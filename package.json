@@ -1,0 +1,16 @@
+{
+  "name": "JsonRestStores",
+  "description": "A module to create full Json REST stores in minutes",
+  "version": "0.0.1",
+  "private": false,
+  "dependencies": {
+    "express": "3.x",
+    "mongodb": "*",
+    "jade": "*",
+    "hat": "*",
+    "connect-mongodb": "*",
+    "send": "*",
+    "bcrypt": "*",
+    "hotplate": "*"
+  }
+
