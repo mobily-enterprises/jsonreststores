@@ -1,4 +1,5 @@
 JsonRestStores
 ==============
 
-A module to create JsonRest stores compatible with Dojo in minutes
+A module to create JsonRest stores compatible with Dojo in minutes.
+

@@ -1,6 +1,5 @@
 var 
   dummy
-, hotplate =  require('hotplate')
 ;
 
 

@@ -1,27 +1,14 @@
 
 var 
   dummy
-, hotplate =  require('hotplate')
-, SimpleSchema = require('./SimpleSchema')
-, declare = require('./declare')
 , e = require('./Errors')
+, declare = require('./declare')
+, SimpleSchema = require('./SimpleSchema')
 , url = require('url')
-, async = require('async')
-, checkObjectId = require('mongoWrapper').checkObjectId
-, ObjectId = require('mongoWrapper').ObjectId
 ;
-
-
-
-exports.hotHooks = hooks = {}
 
 exports.declare = declare;
 exports.Errors = e;
-
-hooks.init = function( done ){
-  done( null );
-}
-
 
 var Store = declare( null,  {
 

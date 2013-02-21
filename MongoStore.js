@@ -1,11 +1,11 @@
 
 var 
   dummy
-, hotplate =  require('hotplate')
 , SimpleSchema = require('./SimpleSchema')
 , declare = require('./declare')
 , Store = require('./Store')
 , e = require('./Errors')
+
 , url = require('url')
 , async = require('async')
 , checkObjectId = require('mongoWrapper').checkObjectId

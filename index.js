@@ -1,21 +1,19 @@
 
 var 
   dummy
-, hotplate =  require('hotplate')
+, e = require('./Errors')
+, declare = require('./declare')
 , SimpleSchema = require('./SimpleSchema')
+
 , Store = require('./Store')
 , MongoStore = require('./MongoStore')
-, declare = require('./declare')
-, e = require('./Errors')
-, url = require('url')
-, async = require('async')
-, checkObjectId = require('mongoWrapper').checkObjectId
-, ObjectId = require('mongoWrapper').ObjectId
 ;
 
 
 exports.declare = declare;
 exports.Errors = e;
-exports.Store = Store;
+exports.SimpleSchema = SimpleSchema;
 
+exports.Store = Store;
+exports.MongoStore = MongoStore;
 

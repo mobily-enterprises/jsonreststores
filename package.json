@@ -1,16 +1,24 @@
 {
   "name": "JsonRestStores",
   "description": "A module to create full Json REST stores in minutes",
+  "keywords": [
+    "json",
+    "REST",
+    "Dojo",
+    "mongodb"
+  ],
+  "main" : "index.js",
   "version": "0.0.1",
   "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/mercmobily/JsonRestStores.git"
+  },
+  "author": {
+    "name": "Tony Mobily"
+  },
   "dependencies": {
     "express": "3.x",
-    "mongodb": "*",
-    "jade": "*",
-    "hat": "*",
-    "connect-mongodb": "*",
-    "send": "*",
-    "bcrypt": "*",
-    "hotplate": "*"
+    "mongodb": "*"
   }
-
+}
