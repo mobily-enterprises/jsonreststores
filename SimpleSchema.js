@@ -9,6 +9,14 @@ var SimpleSchema = function( structure, options ){
   this.cameEmpty = {};
 }
 
+exports = module.exports = SimpleSchema;
+
+
+
+SimpleSchema.prototype.checkId = function( id ){
+  return true;
+}
+
 SimpleSchema.prototype.cast = function( object ){
 
 /*
@@ -92,14 +100,15 @@ SimpleSchema.prototype.check = function( object, errors, options ){
   if( typeof( this.options.validator) !== 'undefined' ){
     this.options.validator.call( this, object, errors );
   }
-  
+ 
   // Scan schema
-  for( var k in this.structure[ k ] ){
+  for( var k in this.structure ){
     definition = this.structure[ k ];
    
     // Check that all "required" fields are there
     if( definition.required && typeof( object[ k ]) === 'undefined'){
-      if( Array.isArray( options.notRequired )  && !( k in options.notRequired ) ){
+       if( !( Array.isArray( options.notRequired )  && options.notRequired.indexOf( k ) != -1  ) ){
+        console.log(this.options );
         errors.push( { field: k, message: 'Field required:' + k, mustChange: true } );
       }
     }
@@ -146,7 +155,7 @@ SimpleSchema.prototype.check = function( object, errors, options ){
         break;
 
         case 'id':
-          if( ! checkObjectId( object[ k ] ) )
+          if( ! this.checkId( object[ k ] ) )
             errors.push( { field: k, message: 'Invalid ID: ' + k, mustChange: false } );
         break;
 
@@ -162,10 +171,10 @@ SimpleSchema.prototype.check = function( object, errors, options ){
 }
 
 
-SimpleSchema.prototype.cleanUp = function( object ){
+SimpleSchema.prototype.cleanup = function( object ){
   newObject = {};
   for( var k in object )
-     if( ! this.schema.structure[ k ].doNotSave )
+     if( ! this.structure[ k ].doNotSave )
         newObject[ k ] = object[ k ];
   return newObject;
 }

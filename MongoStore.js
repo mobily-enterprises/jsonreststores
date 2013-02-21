@@ -24,16 +24,21 @@ var MongoStore = declare( Store,  {
     return doc;
   },
 
-
   prepareBeforeSend: function( doc, cb ){
+    var doc = {};
     cb( null, doc );
   },
 
   allDbFetch: function( reqParams, cb ){
+    var doc = {}
     cb( null, doc );
   }, 
 
   getDbQuery: function( req, res, sortBy, ranges, filters ){
+    console.log(sortBy);
+    console.log(ranges);
+    console.log(filters);
+
     res.json( 200, [] );
   },
 
@@ -46,10 +51,11 @@ var MongoStore = declare( Store,  {
   },
 
   postDbInsertNoId: function( req, cb ){
+    var doc = {}
     cb( null, doc );
   },
 
-  postDbAppend: function( req, cleanBody, doc, fullDoc, cb ){
+  postDbAppend: function( req, doc, fullDoc, cb ){
     cb( null, doc );
   },
 

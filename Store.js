@@ -14,8 +14,7 @@ var Store = declare( null,  {
 
   paramIds: [ ],
   schema: null,
-  storeName: null,
-  
+ 
   handlePut: true,
   handlePost: true,
   handlePostAppend: true,
@@ -128,7 +127,8 @@ var Store = declare( null,  {
 
     if( self.paramIds ){
       self.paramIds.forEach( function(k){
-        if( !self.checkId( reqParams[k] ) && !( skipLast && k == lastItem )  )
+
+        if( !( skipLast && k == lastItem ) && !self.checkId( reqParams[k] )  )
           errors.push( { field: k, message: 'Invalid ID in URL: ' + k, mustChange: false } );
       });
     }
@@ -168,7 +168,7 @@ var Store = declare( null,  {
     // Do schema and callback functon checks. They will both add to `errors`
     if( self.schema !== null ){
       self.schema.cast(  req.body );
-      self.schema.check( req.body, errors );
+      self.schema.check( req.body, errors, { notRequired: [ '_id' ]}  );
     }
 
     self.validate( req.body,  errors, function(){
@@ -189,7 +189,7 @@ var Store = declare( null,  {
               // Clean up req.body from things that are not to be submitted
               if( self.schema ) self.schema.cleanup( req.body );
 
-              postDbInsertNoId( req, function( err, fullDoc ){
+              self.postDbInsertNoId( req, function( err, fullDoc ){
 
                 if( err ){
                   self._sendError( res, err );
@@ -263,12 +263,12 @@ var Store = declare( null,  {
                   // Clean up req.body from things that are not to be submitted
                   if( self.schema ) self.schema.cleanup( req.body );
 
-                  postDbAppend( req, doc, fullDoc, function( err, doc ){
+                  self.postDbAppend( req, doc, fullDoc, function( err, fullDocAfter ){
                     if( err ){
                       self._sendError( res, err );
                     } else {
   
-                      var doc = self.extrapolateDoc( fullDoc );
+                      var docAfter = self.extrapolateDoc( fullDoc );
                       res.send( 202, '' );
                       self.afterPostAppend( req, doc, fullDoc, docAfter, fullDocAfter );
                     } // err
@@ -428,10 +428,15 @@ var Store = declare( null,  {
       return;
     }
 
-    sortBy = parseSortBy();
-    ranges = parseRangeHeaders();
-    filters = parseFilters();
-    
+    // TODO: Add casting with schema (no checking, there is no point)
+    // (but first copy values over)
+    // self.schema.cast(  req.body );
+
+    sortBy = parseSortBy( req );
+    ranges = parseRangeHeaders( req );
+    filters = parseFilters( req );
+   
+ 
     this.getDbQuery( req, res, sortBy, ranges, filters );
 
     function parseSortBy(){
@@ -441,8 +446,6 @@ var Store = declare( null,  {
       var sortBy;
       var tokens, subTokens, i;
       var sortArray = [];
-
-      if( ! self.schema ) return sortArray;
 
       tokens = q.split( '&' ).forEach( function( item ) {
 
@@ -474,6 +477,8 @@ var Store = declare( null,  {
       var rangeFrom, rangeTo, limit;
       var hr;
 
+      
+
       // If there was a range request, then set the range to the
       // query and return the count
       if( (hr = req.headers['range']) && ( tokens = hr.match(/items=([0-9]+)\-([0-9]+)$/))  ){
@@ -495,8 +500,6 @@ var Store = declare( null,  {
       var q = url_parts.query || '';
       var tokens, tokenLeft, tokenRight;
       var result = {};
-
-      if( ! self.schema ) return result;
 
       options = typeof( options) === 'object' ? options : {};
       options.partial = typeof(options.partial) === 'object' ? options.partial : {};
@@ -657,8 +660,6 @@ var Store = declare( null,  {
 
     }) // self.allDbFetchDoc
   },
-
-
 
   // Permission stock functions
   checkPermissionsPost: function( req, cb ){
