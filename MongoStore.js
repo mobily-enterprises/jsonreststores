@@ -13,6 +13,30 @@ var
 ;
 
 
+var Schema = declare( SimpleSchema, {
+
+  // Cast an ID for this particular engine. If the object is in invalid format, it won't
+  // get cast, and as a result check will fail
+  idTypeCast: function( definition, value ){
+    if( checkObjectId( value ) ) {
+      return ObjectId( value );
+    } else {
+      return value;
+    }
+  },
+  // Check if an ID is legal for this particular engine
+  idTypeCheck: function( definition, name, value, errors ){ 
+    if( value.constructor.name !== 'ObjectID' ){
+      errors.push( { field: name, message: 'Id not valid: ' + name } );
+    }
+  },
+
+  constructor: function( ){
+    console.log("**************Constructor for MongoSchema's schema called!");
+  }
+
+});
+
 
 var MongoStore = declare( Store,  {
 
@@ -35,9 +59,9 @@ var MongoStore = declare( Store,  {
   }, 
 
   getDbQuery: function( req, res, sortBy, ranges, filters ){
-    console.log(sortBy);
-    console.log(ranges);
-    console.log(filters);
+    // console.log(sortBy);
+    // console.log(ranges);
+    // console.log(filters);
 
     res.json( 200, [] );
   },
@@ -63,10 +87,17 @@ var MongoStore = declare( Store,  {
     cb( null );
   },
 
-  // DB specific functuons to check if an ID is legal
+  // Check if an ID is legal for this particular engine
   checkId: function( id ){ 
     return checkObjectId( id );
   },
+
+  // Cast an ID for this particular engine
+  castId: function( id ){
+    return ObjectId( id );
+  }
+
 });
 
+MongoStore.Schema = Schema;
 exports = module.exports = MongoStore;

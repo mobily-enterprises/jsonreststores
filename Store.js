@@ -77,6 +77,9 @@ var Store = declare( null,  {
     return true; 
   },
 
+  castId: function( id ){ 
+    return id; 
+  },
 
   // *** Non-db functions users might decide to change ***
 
@@ -428,15 +431,14 @@ var Store = declare( null,  {
       return;
     }
 
-    // TODO: Add casting with schema (no checking, there is no point)
-    // (but first copy values over)
-    // self.schema.cast(  req.body );
-
     sortBy = parseSortBy( req );
     ranges = parseRangeHeaders( req );
     filters = parseFilters( req );
+
+    console.log( sortBy );
+    console.log( ranges );
+    console.log( filters );
    
- 
     this.getDbQuery( req, res, sortBy, ranges, filters );
 
     function parseSortBy(){
@@ -444,8 +446,8 @@ var Store = declare( null,  {
       var url_parts = url.parse( req.url, false );
       var q = url_parts.query || '';
       var sortBy;
-      var tokens, subTokens, i;
-      var sortArray = [];
+      var tokens, subTokens, subToken, subTokenClean, i;
+      var sortObject = {};
 
       tokens = q.split( '&' ).forEach( function( item ) {
 
@@ -453,22 +455,30 @@ var Store = declare( null,  {
         var tokenLeft = tokens[0];
         var tokenRight = tokens[1];
 
-        // CASE 1: it's a sorting option
-        // FIXME: Change make 'sortBy' configurable
+        console.log("INFO:");
+        console.log( tokenLeft );
+        console.log( self.schema.structure[ tokenLeft ]);
+
         if(tokenLeft === 'sortBy'){
+          console.log("ONE");
           subTokens = tokenRight.split(',');
           for( i = 0; i < subTokens.length; i++ ){
 
-            // TODO: Check if subTokens[i] is actually allowed as criteria, checking the schema
-            if( self.schema.structure[ subTokens[i] ].sortable ){
+            subToken = subTokens[ i ];
+            subTokenClean = subToken.replace( '+', '' ).replace( '-', '' );
+
+            console.log( subToken );
+            console.log( subTokenClean );
+
+            if( self.schema.structure[ subTokenClean ] && self.schema.structure[ subTokenClean ].sortable ){
               var sortDirection = subTokens[i][0] == '+' ? 1 : -1;
               sortBy = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
-              sortArray.push( [ sortBy, sortDirection ] );
+              sortObject[ sortBy ] = sortDirection;
             }
           }
         }
       });
-      return sortArray;
+      return sortObject;
     }
 
     function parseRangeHeaders( req ){
@@ -482,10 +492,14 @@ var Store = declare( null,  {
       // If there was a range request, then set the range to the
       // query and return the count
       if( (hr = req.headers['range']) && ( tokens = hr.match(/items=([0-9]+)\-([0-9]+)$/))  ){
+        rangeFrom = tokens[1] - 0;
+        rangeTo = tokens[2] - 0;
+        limit =  rangeTo - rangeFrom + 1;
+
         return( {
-          rangeFrom: tokens[1] - 0,
-          rangeTo: tokens[2] - 0,
-          limit:  rangeTo - rangeFrom + 1,
+          rangeFrom: rangeFrom,
+          rangeTo: rangeTo,
+          limit:  limit,
         });
       } 
 
@@ -510,10 +524,13 @@ var Store = declare( null,  {
         tokenLeft  = tokens[0];
         tokenRight = tokens[1];
 
-        if( tokenLeft != 'sortBy' && self.schema.structure[ tokenLeft ].searchable ) {
+        // Only add it to the filter if it's in the schema AND if it's searchable
+        if( tokenLeft != 'sortBy' && self.schema.structure[ tokenLeft ] && self.schema.structure[ tokenLeft ].searchable ) {
           result[ tokenLeft ] = tokenRight;
         }
       })
+
+      // Cast result values according to schema
       self.schema.cast( result );
 
       return result;
@@ -682,7 +699,6 @@ var Store = declare( null,  {
 
 // Make Store.makeGet, Store.makeGetQuery, etc.
 [ 'Get', 'GetQuery', 'Put', 'Post', 'PostAppend', 'Delete' ].forEach( function(mn){
-  console.log("ADDING: " + mn );
   Store[ 'make' + mn ] = function( Class ){
     return function( req, res, next ){
       var request = new Class();
