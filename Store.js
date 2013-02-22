@@ -33,6 +33,9 @@ var Store = declare( null,  {
   // *** DB manupulation functions (to be overridden by inheriting classes) ***
 
   extrapolateDoc: function( fullDoc ){
+    console.log("P");
+    console.log( fullDoc);
+    if( fullDoc === null ) return fullDoc;
     var doc = {};
     for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
     return doc;
@@ -54,6 +57,7 @@ var Store = declare( null,  {
   },
 
   putDbInsert: function( req, doc, fullDoc, cb ){
+
     cb( null, doc );
   },
 
@@ -101,7 +105,9 @@ var Store = declare( null,  {
 
 
   // *** "after" calls ***
-  afterPut: function( req, doc, fullDoc, docAfter, fullDocAfter, addFunction, overwrite ){
+  afterPutNew: function( req, doc, fullDoc, overwrite ){
+  },
+  afterPutExisting: function( req, doc, fullDoc, docAfter, fullDocAfter, overwrite ){
   },
 
   afterPost: function( req, doc, fullDoc){
@@ -153,6 +159,7 @@ var Store = declare( null,  {
     var self = this;
     var errors = [];
     var overwrite;
+
 
     // Check that the method is implemented
     if( ! self.handlePost ){
@@ -349,49 +356,81 @@ var Store = declare( null,  {
     
             function continueAfterFetch(){
 
-              // Make up what doc actually is (fullDoc is what the database returned )
-              var doc = self.extrapolateDoc( fullDoc );
- 
-              // Actually check permissions
-              self.checkPermissionsPut( req, doc, fullDoc, function( err, granted ){
-                if( err ){
-                  self._sendError( res, err );
-                } else {
-                  if( ! granted ){
-                    next( new e.ForbiddenError() );
+              // It's a NEW doc: it will need to be an insert, _and_ permissions will be
+              // done on inputted data
+              if( ! fullDoc ){
+                
+                // Actually check permissions
+                self.checkPermissionsPutNew( req, function( err, granted ){
+                  if( err ){
+                    self._sendError( res, err );
                   } else {
-
-                  // Clean up req.body from things that are not to be submitted
-                  if( self.schema ) self.schema.cleanup( req.body );
-
-                    // At this point, if `doc` is set it's an existing document. If it's not set,
-                    // it's a new one. It's important to mark the difference as most DB layers
-                    // will have different commands
-                    var addFunction;
-                    if( ! doc ){
-                       addFunction = 'putDbInsert';
+                    if( ! granted ){
+                      next( new e.ForbiddenError() );
                     } else {
-                       addFunction = 'putDbUpdate';
+
+                      // Clean up req.body from things that are not to be submitted
+                      if( self.schema ) self.schema.cleanup( req.body );
+
+                      // At this point, if `doc` is set it's an existing document. If it's not set,
+                      // it's a new one. It's important to mark the difference as most DB layers
+                      // will have different commands
+                      self.putDbInsert(req, function( err, fullDoc ){
+                        if( err ){
+                          self._sendError( res, err );
+                         } else {
+
+                           // Update "doc" to be the complete version of the doc from the DB
+                           var doc = self.extrapolateDoc( fullDoc );
+
+                           // All good, send a 202
+                           res.send( 202, '' );
+                           self.afterPutNew( req, doc, fullDoc, overwrite );
+                        }
+                      })
                     }
-                    self[addFunction]( req, doc, fullDoc, function( err, fullDocAfter ){
-                      if( err ){
-                        self._sendError( res, err );
-                       } else {
+                  }
+                })
 
-                         // Update "doc" to be the complete version of the doc from the DB
-                         var docAfter = self.extrapolateDoc( fullDocAfter );
 
-                         // All good, send a 202
-                         res.send( 202, '' );
-                         self.afterPut( req, doc, fullDoc, docAfter, fullDocAfter, addFunction, overwrite );
-                      }
-                    })
+              // It's an EXISTING doc: it will need to be an update, _and_ permissions will be
+              // done on inputted data AND existing doc
+              } else {
 
-                  } // if( ! granted )
+                var doc = self.extrapolateDoc( fullDoc );
 
-                } // err
-              }) // self.checkPermissionsPut
+                // Actually check permissions
+                self.checkPermissionsPutExisting( req, doc, fullDoc, function( err, granted ){
+                  if( err ){
+                    self._sendError( res, err );
+                  } else {
+                    if( ! granted ){
+                      next( new e.ForbiddenError() );
+                    } else {
 
+                      // Clean up req.body from things that are not to be submitted
+                      if( self.schema ) self.schema.cleanup( req.body );
+
+                      // At this point, if `doc` is set it's an existing document. If it's not set,
+                      // it's a new one. It's important to mark the difference as most DB layers
+                      // will have different commands
+                      self.putDbUpdate(req, function( err, fullDocAfter ){
+                        if( err ){
+                          self._sendError( res, err );
+                         } else {
+
+                           // Update "doc" to be the complete version of the doc from the DB
+                           var docAfter = self.extrapolateDoc( fullDocAfter );
+
+                           // All good, send a 202
+                           res.send( 202, '' );
+                           self.afterPutExisting( req, doc, docAfter, fullDoc, fullDocAfter, overwrite );
+                        }
+                      })
+                    }
+                  }
+                })
+              }
             }
     
           } // err
@@ -435,9 +474,9 @@ var Store = declare( null,  {
     ranges = parseRangeHeaders( req );
     filters = parseFilters( req );
 
-    console.log( sortBy );
-    console.log( ranges );
-    console.log( filters );
+    // console.log( sortBy );
+    // console.log( ranges );
+    // console.log( filters );
    
     this.getDbQuery( req, res, sortBy, ranges, filters );
 
@@ -455,20 +494,12 @@ var Store = declare( null,  {
         var tokenLeft = tokens[0];
         var tokenRight = tokens[1];
 
-        console.log("INFO:");
-        console.log( tokenLeft );
-        console.log( self.schema.structure[ tokenLeft ]);
-
         if(tokenLeft === 'sortBy'){
-          console.log("ONE");
           subTokens = tokenRight.split(',');
           for( i = 0; i < subTokens.length; i++ ){
 
             subToken = subTokens[ i ];
             subTokenClean = subToken.replace( '+', '' ).replace( '-', '' );
-
-            console.log( subToken );
-            console.log( subTokenClean );
 
             if( self.schema.structure[ subTokenClean ] && self.schema.structure[ subTokenClean ].sortable ){
               var sortDirection = subTokens[i][0] == '+' ? 1 : -1;
@@ -685,7 +716,10 @@ var Store = declare( null,  {
   checkPermissionsPostAppend: function( req, doc, fullDoc, cb ){
     cb( null, true );
   },
-  checkPermissionsPut: function( req, doc, fullDoc, cb ){
+  checkPermissionsPutNew: function( req, cb ){
+    cb( null, true );
+  },
+  checkPermissionsPutExisting: function( req, doc, fullDoc, cb ){
     cb( null, true );
   },
   checkPermissionsGet: function( req, doc, fullDoc, cb ){
@@ -703,6 +737,7 @@ var Store = declare( null,  {
     return function( req, res, next ){
       var request = new Class();
       request['_make' + mn ]( req, res, next );
+      
     }
   }
 })

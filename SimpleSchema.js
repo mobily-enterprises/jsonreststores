@@ -148,7 +148,7 @@ var SimpleSchema = declare( null, {
        */
 
     }
-    
+   
   },
   
   check: function( object, errors, options ){
@@ -179,6 +179,7 @@ var SimpleSchema = declare( null, {
      
       // Check that all "required" fields are there
       if( definition.required && typeof( object[ k ]) === 'undefined'){
+
          // Callers can set exceptions to the rule through `option`. This is crucial
          // to exclude some IDs (for example, POST doesn't have an recordId even though
          // recordId is marked as `required` in the schema
@@ -214,9 +215,9 @@ var SimpleSchema = declare( null, {
             errors.push( { field: k, message: msg, mustChange: true } );
         }
   
-        // Run the xxxTypeCast function for a specific type
+        // Run the xxxTypeCheck function for a specific type
         if( typeof( this[ definition.type + 'TypeCheck' ]) === 'function' ){
-          object[ k ] = this[ definition.type + 'TypeCheck' ](definition, k, object[ k ], errors );
+          this[ definition.type + 'TypeCheck' ](definition, k, object[ k ], errors );
         } else {
           throw( new Error("No checking function found, type probably wrong: " + definition.type ) );
         }
@@ -256,9 +257,12 @@ var SimpleSchema = declare( null, {
 
   cleanup: function( object ){
     newObject = {};
-    for( var k in object )
-       if( ! this.structure[ k ].doNotSave )
+    for( var k in object ){
+       if( this.structure[ k ].doNotSave ) {
+         delete object [ k ]; 
          newObject[ k ] = object[ k ];
+       }
+    }
     return newObject;
   },
 
