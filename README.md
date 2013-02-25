@@ -154,7 +154,6 @@ These are the functions and attributes you are able to change:
 
 **IMPORTANT: General functions**  
  * `extrapolateDoc( fullDoc)`.
- * `prepareBeforeSend( doc, cb )`
 
 **IMPORTANT: Database functions**  
  * `allDbFetch( reqParams, cb )`
@@ -164,8 +163,9 @@ These are the functions and attributes you are able to change:
  * `postDbInsertNoId( body, req, cb )`
  * `postDbAppend( body, req, doc, fullDoc, cb )`
  * `deleteDbDo( id, cb )`
- * `checkId( id )`
+ * `allDbCheckId( id )`
  * `validate( body,  errors, cb )`
+ * `getDbPrepareBeforeSend( doc, cb )`
 
 **IMPORTANT: Attributes to set handled requests**  
  * `handlePut: true`
@@ -209,5 +209,22 @@ These are the functions and attributes you are able to change:
   * `RuntimeError`
 
 Note that the `MongoStore` module already _does_ override the **Database functions**, in order to give a working store for you to enjoy. Other non-db functions are set to sane defaults (e.g. permission functions always accept a request, formatErrorResponse does something pretty standard, etc. )
+
+
+# Stores
+
+This module is meant to be used as "containers" to database-specific code (and as little as possible of it).
+
+## MongoStore
+
+MongoStore is the first engine developed for JsonRestStores.
+
+
+
+# MongoStore Examples
+
+Here are some practical examples on how to manage basic and not-so-basic mongo stores using JsonRestStores.
+
+## Straight store
 
 

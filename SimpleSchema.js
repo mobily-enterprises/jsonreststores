@@ -215,33 +215,6 @@ var SimpleSchema = declare( null, {
           throw( new Error("No checking function found, type probably wrong: " + definition.type ) );
         }
 
-        /*
-        switch(definition.type){
-  
-          case 'string':
-          break;
-     
-          case 'number':
-            // Check its range
-            if( typeof( definition.max ) !== 'undefined'  && object[k] > definition.max )
-              errors.push( { field: k, message: 'Field is too high: ' + k, mustChange: true } );
-            if( typeof( definition.min ) !== 'undefined'  && object[k] < definition.min )
-              errors.push( { field: k, message: 'Field is too low: ' + k, mustChange: true } );
-          break;
-  
-          case 'date':
-          break;
-  
-          case 'id':
-            if( ! this.checkId( object[ k ] ) )
-              errors.push( { field: k, message: 'Invalid ID: ' + k, mustChange: false } );
-          break;
-  
-          case 'array':
-          break;
-        }
-        */
-  
       }
    
     }

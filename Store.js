@@ -42,7 +42,7 @@ var Store = declare( null,  {
   },
 
 
-  prepareBeforeSend: function( doc, cb ){
+  getdbPrepareBeforeSend: function( doc, cb ){
     cb( null, doc );
   },
 
@@ -77,7 +77,7 @@ var Store = declare( null,  {
     cb( null );
   },
 
-  checkId: function( id ){ 
+  allDbCheckId: function( id ){ 
     return true; 
   },
 
@@ -141,7 +141,7 @@ var Store = declare( null,  {
     if( self.paramIds ){
       self.paramIds.forEach( function(k){
 
-        if( !( skipLast && k == lastItem ) && !self.checkId( reqParams[k] )  )
+        if( !( skipLast && k == lastItem ) && !self.allDbCheckId( reqParams[k] )  )
           errors.push( { field: k, message: 'Invalid ID in URL: ' + k, mustChange: false } );
       });
     }
@@ -627,7 +627,7 @@ var Store = declare( null,  {
               } else {
                 
                 // "preparing" the doc. The same function is used by GET for collections 
-                self.prepareBeforeSend( doc, function( err, doc ){
+                self.getDbPrepareBeforeSend( doc, function( err, doc ){
                   if( err ){
                     self._sendError( res, err );
                   } else {

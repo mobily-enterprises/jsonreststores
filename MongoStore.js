@@ -50,12 +50,7 @@ var MongoStore = declare( Store,  {
 
   collectionName: null,
 
-
-  extrapolateDoc: function( fullDoc ){
-     return this.inherited( arguments );
-  },
-
-  prepareBeforeSend: function( doc, cb ){
+  getDbPrepareBeforeSend: function( doc, cb ){
     var doc = {};
     cb( null, doc );
   },
@@ -70,11 +65,6 @@ var MongoStore = declare( Store,  {
 
   }, 
 
-  // TODO: Finish this one, implement a simple version. NOTE: this is the only
-  // function that is actually responsible for actually sending data, because
-  // the resultset could be huge
-
- 
   filterType: '$and',
 
   // Make up the query selector, respecting searchPartial for fields
@@ -131,7 +121,7 @@ var MongoStore = declare( Store,  {
 
               var doc = self.extrapolateDoc( fullDoc );
               // TODO: run these as well
-              // self.prepareBeforeSend( doc, function( err, doc ){
+              // self.getDbPrepareBeforeSend( doc, function( err, doc ){
               docList.push( doc );
 
             })
@@ -217,7 +207,7 @@ var MongoStore = declare( Store,  {
   },
 
   // Check if an ID is legal for this particular engine
-  checkId: function( id ){ 
+  allDbCheckId: function( id ){ 
     return checkObjectId( id );
   },
 
