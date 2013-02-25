@@ -43,27 +43,24 @@ var declare = exports.declare = function(superCtor, protoMixin) {
 
   // Implement inherited() so that classes can run this.inherited(arguments)
   // This will only work for sub-classes created using declare() as they are
-  // the ones with the _inheritMap in their prototype
+  // the ones with super which maps the super-method
   protoMixin.inherited = function(args){
     var name, fn;
 
-    // Look for the name in the _inheritMap
-    name = this._inheritMap[ args.callee ];
-    if( name ){
-      fn = superCtor.prototype[name];
+      fn = args.callee.super;
       if( fn ){
         return fn.apply( this, args );
       } else {
         throw( new Error("Method " + name + "() not inherited!") );
       }
-    }
   }
 
   // Copy every element in protoMixin into the prototype.
-  ctor.prototype._inheritMap = {}
   for( var k in protoMixin ){
     ctor.prototype[ k ] = protoMixin[ k ];
-    ctor.prototype._inheritMap[ protoMixin[ k ] ] = k;
+    if( typeof(  ctor.prototype[ k ] ) === 'function' && superCtor.prototype[k] ){
+      ctor.prototype[ k ].super = superCtor.prototype[k];
+    }
   }
 
   return ctor;
@@ -72,55 +69,86 @@ exports = module.exports = declare;
 
 // Some testing...
 
-/* 
+/*
 
-var First = declare( null, {
-  one: function(p){ 
-    console.log("one in First");
+var A = declare( null, {
+  methodOne: function(p){ 
+    console.log("methodOne in A");
     console.log(p); 
     return 1000; 
   },
-  two: function(p){ 
-    console.log("two in First");
+  methodTwo: function(p){ 
+    console.log("methodTwo in A");
     console.log(p);
     return 1001; 
   },
+  methodThree: function(p){ 
+    console.log("methodThree in A");
+    console.log(p);
+    return 1002; 
+  },
   constructor: function(a){ 
     this.a = a; 
-    console.log("Constructor of First called");
+    console.log("Constructor of A called");
   },
 })
 
-var Second = declare( First, {
-  two: function( p ){
-    console.log("two in Second"); 
+var B = declare( A, {
+  methodOne: function( p ){
+    console.log("methodOne in B"); 
     console.log( p );
     a = this.inherited(arguments);
     console.log("Inherited function returned: " + a );
   },
   constructor: function(a){ 
-    console.log("Constructor of Second called, and this.a is...");
+    console.log("Constructor of B called, and this.a is...");
     console.log( this.a );
   },
 })
 
-console.log("Creating first...");
-first = new First(10);
-console.log("Creating second...");
-second = new Second( 20 );
+var C = declare( B, {
+  methodTwo: function( p ){
+    console.log("methodTwo in C"); 
+    console.log( p );
+    a = this.inherited(arguments);
+    console.log("Inherited function returned: " + a );
+  },
+  constructor: function(a){ 
+    console.log("Constructor of C called, and this.a is...");
+    console.log( this.a );
+  },
+})
 
-console.log( "first.a:")
-console.log( first.a );
-console.log( "second.a:")
-console.log( second.a );
 
-console.log( "first.one(1):")
-first.one(1);
-console.log( "first.two(2):")
-first.two(2);
 
-console.log( "second.one(3):")
-second.one(3);
-console.log( "second.two(4):")
-second.two(4);
+
+console.log("Creating a...");
+a = new A(10);
+console.log("Creating b...");
+b = new B( 20 );
+console.log("Creating c...");
+c = new C( 30 );
+
+console.log( "a.a:")
+console.log( a.a );
+console.log( "b.a:")
+console.log( b.a );
+console.log( "c.a:")
+console.log( c.a );
+
+console.log( "a.methodOne(1):")
+a.methodOne(1);
+console.log( "a.methodTwo(2):")
+a.methodTwo(2);
+
+console.log( "b.methodOne(3):")
+b.methodOne(3);
+console.log( "b.methodTwo(4):")
+b.methodTwo(4);
+
+console.log( "c.methodOne(5):")
+c.methodOne(5);
+console.log( "c.methodTwo(6):")
+c.methodTwo(6);
+
 */

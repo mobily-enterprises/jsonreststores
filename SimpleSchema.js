@@ -8,7 +8,6 @@ var
   OK, this one was written in a hurry, and it shows. It *works*, but it's not very pretty nor powerful.
   Things to do:
 
-  * Get rid of that this.cameEmpty *somehow*. Right now a schema can only cast one object (!)
   * Decide what to do with values that came defined, but as empty strings. If a date is '', what shoud it become?
 
   Using `declare()` here means that you can _very_ easily define your schema for your own applications,
@@ -20,7 +19,6 @@ var SimpleSchema = declare( null, {
   constructor: function( structure, options){
     this.structure = structure;
     this.options = typeof( options ) !== 'undefined' ? options : {};
-    this.cameEmpty = {};
     console.log("*********SimpleSchema constructor called!");
   },
 
@@ -100,12 +98,6 @@ var SimpleSchema = declare( null, {
   
       if( typeof(definition) === 'undefined' ) return;
   
-      // Set the internal hash this.cameEmpty if the field arrived empty
-      // This will then be used later at checking time
-      // Note: arrays are a special case: it's an array if multiple fields have 
-      // the same `name` attribute. Arrays are not checked.
-      if( ! Array.isArray( object[ k ] ) && object[ k ] == '' ) this.cameEmpty[ k ] = true;
-
       // Run the xxxTypeCast function for a specific type
       if( typeof( this[ definition.type + 'TypeCast' ]) === 'function' ){
         object[ k ] = this[ definition.type + 'TypeCast' ](definition, object[ k ]);
@@ -151,7 +143,7 @@ var SimpleSchema = declare( null, {
    
   },
   
-  check: function( object, errors, options ){
+  check: function( object, objectBeforeCast, errors, options ){
   
   /*
       schema: {
@@ -204,7 +196,8 @@ var SimpleSchema = declare( null, {
         definition = this.structure[ k ];
   
         // Check if the value was empty when it was submitted and it shouldn't have been
-        if( definition.notEmpty && this.cameEmpty[ k ] ){
+
+        if( definition.notEmpty && ! Array.isArray( object[ k ] ) && objectBeforeCast[ k ] == '' ) {
             errors.push( { field: k, message: 'Field cannot be empty: ' + k, mustChange: true } );
         }
   
