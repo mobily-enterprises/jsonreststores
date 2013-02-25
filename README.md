@@ -129,15 +129,15 @@ When you run Store.MakeAll, you actually ran this:
 
 `Store.makeGet()`, called here, simply does this:
 
-  // Make Store.makeGet, Store.makeGetQuery, etc.
-  StoreGet = function( Class ){
-    return function( req, res, next ){
-      var request = new Class();
-      request._makeGet( req, res, next );
+    // Make Store.makeGet, Store.makeGetQuery, etc.
+    StoreGet = function( Class ){
+      return function( req, res, next ){
+        var request = new Class();
+        request._makeGet( req, res, next );
+      }
     }
-  }
 
-Basically, an object of type `PeopleStore` was created, and its method `_makeGet()` was called passing it req, res, next. It's important to create a new object: even though the library itself doesn't define any object attributes, user defined method might well do.
+Basically, an object of type `PeopleStore` was created, and its method `_makeGet()` was called passing it `req`, `res`, `next`. It's important to create a new object: even though the library itself doesn't define any object attributes, user defined method might well do.
 
 # Customising your store: general overview
 
@@ -201,13 +201,13 @@ These are the functions and attributes you are able to change:
   * `logError( error )`
 
 **HTTP Errors**
-  * `BadRequestError
-  * `UnauthorizedError
-  * `ForbiddenError
-  * `NotFoundError
-  * `ValidationError
-  * `RuntimeError
+  * `BadRequestError`
+  * `UnauthorizedError`
+  * `ForbiddenError`
+  * `NotFoundError`
+  * `ValidationError`
+  * `RuntimeError`
 
-Note that the `MongoStore` module already _does_ override most of these, in order to give a working store for you to enjoy. Other non-db functions are set to sane defaults (e.g. permission functions always accept a request, formatErrorResponse does something pretty standard, etc. )
+Note that the `MongoStore` module already _does_ override the **Database functions**, in order to give a working store for you to enjoy. Other non-db functions are set to sane defaults (e.g. permission functions always accept a request, formatErrorResponse does something pretty standard, etc. )
 
 

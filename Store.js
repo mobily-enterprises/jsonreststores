@@ -14,6 +14,8 @@ var Store = declare( null,  {
 
   paramIds: [ ],
   schema: null,
+
+  storeName: null,
  
   handlePut: true,
   handlePost: true,
@@ -84,8 +86,6 @@ var Store = declare( null,  {
     return id; 
   },
   */
-
-  // *** Non-db functions users might decide to change ***
 
   validate: function( body, errors, cb ){
     cb();
