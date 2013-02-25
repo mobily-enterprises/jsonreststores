@@ -50,14 +50,16 @@ var MongoStore = declare( Store,  {
 
   collectionName: null,
 
+
   extrapolateDoc: function( fullDoc ){
-    return this.inherited(arguments);
+     return this.inherited( arguments );
   },
 
   prepareBeforeSend: function( doc, cb ){
     var doc = {};
     cb( null, doc );
   },
+
 
   allDbFetch: function( reqParams, cb ){
 
@@ -72,26 +74,86 @@ var MongoStore = declare( Store,  {
   // function that is actually responsible for actually sending data, because
   // the resultset could be huge
 
-  getDbQuery: function( req, res, sortBy, ranges, filters ){
-    // console.log(sortBy);
-    // console.log(ranges);
-    // console.log(filters);
+ 
+  filterType: '$and',
 
-    res.json( 200, [] );
+  // Make up the query selector, respecting searchPartial for fields
+  queryMakeSelector: function( filters ){
+    var selector, s;
+    var item;
+    
+    selector = {};
+    selector[ this.filterType ] = s = [];
+    for( var k in filters ){
+      item = new Object();
+      item[ k ] = filters [ k ];
+      s.push( item );
+    }
+    return selector;
   },
 
-  postDbInsertNoId: function( req,  cb ){
+  getDbQuery: function( req, res, sortBy, ranges, filters ){
+
+    var self = this;
+
+    var cursor;
+    var selector = {};
+   
+    this._queryEnrichFilters( filters ); 
+
+    // Select according to selector
+    selector = this.queryMakeSelector( filters );
+    cursor = this.collection.find( selector );
+
+    // Skipping/limiting according to ranges/limits
+    if( ranges.rangeFrom != 0 )
+      cursor.skip( ranges.rangeFrom );
+    if( ranges.limit != 0 )
+      cursor.limit( ranges.limit );
+
+    cursor.count( function( err, total ){
+      if( err ){
+        self._sendError( res, err );
+      } else {
+
+        self._querySetRangeHeaders( res, ranges, total );
+
+        cursor.sort( self._queryMakeMongoSortArray( sortBy ) );        
+        cursor.toArray( function( err, docs ){
+          if( err ){
+            self._sendError( res, err );
+          } else {
+          
+            var docList = []; 
+            docs.forEach( function( fullDoc ){
+
+              console.log( fullDoc );
+
+              var doc = self.extrapolateDoc( fullDoc );
+              // TODO: run these as well
+              // self.prepareBeforeSend( doc, function( err, doc ){
+              docList.push( doc );
+
+            })
+            res.json( 200, docList );
+          }
+        });
+      }
+    });
+  },
+
+  postDbInsertNoId: function( body, req,  cb ){
     if( this.paramIds.length !== 1 ) 
       return cb( new Error("Stock postDbInsertNoId does not work when paramsIds > 1"), null );
    
     var self = this;
 
-    req.body._id = ObjectId();
-    this.collection.insert( req.body, function( err ){
+    body._id = ObjectId();
+    this.collection.insert( body, function( err ){
       if( err ) {
         cb( err );
       } else {
-        self.collection.findOne( {_id: req.body._id }, cb );
+        self.collection.findOne( {_id: body._id }, cb );
       }
     });
 
@@ -100,21 +162,20 @@ var MongoStore = declare( Store,  {
 
   postDbUpdatePrefix: '',
 
-  postDbUpdateMake: function( doc, exceptions ){
+  postDbMakeUpdateObject: function( doc, exceptions ){
     var updateObject = {};
 
-    // Simply copy values over with the prefix
-    // (e.g. something.other.actualvalue1, etc.
+    // Simply copy values over with the prefix (e.g. something.other.actualvalue1, etc.)
+    // Honour the exceptions hash, as you don't want to update the primary key
     for( i in doc ){
       if( ! exceptions[ i ] ) updateObject[ this.postDbUpdatePrefix + i ] = doc[ i ];
-      // updateObject[ this.postDbUpdatePrefix + i ] = doc[ i ];
     }
 
     // Return the actual update object 
     return { $set: updateObject };
   },
 
-  putDbUpdate: function( req, cb ){
+  putDbUpdate: function( body, req, cb ){
 
     if( this.paramIds.length !== 1 ) 
       return cb( new Error("Stock putDbUpdate does not work when paramsIds > 1"), null );
@@ -122,38 +183,30 @@ var MongoStore = declare( Store,  {
     var self = this;
 
 
-    var updateObject = this.postDbUpdateMake( req.body, { '_id': true } );
+    var updateObject = this.postDbMakeUpdateObject( body, { '_id': true } );
 
     
-    this.collection.findAndModify( { _id: req.body._id }, {}, updateObject, {new: true}, cb );
-/*
-    this.collection.update( { _id: req.body._id }, updateObject, function( err ){
-      if( err ) {
-        cb( err );
-      } else {
-        self.collection.findOne( {_id: req.body._id }, cb );
-      }
-    });*/
+    this.collection.findAndModify( { _id: body._id }, {}, updateObject, {new: true}, cb );
   },
 
 
-  putDbInsert: function( req, cb ){
+  putDbInsert: function( body, req, cb ){
     if( this.paramIds.length !== 1 ) 
       return cb( new Error("Stock putDbInsert does not work when paramsIds > 1"), null );
   
     var self = this;
 
-    this.collection.insert( req.body, function( err ){
+    this.collection.insert( body, function( err ){
       if( err ) {
         cb( err );
       } else {
-        self.collection.findOne( {_id: req.body._id }, cb );
+        self.collection.findOne( {_id: body._id }, cb );
       }
     });
 
   },
 
-  postDbAppend: function( req, doc, fullDoc, cb ){
+  postDbAppend: function( body, req, doc, fullDoc, cb ){
 
     // Is this _ever_ implemented, really? Seriously?
     cb( null, doc );
@@ -168,10 +221,48 @@ var MongoStore = declare( Store,  {
     return checkObjectId( id );
   },
 
+
+
+
+  _queryEnrichFilters: function( filters ){
+
+    var self = this;    
+
+    for( var k in filters ){
+
+      // They are marked as searchPartial: turn the string into a regexp
+      if( self.schema.structure[ k ].searchPartial ){
+        filters[ k ] = { $regex: new RegExp('^' + filters[ k ] + '.*' ) };
+      }
+
+      // ... anything else?
+
+    }
+  },
+
+
+  _querySetRangeHeaders: function( res, ranges, total ){
+    res.setHeader('Content-Range', 'items ' + ranges.rangeFrom + '-' + ranges.rangeTo + '/' + total );
+  },
+
+  _queryMakeMongoSortArray: function( sortBy ){
+    var sortArray = [];  
+
+    for( var k in sortBy )
+      sortArray.push( [ k , sortBy [ k ] ] );
+
+    return sortArray;
+
+  },
+
+
+
+  /*
   // Cast an ID for this particular engine
   castId: function( id ){
     return ObjectId( id );
   }
+  */
 
 });
 

@@ -1,4 +1,3 @@
 
-* Decide if I really want to change req.body -- note that I can't really, as I will need the tabId for the broadcast
 * Implement the query side of the story
 
