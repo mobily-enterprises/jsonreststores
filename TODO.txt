@@ -1,3 +1,0 @@
-
-* Implement the query side of the story
-
