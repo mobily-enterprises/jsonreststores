@@ -38,7 +38,7 @@ var Store = declare( null,  {
 
   // *** DB manupulation functions (to be overridden by inheriting classes) ***
 
-  extrapolateDoc: function( fullDoc ){
+  extrapolateDoc: function( fullDoc, req ){
     if( fullDoc === null ) return fullDoc;
     var doc = {};
     for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
@@ -46,11 +46,11 @@ var Store = declare( null,  {
   },
 
 
-  getdbPrepareBeforeSend: function( doc, cb ){
+  getDbPrepareBeforeSend: function( doc, cb ){
     cb( null, doc );
   },
 
-  allDbFetch: function( reqParams, cb ){
+  allDbFetch: function( req, cb ){
     var doc = { id: 'id', dummyData: 'value'};
     cb( null, doc );
   }, 
@@ -60,7 +60,7 @@ var Store = declare( null,  {
     res.json( 200, [] );
   },
 
-  putDbInsert: function( body, req, doc, fullDoc, cb ){
+  putDbInsert: function( body, req, cb ){
 
     cb( null, doc );
   },
@@ -103,15 +103,15 @@ var Store = declare( null,  {
 
 
   // *** "after" calls ***
-  afterPutNew: function( req, doc, fullDoc, overwrite ){
+  afterPutNew: function( req, body, doc, fullDoc, overwrite ){
   },
-  afterPutExisting: function( req, doc, fullDoc, docAfter, fullDocAfter, overwrite ){
+  afterPutExisting: function( req, body, doc, fullDoc, docAfter, fullDocAfter, overwrite ){
   },
 
   afterPost: function( req, doc, fullDoc){
   },
 
-  afterPostAppend: function( req, doc, fullDoc, docAfter, fullDocAfter ){
+  afterPostAppend: function( doc, body, fullDoc, docAfter, fullDocAfter ){
   },
 
   afterDelete: function( req, doc, fullDoc ){
@@ -148,17 +148,18 @@ var Store = declare( null,  {
 
   _sendError: function( res, next, error ){
 
+    var self = this;
 
     // The error wasn't from the store: create a new ServiceUnavailable error,
     // and encapsulate the existing error in it
     // This will happen when _sendError is passed an error straight from a callback
     // The idea is that jsonreststores _always_ throws an HTTP error of some sort.
+
     if( ! error.fromStore ){
-      error = new this.ServiceUnavailableError( error.message || "Service Unavailable", error );
+      error = new self.ServiceUnavailableError( error.message || "Service Unavailable", error );
     } 
 
-
-    switch( this.chainError ){
+    switch( self.chainErrors ){
       case 'none':
       case 'some':
 
@@ -169,10 +170,10 @@ var Store = declare( null,  {
           // Sets errorFields, and formats the error response using this object's formatErrorResponse method
           // (which might have been redefined by the user)
           error.errorFields = typeof( error.errorFields ) !== 'object' ? null : error.errorFields;
-          var responseBody = this.formatErrorResponse( error );
+          var responseBody = self.formatErrorResponse( error );
 
           // End of story!
-          res.send( responseStatus, responseBody );
+          res.send( error.httpError, responseBody );
         }
       break;
 
@@ -181,7 +182,7 @@ var Store = declare( null,  {
       break;
     }
  
-    this.logError( error );
+    self.logError( error );
   },
 
   _makePost: function( req, res, next ){
@@ -193,7 +194,7 @@ var Store = declare( null,  {
 
     // Check that the method is implemented
     if( ! self.handlePost ){
-      self._sendError( res, next, new this.NotImplementedError( ) );
+      self._sendError( res, next, new self.NotImplementedError( ) );
       return;
     }
    
@@ -201,11 +202,11 @@ var Store = declare( null,  {
     // return a BadRequestError
     self._checkParamIds( req.params, errors, true );
     if( errors.length ){
-      self._sendError( res, next, new this.BadRequestError( null, errors ) );
+      self._sendError( res, next, new self.BadRequestError( null, errors ) );
       return;
     }
   
-    body = this._clone( req.body );
+    body = self._clone( req.body );
   
     // Do schema and callback functon checks. They will both add to `errors`
     if( self.schema !== null ){
@@ -216,7 +217,7 @@ var Store = declare( null,  {
     self.validate( body,  errors, function(){
 
       if( errors.length ){
-        next( new this.ValidationError('Validation problems', errors));
+        self._sendError( res, next, new self.ValidationError('Validation problems', errors));
       } else {
 
         // Actually check permissions
@@ -225,7 +226,7 @@ var Store = declare( null,  {
             self._sendError( res, next, err );
           } else {
             if( ! granted ){
-              next( new this.ForbiddenError() );
+              self._sendError( res, next, new self.ForbiddenError() );
             } else {
 
               // Clean up req.body from things that are not to be submitted
@@ -237,9 +238,9 @@ var Store = declare( null,  {
                   self._sendError( res, next, err );
                 } else {
 
-                  var doc = self.extrapolateDoc( fullDoc );
+                  var doc = self.extrapolateDoc( fullDoc, req );
                   res.send( 202, '' );
-                  self.afterPost( body, req, doc, fullDoc );
+                  self.afterPost( req, body, doc, fullDoc );
                 } // err
               }) // postDbInsertNoId
 
@@ -263,7 +264,7 @@ var Store = declare( null,  {
 
     // Check that the method is implemented
     if( ! self.handlePostAppend ){
-      self._sendError( res, next, new this.NotImplementedError( ) );
+      self._sendError( res, next, new self.NotImplementedError( ) );
       return;
     }
    
@@ -271,11 +272,11 @@ var Store = declare( null,  {
     // return a BadRequestError
     self._checkParamIds( req.params, errors );
     if( errors.length ){
-      self._sendError( res, next, new this.BadRequestError( null, errors ) );
+      self._sendError( res, next, new self.BadRequestError( null, errors ) );
       return;
     }
    
-    body = this._clone( req.body );
+    body = self._clone( req.body );
  
     // Do schema and callback functon checks. They will both add to `errors`
     if( self.schema !== null ){
@@ -285,16 +286,16 @@ var Store = declare( null,  {
     self.validate( body,  errors, function(){
 
       if( errors.length ){
-        next( new this.ValidationError('Validation problems', errors));
+        self._sendError( res, next, new self.ValidationError('Validation problems', errors ) );
       } else {
         // Fetch the doc
-        self.allDbFetch( req.params, function( err, fullDoc ){
+        self.allDbFetch( req, function( err, fullDoc ){
           if( err ){
             self._sendError( res, next, err );
           } else {
 
             // Get the extrapolated doc
-            var doc = self.extrapolateDoc( fullDoc );
+            var doc = self.extrapolateDoc( fullDoc, req );
 
             // Actually check permissions
             self.checkPermissionsPostAppend( req, doc, fullDoc, function( err, granted ){
@@ -302,7 +303,7 @@ var Store = declare( null,  {
                 self._sendError( res, next, err );
               } else {
                 if( ! granted ){
-                  next( new this.ForbiddenError() );
+                  self._sendError( res, next, new self.ForbiddenError() );
                 } else {
 
                   // Clean up req.body from things that are not to be submitted
@@ -313,9 +314,9 @@ var Store = declare( null,  {
                       self._sendError( res, next, err );
                     } else {
   
-                      var docAfter = self.extrapolateDoc( fullDoc );
+                      var docAfter = self.extrapolateDoc( fullDoc, req );
                       res.send( 202, '' );
-                      self.afterPostAppend( body, req, doc, fullDoc, docAfter, fullDocAfter );
+                      self.afterPostAppend( req, body, doc, fullDoc, docAfter, fullDocAfter );
                     } // err
                   }) // postDbAppend
 
@@ -347,7 +348,7 @@ var Store = declare( null,  {
 
     // Check that the method is implemented
     if( ! self.handlePut ){
-      self._sendError( res, next, new this.NotImplementedError( ) );
+      self._sendError( res, next, new self.NotImplementedError( ) );
       return;
     }
    
@@ -355,11 +356,11 @@ var Store = declare( null,  {
     // return a BadRequestError
     self._checkParamIds( req.params, errors );
     if( errors.length ){
-      self._sendError( res, next, new this.BadRequestError( null, errors ) );
+      self._sendError( res, next, new self.BadRequestError( null, errors ) );
       return;
     }
     
-    body = this._clone( req.body );
+    body = self._clone( req.body );
 
     // Do schema and callback functon checks. They will both add to `errors`
     if( self.schema !== null ){
@@ -369,11 +370,11 @@ var Store = declare( null,  {
     self.validate( body,  errors, function(){
 
       if( errors.length ){
-        next( new this.ValidationError('Validation problems', errors));
+        self._sendError( res, next, new self.ValidationError('Validation problems', errors ) );
       } else {
 
         // Fetch the doc
-        self.allDbFetch( req.params, function( err, fullDoc ){
+        self.allDbFetch( req, function( err, fullDoc ){
           if( err ){
             self._sendError( res, next, err );
           } else {
@@ -381,9 +382,9 @@ var Store = declare( null,  {
             // Check the 'overwrite' option
             if( typeof( overwrite ) !== 'undefined' ){
               if( fullDoc && ! overwrite ){
-                self._sendError( res, next, new this.PreconditionFailedError() );
+                self._sendError( res, next, new self.PreconditionFailedError() );
               } else if( !fullDoc && overwrite ) {
-                self._sendError( res, next, new this.PreconditionFailedError() );
+                self._sendError( res, next, new self.PreconditionFailedError() );
               } else {
                 continueAfterFetch();
               }
@@ -403,26 +404,23 @@ var Store = declare( null,  {
                     self._sendError( res, next, err );
                   } else {
                     if( ! granted ){
-                      next( new this.ForbiddenError() );
+                      self._sendError( res, next, new self.ForbiddenError() );
                     } else {
 
                       // Clean up req.body from things that are not to be submitted
                       if( self.schema ) self.schema.cleanup( body );
 
-                      // At this point, if `doc` is set it's an existing document. If it's not set,
-                      // it's a new one. It's important to mark the difference as most DB layers
-                      // will have different commands
                       self.putDbInsert( body, req, function( err, fullDoc ){
                         if( err ){
                           self._sendError( res, next, err );
                          } else {
 
                            // Update "doc" to be the complete version of the doc from the DB
-                           var doc = self.extrapolateDoc( fullDoc );
+                           var doc = self.extrapolateDoc( fullDoc, req );
 
                            // All good, send a 202
                            res.send( 202, '' );
-                           self.afterPutNew( body, req, doc, fullDoc, overwrite );
+                           self.afterPutNew( req, body, doc, fullDoc, overwrite );
                         }
                       })
                     }
@@ -434,7 +432,7 @@ var Store = declare( null,  {
               // done on inputted data AND existing doc
               } else {
 
-                var doc = self.extrapolateDoc( fullDoc );
+                var doc = self.extrapolateDoc( fullDoc, req );
 
                 // Actually check permissions
                 self.checkPermissionsPutExisting( req, doc, fullDoc, function( err, granted ){
@@ -442,26 +440,23 @@ var Store = declare( null,  {
                     self._sendError( res, next, err );
                   } else {
                     if( ! granted ){
-                      next( new this.ForbiddenError() );
+                      self._sendError( res, next, new self.ForbiddenError() );
                     } else {
 
                       // Clean up req.body from things that are not to be submitted
                       if( self.schema ) self.schema.cleanup( body );
 
-                      // At this point, if `doc` is set it's an existing document. If it's not set,
-                      // it's a new one. It's important to mark the difference as most DB layers
-                      // will have different commands
-                      self.putDbUpdate(body, req, function( err, fullDocAfter ){
+                      self.putDbUpdate(body, req, doc, fullDoc, function( err, fullDocAfter ){
                         if( err ){
                           self._sendError( res, next, err );
                          } else {
 
                            // Update "doc" to be the complete version of the doc from the DB
-                           var docAfter = self.extrapolateDoc( fullDocAfter );
+                           var docAfter = self.extrapolateDoc( fullDocAfter, req );
 
                            // All good, send a 202
                            res.send( 202, '' );
-                           self.afterPutExisting( body, req, doc, docAfter, fullDoc, fullDocAfter, overwrite );
+                           self.afterPutExisting( req, body, doc, docAfter, fullDoc, fullDocAfter, overwrite );
                         }
                       })
                     }
@@ -488,7 +483,7 @@ var Store = declare( null,  {
 
     // Check that the method is implemented
     if( ! self.handleGetQuery ){
-      self._sendError( res, next, new this.NotImplementedError( ) );
+      self._sendError( res, next, new self.NotImplementedError( ) );
       return;
     }
    
@@ -496,14 +491,14 @@ var Store = declare( null,  {
     // return a BadRequestError
     self._checkParamIds( req.params, errors, true );
     if( errors.length ){
-      self._sendError( res, next, new this.BadRequestError( null, errors ) );
+      self._sendError( res, next, new self.BadRequestError( null, errors ) );
       return;
     }
     
     // The schema must be defined for queries. It's too important, as it defines
     // what's searchable and what's sortable
     if( self.schema == null ){
-      self._sendError( res, next, new this.ServiceUnavailableError( 'Query attempted on schema-less store' ) );
+      self._sendError( res, next, new self.ServiceUnavailableError( 'Query attempted on schema-less store' ) );
       return;
     }
 
@@ -515,7 +510,7 @@ var Store = declare( null,  {
     // console.log( ranges );
     // console.log( filters );
    
-    this.getDbQuery( req, res, sortBy, ranges, filters );
+    self.getDbQuery( req, res, sortBy, ranges, filters );
 
     function parseSortBy(){
 
@@ -617,7 +612,7 @@ var Store = declare( null,  {
 
     // Check that the method is implemented
     if( ! self.handleGet ){
-      self._sendError( res, next, new this.NotImplementedError( ) );
+      self._sendError( res, next, new self.NotImplementedError( ) );
       return;
     }
 
@@ -626,21 +621,21 @@ var Store = declare( null,  {
  
     // There was a problem: return the errors
     if( errors.length ){
-      self._sendError( res, next, new this.BadRequestError( null, errors ) );
+      self._sendError( res, next, new self.BadRequestError( null, errors ) );
       return;
     }
 
     // Fetch the doc.
-    self.allDbFetch( req.params, function( err, fullDoc ){
+    self.allDbFetch( req, function( err, fullDoc ){
       if( err ){
         self._sendError( res, next, err );
       } else {
 
         if( ! fullDoc ){
-          self._sendError( res, next, new this.NotFoundError());
+          self._sendError( res, next, new self.NotFoundError());
         } else {
 
-          var doc = self.extrapolateDoc( fullDoc );
+          var doc = self.extrapolateDoc( fullDoc, req );
 
           // Check the permissions 
           self.checkPermissionsGet( req, doc, fullDoc, function( err, granted ){
@@ -649,7 +644,7 @@ var Store = declare( null,  {
             } else {
 
               if( ! granted ){
-                next( new this.ForbiddenError() );
+                self._sendError( res, next, new self.ForbiddenError() ); 
               } else {
                 
                 // "preparing" the doc. The same function is used by GET for collections 
@@ -686,7 +681,7 @@ var Store = declare( null,  {
 
     // Check that the method is implemented
     if( ! self.handleDelete ){
-      self._sendError( res, next, new this.NotImplementedError( ) );
+      self._sendError( res, next, new self.NotImplementedError( ) );
       return;
     }
 
@@ -695,21 +690,21 @@ var Store = declare( null,  {
  
     // There was a problem: return the errors
     if( errors.length ){
-      self._sendError( res, next, new this.BadRequestError( null, errors ) );
+      self._sendError( res, next, new self.BadRequestError( null, errors ) );
       return;
     }
 
     // Fetch the doc.
-    self.allDbFetch( req.params, function( err, fullDoc ){
+    self.allDbFetch( req, function( err, fullDoc ){
       if( err ){
         self._sendError( res, next, err );
       } else {
 
         if( ! fullDoc ){
-          self._sendError( res, next, new this.NotFoundError());
+          self._sendError( res, next, new self.NotFoundError());
         } else {
 
-          var doc = self.extrapolateDoc( fullDoc );
+          var doc = self.extrapolateDoc( fullDoc, req );
 
           // Check the permissions 
           self.checkPermissionsDelete( req, doc, fullDoc, function( err, granted ){
@@ -718,7 +713,7 @@ var Store = declare( null,  {
             } else {
 
               if( ! granted ){
-                next( new this.ForbiddenError() );
+                self._sendError( res, next, new self.ForbiddenError() );
               } else {
                 
                 // Actually delete the document

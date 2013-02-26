@@ -49,18 +49,25 @@ var MongoStore = declare( Store,  {
 
   collectionName: null,
 
+
+  handlePut: false,
+  handlePost: false,
+  handlePostAppend: false,
+  handleGet: false,
+  handleGetQuery: false,
+  handleDelete: false,
+
   getDbPrepareBeforeSend: function( doc, cb ){
-    var doc = {};
     cb( null, doc );
   },
 
 
-  allDbFetch: function( reqParams, cb ){
+  allDbFetch: function( req, cb ){
 
     if( this.paramIds.length !== 1 ) 
       return cb( new Error("Stock allDbFetch does not work when paramsIds > 1"), null );
-
-    this.collection.findOne( {_id: ObjectId( reqParams[this.paramIds[0]] ) }, cb );
+ 
+    this.collection.findOne( {_id: ObjectId( req.params[this.paramIds[0]] ) }, cb );
 
   }, 
 
@@ -164,18 +171,14 @@ var MongoStore = declare( Store,  {
     return { $set: updateObject };
   },
 
-  putDbUpdate: function( body, req, cb ){
+  putDbUpdate: function( body, req, doc, fullDoc, cb ){
 
     if( this.paramIds.length !== 1 ) 
       return cb( new Error("Stock putDbUpdate does not work when paramsIds > 1"), null );
   
-    var self = this;
-
 
     var updateObject = this.postDbMakeUpdateObject( body, { '_id': true } );
-
-    
-    this.collection.findAndModify( { _id: body._id }, {}, updateObject, {new: true}, cb );
+    this.collection.findAndModify( { _id: fullDoc._id }, {}, updateObject, {new: true}, cb );
   },
 
 
@@ -185,6 +188,7 @@ var MongoStore = declare( Store,  {
   
     var self = this;
 
+    body._id = ObjectId();
     this.collection.insert( body, function( err ){
       if( err ) {
         cb( err );

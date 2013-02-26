@@ -153,12 +153,12 @@ At this point, you are aware that there are six crucial methods for each store:
 These are the functions and attributes you are able to change:
 
 **IMPORTANT: General functions**  
- * `extrapolateDoc( fullDoc)`.
+ * `extrapolateDoc( fullDoc, req )`.
 
 **IMPORTANT: Database functions**  
- * `allDbFetch( reqParams, cb )`
+ * `allDbFetch( req, cb )`
  * `getDbQuery( req, res, sortBy, ranges, filters )`
- * `putDbInsert( body, req, doc, fullDoc, cb )`
+ * `putDbInsert( body, req, cb )`
  * `putDbUpdate( body, req, doc, fullDoc, cb )`
  * `postDbInsertNoId( body, req, cb )`
  * `postDbAppend( body, req, doc, fullDoc, cb )`
@@ -189,10 +189,10 @@ These are the functions and attributes you are able to change:
  * `checkPermissionsDelete( req, doc, fullDoc, cb )`
 
 **After op functions** 
- * `afterPutNew( req, doc, fullDoc, overwrite )`
- * `afterPutExisting( req, doc, fullDoc, docAfter, fullDocAfter, overwrite )`
- * `afterPost( req, doc, fullDoc)`
- * `afterPostAppend( req, doc, fullDoc, docAfter, fullDocAfter )`
+ * `afterPutNew( req, body, doc, fullDoc, overwrite )`
+ * `afterPutExisting( req, body, doc, fullDoc, docAfter, fullDocAfter, overwrite )`
+ * `afterPost( req, body, doc, fullDoc)`
+ * `afterPostAppend( req, body, doc, fullDoc, docAfter, fullDocAfter )`
  * `afterDelete( req, doc, fullDoc )`
  * `afterGet( req, doc, fullDoc)`
 
