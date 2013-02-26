@@ -2,14 +2,13 @@
 var 
   dummy
 , SimpleSchema = require('./SimpleSchema')
-, declare = require('./declare')
+, declare = require('simpledeclare')
 , Store = require('./Store')
-, e = require('./Errors')
 
 , url = require('url')
 , async = require('async')
-, checkObjectId = require('mongoWrapper').checkObjectId
-, ObjectId = require('mongoWrapper').ObjectId
+, checkObjectId = require('mongowrapper').checkObjectId
+, ObjectId = require('mongowrapper').ObjectId
 ;
 
 

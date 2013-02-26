@@ -1,6 +1,6 @@
 var 
   dummy
-, declare = require('./declare')
+, declare = require('simpledeclare')
 ;
 
 /*
