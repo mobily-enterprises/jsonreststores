@@ -38,11 +38,8 @@ var Store = declare( null,  {
 
   // *** DB manupulation functions (to be overridden by inheriting classes) ***
 
-  extrapolateDoc: function( fullDoc, req ){
-    if( fullDoc === null ) return fullDoc;
-    var doc = {};
-    for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
-    return doc;
+  allDbExtrapolateDoc: function( fullDoc, req, cb ){
+    cb( null, fullDoc );
   },
 
 
@@ -81,18 +78,10 @@ var Store = declare( null,  {
     cb( null );
   },
 
-  allDbCheckId: function( id ){ 
-    return true; 
-  },
-
-  validate: function( body, errors, cb ){
-    cb();
-  },
-
 
   formatErrorResponse: function( error ){
-    if( error.errors ){
-      return { message: error.message, errors: error.errors }
+    if( error.errorFields ){
+      return { message: error.message, errors: error.errorFields }
     } else {
       return { message: error.message }
     }
@@ -126,7 +115,18 @@ var Store = declare( null,  {
 
   },
 
+   _checkId: function( id ){ 
+    return true; 
+  },
+
+  _castId: function( id ){ 
+    return id; 
+  },
+
+  
+
   // *** Internal, protected calls that should't be changed by users ***
+
   _checkParamIds: function( reqParams, errors, skipLast ){
     var self = this;
     var lastItem;
@@ -139,8 +139,14 @@ var Store = declare( null,  {
     if( self.paramIds ){
       self.paramIds.forEach( function(k){
 
-        if( !( skipLast && k == lastItem ) && !self.allDbCheckId( reqParams[k] )  )
+        // Check that every ID passed is actually correct
+        if( !( skipLast && k == lastItem ) && !self._checkId( reqParams[ k ] )  )
           errors.push( { field: k, message: 'Invalid ID in URL: ' + k, mustChange: false } );
+
+        // Cast all IDs in req.params. This will make it much easier to use ID elements
+        // in req.params in MongoDb queries
+        reqParams[ k ] = self._castId( reqParams[ k ] );
+
       });
     }
   },
@@ -163,7 +169,9 @@ var Store = declare( null,  {
       case 'none':
       case 'some':
 
-        if( error.name === 'ServiceUnavailableError' ){
+        // Only for "some": if it's a ServiceUnavailableError, pass it through for Express to handle
+        // (the next error handler will get called)
+        if( self.chainErrors === 'some' &&  error.name === 'ServiceUnavailableError' ){
            next( error );
         } else {
 
@@ -214,43 +222,59 @@ var Store = declare( null,  {
       self.schema.check( body, req.body, errors, { notRequired: [ '_id' ]}  );
     }
 
-    self.validate( body,  errors, function(){
+    var validateFunction = function( body, errors, cb ) { cb( null ) }
+    if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
 
-      if( errors.length ){
-        self._sendError( res, next, new self.ValidationError('Validation problems', errors));
+
+
+    validateFunction.call( self.schema, body,  errors, function( err ){
+      if( err ){
+        self._sendError( res, next, err);
       } else {
+        
 
-        // Actually check permissions
-        self.checkPermissionsPost( req, function( err, granted ){
-          if( err ){
-            self._sendError( res, next, err );
-          } else {
-            if( ! granted ){
-              self._sendError( res, next, new self.ForbiddenError() );
+        if( errors.length ){
+          self._sendError( res, next, new self.ValidationError('Validation problems', errors));
+        } else {
+
+          // Actually check permissions
+          self.checkPermissionsPost( req, function( err, granted ){
+            if( err ){
+              self._sendError( res, next, err );
             } else {
+              if( ! granted ){
+                self._sendError( res, next, new self.ForbiddenError() );
+              } else {
 
-              // Clean up req.body from things that are not to be submitted
-              if( self.schema ) self.schema.cleanup( body );
+                // Clean up req.body from things that are not to be submitted
+                if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
 
-              self.postDbInsertNoId( body, req, function( err, fullDoc ){
+                self.postDbInsertNoId( body, req, function( err, fullDoc ){
 
-                if( err ){
-                  self._sendError( res, next, err );
-                } else {
+                  if( err ){
+                    self._sendError( res, next, err );
+                  } else {
 
-                  var doc = self.extrapolateDoc( fullDoc, req );
-                  res.send( 202, '' );
-                  self.afterPost( req, body, doc, fullDoc );
-                } // err
-              }) // postDbInsertNoId
+                    self.allDbExtrapolateDoc( fullDoc, req, function( err, doc) {
+                      if( err ){
+                        self._sendError( res, next, err );
+                      } else {
+                        res.send( 202, '' );
+                        self.afterPost( req, body, doc, fullDoc );
+                      }
+                    })
+                  } // err
+                }) // postDbInsertNoId
 
-            } // granted
+              } // granted
 
-          } // err
-        }) // checkPermissionsPost
+            } // err
+          }) // checkPermissionsPost
 
-      } // errors.length
-    }) // self.validate 
+        } // errors.length
+
+      } // err
+    }) // validate()
 
 
   },
@@ -283,52 +307,75 @@ var Store = declare( null,  {
       self.schema.cast(  body);
       self.schema.check( body, req.body, errors );
     }
-    self.validate( body,  errors, function(){
 
-      if( errors.length ){
-        self._sendError( res, next, new self.ValidationError('Validation problems', errors ) );
+    var validateFunction = function( body, errors, cb ) { cb( null ) }
+    if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
+
+    validateFunction.call( self.schema, body,  errors, function( err ){
+      if( err ){
+        self._sendError( res, next, err);
       } else {
-        // Fetch the doc
-        self.allDbFetch( req, function( err, fullDoc ){
-          if( err ){
-            self._sendError( res, next, err );
-          } else {
 
-            // Get the extrapolated doc
-            var doc = self.extrapolateDoc( fullDoc, req );
+        if( errors.length ){
+          self._sendError( res, next, new self.ValidationError('Validation problems', errors ) );
+        } else {
+          // Fetch the doc
+          self.allDbFetch( req, function( err, fullDoc ){
+            if( err ){
+              self._sendError( res, next, err );
+            } else {
 
-            // Actually check permissions
-            self.checkPermissionsPostAppend( req, doc, fullDoc, function( err, granted ){
-              if( err ){
-                self._sendError( res, next, err );
-              } else {
-                if( ! granted ){
-                  self._sendError( res, next, new self.ForbiddenError() );
-                } else {
+              // Get the extrapolated doc
+              self.allDbExtrapolateDoc( fullDoc, req, function( err, doc ){
+                if( err ) {
+                   self._sendError( res, next, err );
+                 } else {
+                 
 
-                  // Clean up req.body from things that are not to be submitted
-                  if( self.schema ) self.schema.cleanup( body );
-
-                  self.postDbAppend( body, req, doc, fullDoc, function( err, fullDocAfter ){
+                  // Actually check permissions
+                  self.checkPermissionsPostAppend( req, doc, fullDoc, function( err, granted ){
                     if( err ){
                       self._sendError( res, next, err );
                     } else {
+                      if( ! granted ){
+                        self._sendError( res, next, new self.ForbiddenError() );
+                      } else {
+
+                        // Clean up req.body from things that are not to be submitted
+                        if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+
+                        self.postDbAppend( body, req, doc, fullDoc, function( err, fullDocAfter ){
+                          if( err ){
+                            self._sendError( res, next, err );
+                          } else {
   
-                      var docAfter = self.extrapolateDoc( fullDoc, req );
-                      res.send( 202, '' );
-                      self.afterPostAppend( req, body, doc, fullDoc, docAfter, fullDocAfter );
+                            self.allDbExtrapolateDoc( fullDoc, req, function( err, docAfter ){
+                              if( err ){
+                                self._sendError( res, next, err );
+                              } else {
+                                res.send( 202, '' );
+                                self.afterPostAppend( req, body, doc, fullDoc, docAfter, fullDocAfter );
+                              }
+                            });
+
+                          } // err
+                        }) // postDbAppend
+
+                      } // granted
+
+
                     } // err
-                  }) // postDbAppend
+                  }) // allDbExtrapolateDoc 
 
-                } // granted
+                } // err
+              }) // allDbFetch
 
-              } // err
-            }) // allDbFetch
-
-          } // err
-        }) // checkPermissionsPostAppend
+            } // err
+          }) // checkPermissionsPostAppend
    
-      } // errors.length
+        } // errors.length
+
+      } // err
     }) // self.validate
 
   },
@@ -367,111 +414,138 @@ var Store = declare( null,  {
       self.schema.cast(  body );
       self.schema.check( body, req.body, errors );
     }
-    self.validate( body,  errors, function(){
 
-      if( errors.length ){
-        self._sendError( res, next, new self.ValidationError('Validation problems', errors ) );
+    var validateFunction = function( body, errors, cb ) { cb( null ) }
+    if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
+
+    validateFunction.call( self.schema, body,  errors, function( err ){
+      if( err ){
+        self._sendError( res, next, err);
       } else {
 
-        // Fetch the doc
-        self.allDbFetch( req, function( err, fullDoc ){
-          if( err ){
-            self._sendError( res, next, err );
-          } else {
+        if( errors.length ){
+          self._sendError( res, next, new self.ValidationError('Validation problems', errors ) );
+        } else {
+
+          // Fetch the doc
+          self.allDbFetch( req, function( err, fullDoc ){
+            if( err ){
+              self._sendError( res, next, err );
+            } else {
    
-            // Check the 'overwrite' option
-            if( typeof( overwrite ) !== 'undefined' ){
-              if( fullDoc && ! overwrite ){
-                self._sendError( res, next, new self.PreconditionFailedError() );
-              } else if( !fullDoc && overwrite ) {
-                self._sendError( res, next, new self.PreconditionFailedError() );
-              } else {
+              // Check the 'overwrite' option
+              if( typeof( overwrite ) !== 'undefined' ){
+                if( fullDoc && ! overwrite ){
+                  self._sendError( res, next, new self.PreconditionFailedError() );
+                } else if( !fullDoc && overwrite ) {
+                  self._sendError( res, next, new self.PreconditionFailedError() );
+                } else {
+                  continueAfterFetch();
+                }
+              } else { 
                 continueAfterFetch();
               }
-            } else { 
-              continueAfterFetch();
-            }
     
-            function continueAfterFetch(){
+              function continueAfterFetch(){
 
-              // It's a NEW doc: it will need to be an insert, _and_ permissions will be
-              // done on inputted data
-              if( ! fullDoc ){
+                // It's a NEW doc: it will need to be an insert, _and_ permissions will be
+                // done on inputted data
+                if( ! fullDoc ){
                 
-                // Actually check permissions
-                self.checkPermissionsPutNew( req, function( err, granted ){
-                  if( err ){
-                    self._sendError( res, next, err );
-                  } else {
-                    if( ! granted ){
-                      self._sendError( res, next, new self.ForbiddenError() );
+                  // Actually check permissions
+                  self.checkPermissionsPutNew( req, function( err, granted ){
+                    if( err ){
+                      self._sendError( res, next, err );
+                    } else {
+                      if( ! granted ){
+                        self._sendError( res, next, new self.ForbiddenError() );
+                      } else {
+
+                        // Clean up req.body from things that are not to be submitted
+                        if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+
+                        self.putDbInsert( body, req, function( err, fullDoc ){
+                          if( err ){
+                            self._sendError( res, next, err );
+                          } else {
+
+                            // Update "doc" to be the complete version of the doc from the DB
+                            self.allDbExtrapolateDoc( fullDoc, req, function( err, doc ){
+                              if( err ){
+                                self._sendError( res, next, err );
+                              } else {
+
+                                // All good, send a 202
+                                res.send( 202, '' );
+                                self.afterPutNew( req, body, doc, fullDoc, overwrite );
+                              }
+                            })
+                        
+                          }
+                        })
+                      }
+                  } // err
+                }) // checkPermissionsPutNew
+
+
+                // It's an EXISTING doc: it will need to be an update, _and_ permissions will be
+                // done on inputted data AND existing doc
+                } else {
+
+                  self.allDbExtrapolateDoc( fullDoc, req, function( err, doc ){
+                    if( err ){
+                      self._sendError( res, next, err );
                     } else {
 
-                      // Clean up req.body from things that are not to be submitted
-                      if( self.schema ) self.schema.cleanup( body );
-
-                      self.putDbInsert( body, req, function( err, fullDoc ){
+                      // Actually check permissions
+                      self.checkPermissionsPutExisting( req, doc, fullDoc, function( err, granted ){
                         if( err ){
                           self._sendError( res, next, err );
-                         } else {
+                        } else {
+                          if( ! granted ){
+                            self._sendError( res, next, new self.ForbiddenError() );
+                          } else {
 
-                           // Update "doc" to be the complete version of the doc from the DB
-                           var doc = self.extrapolateDoc( fullDoc, req );
+                            // Clean up req.body from things that are not to be submitted
+                            if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
 
-                           // All good, send a 202
-                           res.send( 202, '' );
-                           self.afterPutNew( req, body, doc, fullDoc, overwrite );
-                        }
-                      })
-                    }
-                  }
-                })
+                            self.putDbUpdate(body, req, doc, fullDoc, function( err, fullDocAfter ){
+                              if( err ){
+                                self._sendError( res, next, err );
+                              } else {
 
+                                // Update "doc" to be the complete version of the doc from the DB
+                                self.allDbExtrapolateDoc( fullDocAfter, req, function( err, docAfter ){
+                                  if( err ){
+                                    self._sendError( res, next, err );
+                                  } else {
 
-              // It's an EXISTING doc: it will need to be an update, _and_ permissions will be
-              // done on inputted data AND existing doc
-              } else {
+                                    // All good, send a 202
+                                    res.send( 202, '' );
+                                    self.afterPutExisting( req, body, doc, docAfter, fullDoc, fullDocAfter, overwrite );
+                                  } 
+                                })
+                              }
+                            }) // self.putDbUpdate
 
-                var doc = self.extrapolateDoc( fullDoc, req );
+                          } // granted
 
-                // Actually check permissions
-                self.checkPermissionsPutExisting( req, doc, fullDoc, function( err, granted ){
-                  if( err ){
-                    self._sendError( res, next, err );
-                  } else {
-                    if( ! granted ){
-                      self._sendError( res, next, new self.ForbiddenError() );
-                    } else {
+                        } // err
+                      }) // self.checkPermissionsPutExisting
 
-                      // Clean up req.body from things that are not to be submitted
-                      if( self.schema ) self.schema.cleanup( body );
+                    } // err
+                  }) // self.allDbExtrapolateDoc
+                }
 
-                      self.putDbUpdate(body, req, doc, fullDoc, function( err, fullDocAfter ){
-                        if( err ){
-                          self._sendError( res, next, err );
-                         } else {
-
-                           // Update "doc" to be the complete version of the doc from the DB
-                           var docAfter = self.extrapolateDoc( fullDocAfter, req );
-
-                           // All good, send a 202
-                           res.send( 202, '' );
-                           self.afterPutExisting( req, body, doc, docAfter, fullDoc, fullDocAfter, overwrite );
-                        }
-                      })
-                    }
-                  }
-                })
-              }
-            }
+              } // function continueAfterFetch()
     
-          } // err
-        }) // allDbFetch
+            } // err
+          }) // allDbFetch
 
-   
-      } // if( errors.length )
+        } // if errors.length  
 
-    }) 
+      } // err 
+    }) // validateFunction
 
   },
 
@@ -635,36 +709,43 @@ var Store = declare( null,  {
           self._sendError( res, next, new self.NotFoundError());
         } else {
 
-          var doc = self.extrapolateDoc( fullDoc, req );
+          self.allDbExtrapolateDoc( fullDoc, req, function( err, doc ){
 
-          // Check the permissions 
-          self.checkPermissionsGet( req, doc, fullDoc, function( err, granted ){
             if( err ){
               self._sendError( res, next, err );
             } else {
 
-              if( ! granted ){
-                self._sendError( res, next, new self.ForbiddenError() ); 
-              } else {
-                
-                // "preparing" the doc. The same function is used by GET for collections 
-                self.getDbPrepareBeforeSend( doc, function( err, doc ){
-                  if( err ){
-                    self._sendError( res, next, err );
+              // Check the permissions 
+              self.checkPermissionsGet( req, doc, fullDoc, function( err, granted ){
+                if( err ){
+                  self._sendError( res, next, err );
+                } else {
+
+                  if( ! granted ){
+                    self._sendError( res, next, new self.ForbiddenError() ); 
                   } else {
+                
+                    // "preparing" the doc. The same function is used by GET for collections 
+                    self.getDbPrepareBeforeSend( doc, function( err, doc ){
+                      if( err ){
+                        self._sendError( res, next, err );
+                      } else {
                    
-                    // Send "prepared" doc
-                    res.json( 200, doc );
-
-                    self.afterGet( req, doc, fullDoc );
-                  } 
-                })
-              }
-
+                        // Send "prepared" doc
+                        res.json( 200, doc );
+                        self.afterGet( req, doc, fullDoc );
+                      } 
+                    })
+                  } // granted
 
 
-            }
-          }) // self.checkPermissionsGet
+
+                }
+              }) // self.checkPermissionsGet
+
+
+            } // err
+          }) // self.allDbExtrapolateDoc
 
         } // if self.fetchedDoc
 
@@ -704,36 +785,44 @@ var Store = declare( null,  {
           self._sendError( res, next, new self.NotFoundError());
         } else {
 
-          var doc = self.extrapolateDoc( fullDoc, req );
+          self.allDbExtrapolateDoc( fullDoc, req, function( err, doc ){
 
-          // Check the permissions 
-          self.checkPermissionsDelete( req, doc, fullDoc, function( err, granted ){
             if( err ){
               self._sendError( res, next, err );
             } else {
 
-              if( ! granted ){
-                self._sendError( res, next, new self.ForbiddenError() );
-              } else {
-                
-                // Actually delete the document
-                self.deleteDbDo( req.params, function( err ){
-                  if( err ){
-                    self._sendError( res, next, err );
+
+              // Check the permissions 
+              self.checkPermissionsDelete( req, doc, fullDoc, function( err, granted ){
+                if( err ){
+                  self._sendError( res, next, err );
+                } else {
+
+                  if( ! granted ){
+                    self._sendError( res, next, new self.ForbiddenError() );
                   } else {
+                
+                    // Actually delete the document
+                    self.deleteDbDo( req.params, function( err ){
+                      if( err ){
+                        self._sendError( res, next, err );
+                      } else {
                    
-                    // Return 204 and empty contents as requested by RFC
-                    res.json( 204, '' );
+                        // Return 204 and empty contents as requested by RFC
+                        res.json( 204, '' );
 
-                    self.afterDelete( req, doc, fullDoc );
-                  } 
-                })
-              }
+                        self.afterDelete( req, doc, fullDoc );
+                      } 
+                    })
+
+                  } // granted
 
 
-            }
-          }) // self.checkPermissionsGet
+                }
+              }) // self.checkPermissionsGet
 
+            } // err
+          }) // allDbExtrapolateDoc
         } // if self.fetchedDoc
 
       } // if ! err

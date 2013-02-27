@@ -1,0 +1,8 @@
+
+* Make it possible to echo results (based on settings)
+* Take out old code from BookingDojo, test log queries with new system
+
+* Write a couple of examples in the documentation based on real stores
+
+And then...
+Answer personal emails, Entertainers.Biz's emails, and publish something in FSM

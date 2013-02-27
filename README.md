@@ -143,19 +143,26 @@ Basically, an object of type `PeopleStore` was created, and its method `_makeGet
 
 At this point, you are aware that there are six crucial methods for each store:
 
- * `_makeGet()`
- * `_makeGetQuery()`
- * `_makePut()`
- * `_makePost()`
- * `_makePostAppend()`
- * `_makeDelete()`
+ * `_makeGet()` (implement GET for one single document)
+ * `_makeGetQuery()` (implement GET for a collection, no ID passed)
+ * `_makePut()` (implement PUT for a collection)
+ * `_makePost()` (implement POST for a collection)
+ * `_makePostAppend()` (implement POST for a collection, when ID is present)
+ * `_makeDelete()` (implement DELETE for a collection)
+
+There are also some functions used by them, which will change according to the store:
+
+ * `_checkId()` (check that the passed ID is OK for the DB engine)
+ * `_castId()` (cast the passed value to one of type ID for that DB engine)
 
 These are the functions and attributes you are able to change:
 
 **IMPORTANT: General functions**  
- * `extrapolateDoc( fullDoc, req )`.
+
+ * `validate( body,  errors, cb )`
 
 **IMPORTANT: Database functions**  
+ * `allDbExtrapolateDoc( fullDoc, req, cb )`
  * `allDbFetch( req, cb )`
  * `getDbQuery( req, res, sortBy, ranges, filters )`
  * `putDbInsert( body, req, cb )`
@@ -163,8 +170,6 @@ These are the functions and attributes you are able to change:
  * `postDbInsertNoId( body, req, cb )`
  * `postDbAppend( body, req, doc, fullDoc, cb )`
  * `deleteDbDo( id, cb )`
- * `allDbCheckId( id )`
- * `validate( body,  errors, cb )`
  * `getDbPrepareBeforeSend( doc, cb )`
 
 **IMPORTANT: Attributes to set handled requests**  
@@ -188,7 +193,7 @@ These are the functions and attributes you are able to change:
  * `checkPermissionsGet( req, doc, fullDoc, cb )`
  * `checkPermissionsDelete( req, doc, fullDoc, cb )`
 
-**After op functions** 
+**Redefinable after-op functions** 
  * `afterPutNew( req, body, doc, fullDoc, overwrite )`
  * `afterPutExisting( req, body, doc, fullDoc, docAfter, fullDocAfter, overwrite )`
  * `afterPost( req, body, doc, fullDoc)`
@@ -196,8 +201,8 @@ These are the functions and attributes you are able to change:
  * `afterDelete( req, doc, fullDoc )`
  * `afterGet( req, doc, fullDoc)`
 
-**Generic functions** 
-  * `formatErrorResponse( error )`
+**Redefinable generic functions** 
+  * `formatErrorResponse( error )` 
   * `logError( error )`
 
 **HTTP Errors**

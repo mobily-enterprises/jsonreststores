@@ -23,59 +23,73 @@ var SimpleSchema = declare( null, {
   },
 
 
-  // id
-  idTypeCast: function( definition, value ){
-    return value; 
-  },
-  idTypeCheck: function( definition, name, value, errors ){
-  },
+  idTypeCast: function( definition, value ){ return value; },
 
-  // string
-  stringTypeCast: function( definition, value){
-    value = value.toString();
+  stringTypeCast: function( definition, value){ return value.toString(); },
 
-    // Trim it if necessary. Since there is no chanche of adding an error,
-    // I consider this part of casting
-    if( definition.trim ) value = value.substr( 0, definition.trim );
-    if( definition.lowercase) value = value.toLowerCase();
-    if( definition.uppercase) value = value.toLowerCase();
+  numberTypeCast: function( definition, value){ return Number( value ); },
+ 
+  dateTypeCast: function( definition, value){ return new Date( value ); },
 
-    return value;
-  },
-  stringTypeCheck: function( definition, name, value, errors ){
-  },
-
-  numberTypeCast: function( definition, value){
-    return Number( value );
-  },
-  numberTypeCheck: function( definition, name, value, errors ){
-    // Check its range
-    if( typeof( definition.max ) !== 'undefined'  && value > definition.max )
-      errors.push( { field: name, message: 'Field is too high: ' + name } );
-    if( typeof( definition.min ) !== 'undefined'  && value < definition.min )
-      errors.push( { field: name, message: 'Field is too low: ' + name } );
-  },
-
-  
-  dateTypeCast: function( definition, value){
-   return new Date( value );
-    
-  },
-  dateTypeCheck: function( definition, name, value, errors ){
-  },
+  arrayTypeCast: function( definition, value){ return Array.isArray( value ) ? value : [ value ] },
 
 
-  arrayTypeCast: function( definition, value){
-    if( ! Array.isArray( value ) ){
-      // Turn into an Array with 1 value: the original object
-      return [ value ];
+
+ 
+  minTypeParam: function( p ){
+    if( p.definition.type === 'number' && p.value < definitionValue ){
+      p.errors.push( { field: p.fieldName, message: 'Field is too low: ' + p.fieldName } );
     }
-    return value;
-  },
-  arrayTypeCheck: function( definition, name, value, errors ){
   },
 
+  maxTypeParam: function( p ){
+    if( p.definition.type === 'number' && p.value > p.definitionValue ){
+      p.errors.push( { field: p.fieldName, message: 'Field is too high: ' + p.fieldName } );
+    }
+  },
 
+  validateTypeParam: function( p ){
+    if( typeof( p.definitionValue ) !== 'function' )
+      throw( new Error("Validator function needs to be a function, found: " + typeof( p.definitionValue ) ) );
+
+    var r = p.definitionValue.call( p.object, p.object[ p.fieldName ], p.fieldName, p.schema );
+    if( typeof( r ) === 'string' ) p.errors.push( { field: p.fieldName, message: r, mustChange: true } );
+  },
+
+  uppercaseTypeParam: function( p ){
+    if( typeof( p.value ) !== 'string' ) return;
+    return  p.value.toUpperCase();
+  },
+  lowercaseTypeParam: function( p ){
+    if( typeof( p.value ) !== 'string' ) return;
+    return  p.value.toLowerCase();
+  },
+
+  trimTypeParam: function( p ){
+    if( typeof( p.value ) !== 'string' ) return;
+    return  p.value.substr( 0, p.definitionValue );
+  },
+
+  requiredTypeParam: function( p ){
+
+    if( typeof( p.object[ fieldName ]) === 'undefined'){
+
+      // Callers can set exceptions to the rule through `option`. This is crucial
+      // to exclude some IDs (for example, POST doesn't have an recordId even though
+      // recordId is marked as `required` in the schema
+      if( !( Array.isArray( p.options.notRequired )  && p.options.notRequired.indexOf( k ) != -1  ) ){
+
+        // The error is definitely there!
+        p.errors.push( { field: p.fieldName, message: 'Field required:' + p.fieldName, mustChange: true } );
+      }
+    }
+  },
+
+  notEmptyTypeParam: function( p ){
+    if( ! Array.isArray( p.value ) && p.objectBeforeCast[ p.fieldName ] == '' ) {
+      p.errors.push( { field: p.fieldName, message: 'Field cannot be empty: ' + p.fieldName, mustChange: true } );
+    }
+  },
 
   cast: function( object ){
   
@@ -91,140 +105,76 @@ var SimpleSchema = declare( null, {
     var type;
   
     // Scan passed object
-    for( var k in object ){
+    for( var fieldName in object ){
   
-  
-      definition = this.structure[ k ];
+      definition = this.structure[ fieldName ];
   
       if( typeof(definition) === 'undefined' ) return;
   
       // Run the xxxTypeCast function for a specific type
       if( typeof( this[ definition.type + 'TypeCast' ]) === 'function' ){
-        object[ k ] = this[ definition.type + 'TypeCast' ](definition, object[ k ]);
+        object[ fieldName ] = this[ definition.type + 'TypeCast' ](definition, object[ fieldName ]);
       } else {
         throw( new Error("No casting function found, type probably wrong: " + definition.type ) );
       }
 
-        /* 
-        switch(definition.type){
-  
-          case 'string':
-            object[ k ] = object[ k ].toString();
-            // Trim it if necessary. Since there is no chanche of adding an error,
-            // I consider this part of casting
-            if( definition.trim ) object[ k ] = object[ k ].substr( 0, definition.trim );
-            if( definition.lowercase) object[ k ] = object[ k ].toLowerCase();
-            if( definition.uppercase) object[ k ] = object[ k ].toLowerCase();
-          break;
-     
-          case 'number':
-            object[ k ] = Number( object[k] );
-          break;
-  
-          case 'date':
-            object[ k ] = new Date( object[ k ] );
-          break;
-  
-          case 'id':
-            object[ k ] = this.castId( object[ k ] );
-          break;
-  
-          case 'array':
-            if( ! Array.isArray( object[ k ] ) ){
-               // Turn into an Array with 1 value: the original object
-               object[ k ] = [ object[ k ] ];
-            }
-          break;
-  
-        }
-       */
-
     }
    
   },
-  
+
+ 
   check: function( object, objectBeforeCast, errors, options ){
   
-  /*
-      schema: {
-        longName: { type: 'string', required: true, notEmpty: true, trim: 35 },
-        tag     : { type: 'number', notEmpty: true, max: 30 },
-        _id     : { type: 'id', required: true },
-        _tabId  : { type: 'id', doNotSave: true },
-      }
-    */
-  
     var type;
-  
     var options = typeof(options) === 'undefined' ? {} : options;
   
     if( ! Array.isArray( errors ) ) errors = [];
-  
-    // Use the global validator first
-    if( typeof( this.options.validator) !== 'undefined' ){
-      this.options.validator.call( this, object, errors );
-    }
-   
-    // Scan schema
-    for( var k in this.structure ){
-      definition = this.structure[ k ];
-     
-      // Check that all "required" fields are there
-      if( definition.required && typeof( object[ k ]) === 'undefined'){
 
-         // Callers can set exceptions to the rule through `option`. This is crucial
-         // to exclude some IDs (for example, POST doesn't have an recordId even though
-         // recordId is marked as `required` in the schema
-         if( !( Array.isArray( options.notRequired )  && options.notRequired.indexOf( k ) != -1  ) ){
-
-          // The error is definitely there!
-          errors.push( { field: k, message: 'Field required:' + k, mustChange: true } );
-        }
-      }
-    }
-  
-  
-    // Scan passed object
+    // Scan passed object, check if there are extra fields that shouldn't
+    // be there
     for( var k in object ){
   
       // First of all, if it's not in the schema, it's not allowed
       if( typeof( this.structure[ k ] ) === 'undefined' ){
         errors.push( { field: k, message: 'Field not allowed: ' + k, mustChange: false } );
-      } else {
-  
-        // Get the value type
-        definition = this.structure[ k ];
-  
-        // Check if the value was empty when it was submitted and it shouldn't have been
-
-        if( definition.notEmpty && ! Array.isArray( object[ k ] ) && objectBeforeCast[ k ] == '' ) {
-            errors.push( { field: k, message: 'Field cannot be empty: ' + k, mustChange: true } );
-        }
-  
-        // Apply fieldValidators
-        if( typeof( definition.fieldValidator) !== 'undefined' ){
-          var msg = definition.fieldValidator( false );
-          if( ! definition.fieldValidator( object[ k ] ) )
-            errors.push( { field: k, message: msg, mustChange: true } );
-        }
-  
-        // Run the xxxTypeCheck function for a specific type
-        if( typeof( this[ definition.type + 'TypeCheck' ]) === 'function' ){
-          this[ definition.type + 'TypeCheck' ](definition, k, object[ k ], errors );
-        } else {
-          throw( new Error("No checking function found, type probably wrong: " + definition.type ) );
-        }
-
       }
-   
     }
-    
+
+    // Scan schema
+    for( var fieldName in this.structure ){
+      definition = this.structure[ fieldName ];
+
+       // Run specific functions based on the passed options
+      for( var attribute in definition ){
+        if( attribute != 'type' ){
+          if( typeof( this[ attribute + 'TypeParam' ]) === 'function' ){
+            var result = this[ attribute + 'TypeParam' ]({
+              value: object[ fieldName ],
+              object: object,
+              objectBeforeCast: objectBeforeCast,
+              fieldName: fieldName,
+              definition: definition,
+              definitionValue: definition[ attribute ],
+              schema: this,
+              errors: errors
+            } );
+            if( typeof( result ) !== 'undefined' ) object[ fieldName ] = result;
+
+          }
+             
+        }
+      }   
+ 
+ 
+    }
+  
+  
   },
 
-  cleanup: function( object ){
+  cleanup: function( object, attributeName ){
     newObject = {};
     for( var k in object ){
-       if( this.structure[ k ].doNotSave ) {
+       if( this.structure[ k ][attributeName] ) {
          delete object [ k ]; 
          newObject[ k ] = object[ k ];
        }
@@ -232,14 +182,20 @@ var SimpleSchema = declare( null, {
     return newObject;
   },
 
+
+  validate: function( object, error, cb ){
+
+    if( typeof( this.options ) === 'object'  && typeof( this.options.validate) === 'function' ){
+      this.options.validate.call( object, this, error, cb );
+    } else {
+      cb( null, true );
+    }
+  },
+
 });
 
 
 
 exports = module.exports = SimpleSchema;
-
-
-
-
 
 

@@ -67,7 +67,7 @@ var MongoStore = declare( Store,  {
     if( this.paramIds.length !== 1 ) 
       return cb( new Error("Stock allDbFetch does not work when paramsIds > 1"), null );
  
-    this.collection.findOne( {_id: ObjectId( req.params[this.paramIds[0]] ) }, cb );
+    this.collection.findOne( {_id: req.params[this.paramIds[0]] }, cb );
 
   }, 
 
@@ -115,27 +115,47 @@ var MongoStore = declare( Store,  {
         self._querySetRangeHeaders( res, ranges, total );
 
         cursor.sort( self._queryMakeMongoSortArray( sortBy ) );        
-        cursor.toArray( function( err, docs ){
+        cursor.toArray( function( err, queryDocs ){
           if( err ){
             self._sendError( res, err );
           } else {
-          
-            var docList = []; 
-            docs.forEach( function( fullDoc ){
+           
+            changeFunctions = [];
+            queryDocs.forEach( function( fullDoc, index ){
 
-              console.log( fullDoc );
+              changeFunctions.push( function( callback ){
+                
+                self.allDbExtrapolateDoc( fullDoc, res, function( err, extrapolatedDoc ){
+                  if( err ){
+                    callback( err, null );
+                  } else {
+                   
+                    self.getDbPrepareBeforeSend( extrapolatedDoc, function( err, preparedDoc ){
+                      if( err ){
+                        callback( err, null );
+                      } else {
+                        queryDocs[ index ] = preparedDoc;
+                        callback( null, null );
+                      }
+                    })
 
-              var doc = self.extrapolateDoc( fullDoc );
-              // TODO: run these as well
-              // self.getDbPrepareBeforeSend( doc, function( err, doc ){
-              docList.push( doc );
+                  }
+                });
+              });
+            }); // queryDocs.forEach
 
+            async.parallel( changeFunctions, function( err ) {
+              if( err ){
+                self._sendError( res, err );
+              } else {
+                res.json( 200, docList );
+              }
             })
-            res.json( 200, docList );
-          }
-        });
-      }
-    });
+
+          } // err
+        }); // cursort.toArray
+      } // err
+    }); 
   },
 
   postDbInsertNoId: function( body, req,  cb ){
@@ -209,12 +229,16 @@ var MongoStore = declare( Store,  {
     cb( null );
   },
 
+
   // Check if an ID is legal for this particular engine
-  allDbCheckId: function( id ){ 
+  _checkId: function( id ){ 
     return checkObjectId( id );
   },
 
-
+  // Cast a string to its ObjectId equivalent
+  _castId: function( id ){ 
+    return checkObjectId( id ) ? ObjectId( id ) : id;
+  },
 
 
   _queryEnrichFilters: function( filters ){
@@ -248,14 +272,6 @@ var MongoStore = declare( Store,  {
 
   },
 
-
-
-  /*
-  // Cast an ID for this particular engine
-  castId: function( id ){
-    return ObjectId( id );
-  }
-  */
 
 });
 
