@@ -1,4 +1,4 @@
-* Make mongoLogger work with new library (define a store just with query; will need to define schema)
-* Write a couple of examples in the documentation based on real stores
+* Make mongoLogger work with new library (define a store just with query; will need to define schema based on data gathered)
+* Write a couple of examples in the documentation based on real stores, plus mention "db"!
 * Finish documentation (Error messages and error management, schema definitions)
 

@@ -309,12 +309,11 @@ var Store = declare( null,  {
                           self._sendErrorOnErr( err, res, next, function(){
 
 
-                            // All good, send a 201 (successfully created)
                             res.setHeader( 'Location', req.originalUrl + doc[ self.idProperty ] );
 
                             if( self.echoAfterPost ){
                               self.getDbPrepareBeforeSend( doc, function( err, doc ){
-                                res.json( 200, doc );
+                                res.json( 201, doc );
                               })
                             } else {
                               res.send( 201, '' );
@@ -419,7 +418,6 @@ var Store = declare( null,  {
                                          res.json( 200, docAfter );
                                        })
                                     } else { 
-                                      // All good, send a 204 (no content)
                                       res.send( 204, '' );
                                     }
 
@@ -547,15 +545,13 @@ var Store = declare( null,  {
                                 self.afterPutNew( req, body, doc, fullDoc, overwrite, function( err ){
                                   self._sendErrorOnErr( err, res, next, function(){
 
-                                    // All good, send a 201 (successfully created)
                                     res.setHeader( 'Location', req.originalUrl + doc[ self.idProperty ] );
 
                                     if( self.echoAfterPutNew ){
                                       self.getDbPrepareBeforeSend( doc, function( err, doc ){
-                                        res.json( 200, doc );
+                                        res.json( 201, doc );
                                       })
                                     } else {
-                                      // All good, send a 204 (no content)
                                       res.send( 201, '' );
                                     }
 
@@ -604,14 +600,12 @@ var Store = declare( null,  {
                                     self.afterPutExisting( req, body, doc, docAfter, fullDoc, fullDocAfter, overwrite, function( err ) {
                                       self._sendErrorOnErr( err, res, next, function(){
 
-                                        // All good, send a 204 (no content)
                                         if( self.echoAfterPutExisting ){
                                           self.getDbPrepareBeforeSend( docAfter, function( err, docAfter ){
                                             res.json( 200, docAfter );
                                           })
                                         } else {
-                                          // All good, send a 204 (no content)
-                                          res.send( 201, '' );
+                                          res.send( 204, '' );
                                         }
                                       }) // err
                                     }) // self.afterPutExisting
