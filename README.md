@@ -157,20 +157,17 @@ There are also some functions used by them, which will change according to the s
 
 These are the functions and attributes you are able to change:
 
-**IMPORTANT: General functions**  
-
- * `validate( body,  errors, cb )`
 
 **IMPORTANT: Database functions**  
- * `allDbExtrapolateDoc( fullDoc, req, cb )`
- * `allDbFetch( req, cb )`
- * `getDbQuery( req, res, sortBy, ranges, filters )`
- * `putDbInsert( body, req, cb )`
- * `putDbUpdate( body, req, doc, fullDoc, cb )`
- * `postDbInsertNoId( body, req, cb )`
- * `postDbAppend( body, req, doc, fullDoc, cb )`
- * `deleteDbDo( id, cb )`
- * `getDbPrepareBeforeSend( doc, cb )`
+ * `allDbFetch( req, cb )` (fetch a document based on `req`)
+ * `allDbExtrapolateDoc( fullDoc, req, cb )`(from the fetched document, extrapolate the data you actually want)
+ * `getDbQuery( req, res, sortBy, ranges, filters )` (executes the query; this is the only DB function that needs to handle the response)
+ * `putDbInsert( body, req, cb )`(inserts a record in the DB after a PUT)
+ * `putDbUpdate( body, req, doc, fullDoc, cb )`(updates a record in the DB after a PUT)
+ * `postDbInsertNoId( body, req, cb )`(adds a new record to the DB; a new ID will be created)
+ * `postDbAppend( body, req, doc, fullDoc, cb )` (appends information to existing record after PUT)
+ * `deleteDbDo( id, cb )`(deletes a record)
+ * `getDbPrepareBeforeSend( doc, cb )`(manipulate a record jut before sending it back to the client)
 
 **IMPORTANT: Attributes to set handled requests**  
  * `handlePut: true`
