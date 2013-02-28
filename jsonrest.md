@@ -31,16 +31,16 @@ The reference implementation for the client is JsonRest by Dojo
   * `204 No Content` - on success, IF NOT returning data
 
 
-# POST {target}/id  *****
+# POST {target}/id
 
-# "APPEND PUT"
+## "APPEND PUT"
 
 **When in Dojo**:  
 
  * store.put(), with ID (object/options), and options.incremental is TRUE
    * The option `overwrite` here cannot mean much, as it's an append operation
 
-**Goal**:  
+**Goals**:  
 
  * "Append" to a specific object
 
@@ -66,7 +66,7 @@ The reference implementation for the client is JsonRest by Dojo
 
  * store.put(), no ID (object/options), and options.incremental is FALSE
 
-**Goal:** 
+**Goals:** 
 
  * Write over a resource with a specific ID (or create it if it doesn't yet exist)
 
@@ -87,6 +87,10 @@ The reference implementation for the client is JsonRest by Dojo
 
 **When:**  
  * store.get(id)
+
+**Goals:**  
+
+ * Getch a specific resource
 
 **Notes:**  
 
