@@ -1,8 +1,4 @@
-
-* Make it possible to echo results (based on settings)
-* Take out old code from BookingDojo, test log queries with new system
-
+* Make mongoLogger work with new library (define a store just with query; will need to define schema)
 * Write a couple of examples in the documentation based on real stores
+* Finish documentation (Error messages and error management, schema definitions)
 
-And then...
-Answer personal emails, Entertainers.Biz's emails, and publish something in FSM

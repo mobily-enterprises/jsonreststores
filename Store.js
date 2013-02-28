@@ -5,6 +5,7 @@ var
 , declare = require('simpledeclare')
 , SimpleSchema = require('./SimpleSchema')
 , url = require('url')
+, async = require('async')
 ;
 
 exports.declare = declare;
@@ -14,6 +15,7 @@ var Store = declare( null,  {
 
   paramIds: [ ],
   schema: null,
+  idProperty: 'id',
 
   storeName: null,
  
@@ -24,7 +26,8 @@ var Store = declare( null,  {
   handleGetQuery: true,
   handleDelete: true,
 
-  echoAfterPut: false,
+  echoAfterPutNew: false,
+  echoAfterPutExisting: false,
   echoAfterPost: false,
   echoAfterPostAppend: false,
 
@@ -56,7 +59,7 @@ var Store = declare( null,  {
     cb( null, doc );
   }, 
 
-  getDbQuery: function( req, res, sortBy, ranges, filters ){
+  getDbQuery: function( req, res, next, sortBy, ranges, filters ){
 
     res.json( 200, [] );
   },
@@ -96,28 +99,67 @@ var Store = declare( null,  {
 
 
   // *** "after" calls ***
-  afterPutNew: function( req, body, doc, fullDoc, overwrite ){
+  afterPutNew: function( req, body, doc, fullDoc, overwrite, cb ){
+    cb( null )
   },
-  afterPutExisting: function( req, body, doc, fullDoc, docAfter, fullDocAfter, overwrite ){
-  },
-
-  afterPost: function( req, doc, fullDoc){
-  },
-
-  afterPostAppend: function( doc, body, fullDoc, docAfter, fullDocAfter ){
+  afterPutExisting: function( req, body, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb ){
+    cb( null )
   },
 
-  afterDelete: function( req, doc, fullDoc ){
+  afterPost: function( req, body, doc, fullDoc, cb){
+    cb( null );
   },
 
-  afterGet: function( req, doc, fullDoc) {
+  afterPostAppend: function( doc, body, doc, fullDoc, docAfter, fullDocAfter, cb ){
+    cb( null );
+  },
+
+  afterDelete: function( req, doc, fullDoc, cb ){
+    cb( null );
+  },
+
+  afterGet: function( req, doc, fullDoc, cb ) {
+    cb( null );
   },
 
 
   _clone: function( obj ){
     return  JSON.parse( JSON.stringify( obj ) );
+  },
+
+
+  _extrapolateAndPrepareAll: function( docs, req, cb ){
+
+    var self = this;
+
+    var changeFunctions = [];
+    docs.forEach( function( fullDoc, index ){
+
+      changeFunctions.push( function( callback ){
+
+        self.allDbExtrapolateDoc( fullDoc, req, function( err, extrapolatedDoc ){
+          if( err ){
+            callback( err, null );
+          } else {
+
+            self.getDbPrepareBeforeSend( extrapolatedDoc, function( err, preparedDoc ){
+              if( err ){
+                callback( err, null );
+              } else {
+                docs[ index ] = preparedDoc;
+                callback( null, null );
+              }
+            })
+
+          }
+        });
+      });
+    }); // docs.forEach
+
+    async.parallel( changeFunctions, cb );
 
   },
+
 
    _checkId: function( id ){ 
     return true; 
@@ -230,7 +272,7 @@ var Store = declare( null,  {
     // Do schema and callback functon checks. They will both add to `errors`
     if( self.schema !== null ){
       self.schema.cast(  body );
-      self.schema.check( body, req.body, errors, { notRequired: [ '_id' ]}  );
+      self.schema.check( body, req.body, errors, { notRequired: [ self.idProperty ]}  );
     }
 
     var validateFunction = function( body, errors, cb ) { cb( null ) }
@@ -262,8 +304,25 @@ var Store = declare( null,  {
                     self.allDbExtrapolateDoc( fullDoc, req, function( err, doc) {
                       self._sendErrorOnErr( err, res, next, function(){
 
-                        res.send( 202, '' );
-                        self.afterPost( req, body, doc, fullDoc );
+
+                        self.afterPost( req, body, doc, fullDoc, function( err ){
+                          self._sendErrorOnErr( err, res, next, function(){
+
+
+                            // All good, send a 201 (successfully created)
+                            res.setHeader( 'Location', req.originalUrl + doc[ self.idProperty ] );
+
+                            if( self.echoAfterPost ){
+                              self.getDbPrepareBeforeSend( doc, function( err, doc ){
+                                res.json( 200, doc );
+                              })
+                            } else {
+                              res.send( 201, '' );
+                            }
+
+                          }) // err
+                        }) // self.afterPost
+                       
                       }) // err
                     })
 
@@ -341,16 +400,34 @@ var Store = declare( null,  {
                         // Clean up req.body from things that are not to be submitted
                         if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
 
+                        // Paranoid check
+                        // Make sure that the id property in the body does match
+                        // the one passed as last parameter in the list of IDs
+                        body[ self.idProperty ] = req.params[self.paramIds[ self.paramIds.length - 1 ]];
+
                         self.postDbAppend( body, req, doc, fullDoc, function( err, fullDocAfter ){
                           self._sendErrorOnErr( err, res, next, function(){
   
                             self.allDbExtrapolateDoc( fullDoc, req, function( err, docAfter ){
                               self._sendErrorOnErr( err, res, next, function(){
 
-                                res.send( 202, '' );
-                                self.afterPostAppend( req, body, doc, fullDoc, docAfter, fullDocAfter );
+                                self.afterPostAppend( req, body, doc, fullDoc, docAfter, fullDocAfter, function( err ){
+                                  self._sendErrorOnErr( err, res, next, function(){
+
+                                    if( self.echoAfterPostAppend ){
+                                       self.getDbPrepareBeforeSend( docAfter, function( err, docAfter ){
+                                         res.json( 200, docAfter );
+                                       })
+                                    } else { 
+                                      // All good, send a 204 (no content)
+                                      res.send( 204, '' );
+                                    }
+
+                                  }) // err
+                                }) // self.afterPostAppend
+
                               }) // err
-                            });
+                            }); // self.allDbExtrapolateDoc
 
                           }) // err
                         }) // postDbAppend
@@ -422,7 +499,8 @@ var Store = declare( null,  {
           // Fetch the doc
           self.allDbFetch( req, function( err, fullDoc ){
             self._sendErrorOnErr( err, res, next, function(){
-   
+  
+ 
               // Check the 'overwrite' option
               if( typeof( overwrite ) !== 'undefined' ){
                 if( fullDoc && ! overwrite ){
@@ -454,6 +532,11 @@ var Store = declare( null,  {
                         // Clean up req.body from things that are not to be submitted
                         if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
 
+                        // Paranoid check
+                        // Make sure that the id property in the body does match
+                        // the one passed as last parameter in the list of IDs
+                        body[ self.idProperty ] = req.params[self.paramIds[ self.paramIds.length - 1 ]];
+
                         self.putDbInsert( body, req, function( err, fullDoc ){
                           self._sendErrorOnErr( err, res, next, function(){
 
@@ -461,17 +544,34 @@ var Store = declare( null,  {
                             self.allDbExtrapolateDoc( fullDoc, req, function( err, doc ){
                               self._sendErrorOnErr( err, res, next, function(){
 
-                                // All good, send a 202
-                                res.send( 202, '' );
-                                self.afterPutNew( req, body, doc, fullDoc, overwrite );
+                                self.afterPutNew( req, body, doc, fullDoc, overwrite, function( err ){
+                                  self._sendErrorOnErr( err, res, next, function(){
+
+                                    // All good, send a 201 (successfully created)
+                                    res.setHeader( 'Location', req.originalUrl + doc[ self.idProperty ] );
+
+                                    if( self.echoAfterPutNew ){
+                                      self.getDbPrepareBeforeSend( doc, function( err, doc ){
+                                        res.json( 200, doc );
+                                      })
+                                    } else {
+                                      // All good, send a 204 (no content)
+                                      res.send( 201, '' );
+                                    }
+
+                                  }) // err
+                                }) // self.afterPutNew
+
                               }) // err
-                            })
+                            }) // self.allDbExtrapolateDoc
                         
                           }) // err
-                        })
-                      }
-                  }) // err
-                }) // checkPermissionsPutNew
+                        }) // putDbInsert
+
+                      } // granted
+
+                    }) // err
+                  }) // checkPermissionsPutNew
 
 
                 // It's an EXISTING doc: it will need to be an update, _and_ permissions will be
@@ -499,11 +599,26 @@ var Store = declare( null,  {
                                 self.allDbExtrapolateDoc( fullDocAfter, req, function( err, docAfter ){
                                   self._sendErrorOnErr( err, res, next, function(){
 
-                                    // All good, send a 202
-                                    res.send( 202, '' );
-                                    self.afterPutExisting( req, body, doc, docAfter, fullDoc, fullDocAfter, overwrite );
+                                    res.setHeader( 'Location', req.originalUrl + doc[ self.idProperty ] );
+
+                                    self.afterPutExisting( req, body, doc, docAfter, fullDoc, fullDocAfter, overwrite, function( err ) {
+                                      self._sendErrorOnErr( err, res, next, function(){
+
+                                        // All good, send a 204 (no content)
+                                        if( self.echoAfterPutExisting ){
+                                          self.getDbPrepareBeforeSend( docAfter, function( err, docAfter ){
+                                            res.json( 200, docAfter );
+                                          })
+                                        } else {
+                                          // All good, send a 204 (no content)
+                                          res.send( 201, '' );
+                                        }
+                                      }) // err
+                                    }) // self.afterPutExisting
+ 
+
                                   }) // err
-                                })
+                                }) // self.allDbExtrapolateDoc
 
                               }) // err
                             }) // self.putDbUpdate
@@ -564,7 +679,7 @@ var Store = declare( null,  {
     // console.log( ranges );
     // console.log( filters );
    
-    self.getDbQuery( req, res, sortBy, ranges, filters );
+    self.getDbQuery( req, res, next, sortBy, ranges, filters );
 
     function parseSortBy(){
 
@@ -694,15 +809,20 @@ var Store = declare( null,  {
                     self._sendError( res, next, new self.ForbiddenError() ); 
                   } else {
                 
-                    // "preparing" the doc. The same function is used by GET for collections 
-                    self.getDbPrepareBeforeSend( doc, function( err, doc ){
+                    self.afterGet( req, doc, fullDoc, function( err ) {
                       self._sendErrorOnErr( err, res, next, function(){
+
+                        // "preparing" the doc. The same function is used by GET for collections 
+                        self.getDbPrepareBeforeSend( doc, function( err, doc ){
+                          self._sendErrorOnErr( err, res, next, function(){
                    
-                        // Send "prepared" doc
-                        res.json( 200, doc );
-                        self.afterGet( req, doc, fullDoc );
+                            // Send "prepared" doc
+                            res.json( 200, doc );
+                          }) // err
+                        }) // self.getDbPrepareBeforeSend
+
                       }) // err
-                    })
+                    }) // self.afterGet
 
                   } // granted
 
@@ -759,17 +879,21 @@ var Store = declare( null,  {
                   if( ! granted ){
                     self._sendError( res, next, new self.ForbiddenError() );
                   } else {
-                
-                    // Actually delete the document
-                    self.deleteDbDo( req.params, function( err ){
+              
+                    self.afterDelete( req, doc, fullDoc, function( err ) {
                       self._sendErrorOnErr( err, res, next, function(){
-                   
-                        // Return 204 and empty contents as requested by RFC
-                        res.json( 204, '' );
 
-                        self.afterDelete( req, doc, fullDoc );
-                      })  // err
-                    })
+                        // Actually delete the document
+                        self.deleteDbDo( req.params, function( err ){
+                          self._sendErrorOnErr( err, res, next, function(){
+                   
+                            // Return 204 and empty contents as requested by RFC
+                            res.send( 204, '' );
+                          })  // err
+                        })
+
+                      }) // err
+                    }) // self.afterDelete
 
                   } // granted
 
@@ -778,12 +902,13 @@ var Store = declare( null,  {
               }) // self.checkPermissionsGet
 
             }) // err
-          }) // allDbExtrapolateDoc
+          }) // self.allDbExtrapolateDoc
+
         } // if self.fetchedDoc
 
-      }) // if ! err
-
+      }) // err
     }) // self.allDbFetchDoc
+
   },
 
   // Permission stock functions

@@ -72,12 +72,12 @@ var SimpleSchema = declare( null, {
 
   requiredTypeParam: function( p ){
 
-    if( typeof( p.object[ fieldName ]) === 'undefined'){
+    if( typeof( p.object[ p.fieldName ]) === 'undefined'){
 
       // Callers can set exceptions to the rule through `option`. This is crucial
       // to exclude some IDs (for example, POST doesn't have an recordId even though
       // recordId is marked as `required` in the schema
-      if( !( Array.isArray( p.options.notRequired )  && p.options.notRequired.indexOf( k ) != -1  ) ){
+      if( !( Array.isArray( p.options.notRequired )  && p.options.notRequired.indexOf( p.fieldName ) != -1  ) ){
 
         // The error is definitely there!
         p.errors.push( { field: p.fieldName, message: 'Field required:' + p.fieldName, mustChange: true } );
@@ -156,7 +156,8 @@ var SimpleSchema = declare( null, {
               definition: definition,
               definitionValue: definition[ attribute ],
               schema: this,
-              errors: errors
+              errors: errors,
+              options: options
             } );
             if( typeof( result ) !== 'undefined' ) object[ fieldName ] = result;
 

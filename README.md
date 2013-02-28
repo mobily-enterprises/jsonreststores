@@ -161,7 +161,7 @@ These are the functions and attributes you are able to change:
 **IMPORTANT: Database functions**  
  * `allDbFetch( req, cb )` (fetch a document based on `req`)
  * `allDbExtrapolateDoc( fullDoc, req, cb )`(from the fetched document, extrapolate the data you actually want)
- * `getDbQuery( req, res, sortBy, ranges, filters )` (executes the query; this is the only DB function that needs to handle the response)
+ * `getDbQuery( req, res, next, sortBy, ranges, filters )` (executes the query; this is the only DB function that needs to handle the response)
  * `putDbInsert( body, req, cb )`(inserts a record in the DB after a PUT)
  * `putDbUpdate( body, req, doc, fullDoc, cb )`(updates a record in the DB after a PUT)
  * `postDbInsertNoId( body, req, cb )`(adds a new record to the DB; a new ID will be created)
@@ -191,12 +191,12 @@ These are the functions and attributes you are able to change:
  * `checkPermissionsDelete( req, doc, fullDoc, cb )`
 
 **Redefinable after-op functions** 
- * `afterPutNew( req, body, doc, fullDoc, overwrite )`
- * `afterPutExisting( req, body, doc, fullDoc, docAfter, fullDocAfter, overwrite )`
- * `afterPost( req, body, doc, fullDoc)`
- * `afterPostAppend( req, body, doc, fullDoc, docAfter, fullDocAfter )`
- * `afterDelete( req, doc, fullDoc )`
- * `afterGet( req, doc, fullDoc)`
+ * `afterPutNew( req, body, doc, fullDoc, overwrite, cb )`
+ * `afterPutExisting( req, body, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb )`
+ * `afterPost( req, body, doc, fullDoc, cb )`
+ * `afterPostAppend( req, body, doc, fullDoc, docAfter, fullDocAfter, cb )`
+ * `afterDelete( req, doc, fullDoc cb )`
+ * `afterGet( req, doc, fullDoc, cb )`
 
 **Redefinable generic functions** 
   * `formatErrorResponse( error )` 

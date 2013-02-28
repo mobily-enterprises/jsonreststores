@@ -40,15 +40,16 @@ var Schema = declare( SimpleSchema, {
 
 var MongoStore = declare( Store,  {
 
-  constructor: function(){
-    
+  constructor: function( ){
+
     // This.collectionName will default to the store's name if not set
     this.collectionName = this.collectionName ? this.collectionName : this.storeName;
-    this.collection = db.collection( this.collectionName );
+    this.collection = this.db.collection( this.collectionName );
   },
 
   collectionName: null,
-
+  idProperty: '_id',
+  db: null,
 
   handlePut: false,
   handlePost: false,
@@ -61,34 +62,18 @@ var MongoStore = declare( Store,  {
     cb( null, doc );
   },
 
-
   allDbFetch: function( req, cb ){
 
     if( this.paramIds.length !== 1 ) 
       return cb( new Error("Stock allDbFetch does not work when paramsIds > 1"), null );
- 
+
     this.collection.findOne( {_id: req.params[this.paramIds[0]] }, cb );
 
   }, 
 
   filterType: '$and',
 
-  // Make up the query selector, respecting searchPartial for fields
-  queryMakeSelector: function( filters ){
-    var selector, s;
-    var item;
-    
-    selector = {};
-    selector[ this.filterType ] = s = [];
-    for( var k in filters ){
-      item = new Object();
-      item[ k ] = filters [ k ];
-      s.push( item );
-    }
-    return selector;
-  },
-
-  getDbQuery: function( req, res, sortBy, ranges, filters ){
+  getDbQuery: function( req, res, next, sortBy, ranges, filters ){
 
     var self = this;
 
@@ -98,8 +83,8 @@ var MongoStore = declare( Store,  {
     this._queryEnrichFilters( filters ); 
 
     // Select according to selector
-    selector = this.queryMakeSelector( filters );
-    cursor = this.collection.find( selector );
+    selector = self._queryMakeSelector( filters );
+    cursor = self.collection.find( selector );
 
     // Skipping/limiting according to ranges/limits
     if( ranges.rangeFrom != 0 )
@@ -108,54 +93,27 @@ var MongoStore = declare( Store,  {
       cursor.limit( ranges.limit );
 
     cursor.count( function( err, total ){
-      if( err ){
-        self._sendError( res, err );
-      } else {
+      self._sendErrorOnErr( err, res, next, function(){
 
         self._querySetRangeHeaders( res, ranges, total );
 
         cursor.sort( self._queryMakeMongoSortArray( sortBy ) );        
+
         cursor.toArray( function( err, queryDocs ){
-          if( err ){
-            self._sendError( res, err );
-          } else {
-           
-            changeFunctions = [];
-            queryDocs.forEach( function( fullDoc, index ){
-
-              changeFunctions.push( function( callback ){
-                
-                self.allDbExtrapolateDoc( fullDoc, res, function( err, extrapolatedDoc ){
-                  if( err ){
-                    callback( err, null );
-                  } else {
-                   
-                    self.getDbPrepareBeforeSend( extrapolatedDoc, function( err, preparedDoc ){
-                      if( err ){
-                        callback( err, null );
-                      } else {
-                        queryDocs[ index ] = preparedDoc;
-                        callback( null, null );
-                      }
-                    })
-
-                  }
-                });
-              });
-            }); // queryDocs.forEach
-
-            async.parallel( changeFunctions, function( err ) {
-              if( err ){
-                self._sendError( res, err );
-              } else {
-                res.json( 200, docList );
-              }
+          self._sendErrorOnErr( err, res, next, function(){
+       
+            self._extrapolateAndPrepareAll( queryDocs, req, function( err ){ 
+              self._sendErrorOnErr( err, res, next, function(){
+                res.json( 200, queryDocs );
+              })
             })
 
-          } // err
-        }); // cursort.toArray
-      } // err
-    }); 
+          }) // err
+        }) // cursort.toArray
+
+      }) // err
+    }) // cursor.count 
+
   },
 
   postDbInsertNoId: function( body, req,  cb ){
@@ -208,7 +166,6 @@ var MongoStore = declare( Store,  {
   
     var self = this;
 
-    body._id = ObjectId();
     this.collection.insert( body, function( err ){
       if( err ) {
         cb( err );
@@ -240,6 +197,22 @@ var MongoStore = declare( Store,  {
     return checkObjectId( id ) ? ObjectId( id ) : id;
   },
 
+
+
+  // Make up the query selector, respecting searchPartial for fields
+  _queryMakeSelector: function( filters ){
+    var selector, s;
+    var item;
+    
+    selector = {};
+    selector[ this.filterType ] = s = [];
+    for( var k in filters ){
+      item = new Object();
+      item[ k ] = filters [ k ];
+      s.push( item );
+    }
+    return selector;
+  },
 
   _queryEnrichFilters: function( filters ){
 
