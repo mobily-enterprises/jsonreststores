@@ -3,7 +3,7 @@ var
   dummy
 , e = require('resthttperrors')
 , declare = require('simpledeclare')
-, SimpleSchema = require('./SimpleSchema')
+, SimpleSchema = require('simpleschema')
 , url = require('url')
 , async = require('async')
 ;
