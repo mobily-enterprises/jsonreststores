@@ -2,7 +2,7 @@ var
   dummy
 , e = require('resthttperrors')
 , declare = require('simpledeclare')
-, SimpleSchema = require('simpleschema')
+, Schema = require('simpleschema')
 , url = require('url')
 , async = require('async')
 ;
@@ -924,9 +924,13 @@ var Store = declare( null,  {
 
 });
 
+
+// Make up the class method "make"
+Store.make = {};
+
 // Make Store.makeGet, Store.makeGetQuery, etc.
 [ 'Get', 'GetQuery', 'Put', 'Post', 'PostAppend', 'Delete' ].forEach( function(mn){
-  Store[ 'make' + mn ] = function( Class ){
+  Store.make[mn] = function( Class ){
     return function( req, res, next ){
       var request = new Class();
       request['_make' + mn ]( req, res, next );
@@ -935,13 +939,15 @@ var Store = declare( null,  {
   }
 })
 
-Store.makeAll = function( app, url, idName, Class ){
-  app.get(      url + idName, Store.makeGet( Class ) );
-  app.get(      url,          Store.makeGetQuery( Class ) );
-  app.put(      url + idName, Store.makePut( Class ) );
-  app.post(     url,          Store.makePost( Class ) );
-  app.post(     url + idName, Store.makePostAppend( Class ) );
-  app.delete(   url + idName, Store.makeDelete( Class ) );
+Store.make.All = function( app, url, idName, Class ){
+  app.get(      url + idName, Store.make.Get( Class ) );
+  app.get(      url,          Store.make.GetQuery( Class ) );
+  app.put(      url + idName, Store.make.Put( Class ) );
+  app.post(     url,          Store.make.Post( Class ) );
+  app.post(     url + idName, Store.make.PostAppend( Class ) );
+  app.delete(   url + idName, Store.make.Delete( Class ) );
 }
+
+Store.Schema = Schema;
 
 exports = module.exports = Store;

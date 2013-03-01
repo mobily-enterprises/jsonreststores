@@ -28,7 +28,7 @@ The reference implementation for the client is JsonRest by Dojo
    * `201 Created OR 204 No Content` - on success, IF NOT returning data -- ???
  * Existing resource:
   * `200 Accepted` - on success, IF returning data
-  * `204 No Content` - on success, IF NOT returning data
+  * `200 Accepted OR 204 No Content` - on success, IF NOT returning data
 
 
 # POST {target}/id

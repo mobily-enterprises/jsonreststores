@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "resthttperrors": "*",
-    "simpleschema": "*",
-    "simpledeclare": "*"
+    "simpledeclare": "*",
+    "simpleschema": "*"
   }
 }
