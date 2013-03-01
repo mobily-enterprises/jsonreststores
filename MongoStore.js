@@ -1,7 +1,7 @@
 
 var 
   dummy
-, SimpleSchema = require('./SimpleSchema')
+, Schema = require('simpleschema-mongo')
 , declare = require('simpledeclare')
 , Store = require('./Store')
 
@@ -10,32 +10,6 @@ var
 , checkObjectId = require('mongowrapper').checkObjectId
 , ObjectId = require('mongowrapper').ObjectId
 ;
-
-
-var Schema = declare( SimpleSchema, {
-
-  // Cast an ID for this particular engine. If the object is in invalid format, it won't
-  // get cast, and as a result check will fail
-  idTypeCast: function( definition, value ){
-
-    if( checkObjectId( value ) ) {
-      return ObjectId( value );
-    } else {
-      return value;
-    }
-  },
-  // Check if an ID is legal for this particular engine
-  idTypeCheck: function( definition, name, value, errors ){ 
-    if( value.constructor.name !== 'ObjectID' ){
-      errors.push( { field: name, message: 'Id not valid: ' + name } );
-    }
-  },
-
-  constructor: function( ){
-    console.log("**************Constructor for MongoSchema's schema called!");
-  }
-
-});
 
 
 var MongoStore = declare( Store,  {
