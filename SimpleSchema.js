@@ -19,7 +19,6 @@ var SimpleSchema = declare( null, {
   constructor: function( structure, options){
     this.structure = structure;
     this.options = typeof( options ) !== 'undefined' ? options : {};
-    console.log("*********SimpleSchema constructor called!");
   },
 
 
@@ -165,11 +164,7 @@ var SimpleSchema = declare( null, {
              
         }
       }   
- 
- 
     }
-  
-  
   },
 
   cleanup: function( object, attributeName ){
