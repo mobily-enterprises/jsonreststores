@@ -1,6 +1,6 @@
 var 
   dummy
-, e = require('resthttperrors')
+, e = require('allhttperrors')
 , declare = require('simpledeclare')
 , Schema = require('simpleschema')
 , url = require('url')
@@ -87,10 +87,8 @@ var Store = declare( null,  {
 
 
   formatErrorResponse: function( error ){
-    console.log(" HERE 10");
-    console.log(error);
-    if( error.errorFields ){
-      return { message: error.message, errors: error.errorFields }
+    if( error.errors ){
+      return { message: error.message, errors: error.errors }
     } else {
       return { message: error.message }
     }
@@ -211,8 +209,6 @@ var Store = declare( null,  {
 
     var self = this;
 
-    // The error wasn't from the store: create a new ServiceUnavailable error,
-    // and encapsulate the existing error in it
     // This will happen when _sendError is passed an error straight from a callback
     // The idea is that jsonreststores _always_ throws an HTTP error of some sort.
 
@@ -220,36 +216,39 @@ var Store = declare( null,  {
     console.log(" Error: ");
     console.log( error );
 
-    if( ! error.fromStore ){
-      error = new self.ServiceUnavailableError( { originalErr: error } );
-    } 
-    console.log(" Error: ");
+   console.log(" Error: ");
     console.log( error );
 
     switch( self.chainErrors ){
-      case 'none':
-      case 'some':
-
-        var responseBody;
-
-        // Only for "some": if it's a ServiceUnavailableError, pass it through for Express to handle
-        // (the next error handler will get called)
-        if( self.chainErrors === 'some' &&  error.name === 'ServiceUnavailableError' ){
-           next( error );
-        } else {
-
-          // Sets errorFields to null if it's not defined
-          error.errorFields = typeof( error.errorFields ) !== 'object' ? null : error.errorFields;
-          responseBody =  self.formatErrorResponse( error );
-
-          // End of story!
-          res.send( error.httpError, responseBody );
-        }
-      break;
 
       case 'all':
         next( error );
       break;
+
+      case 'none':
+      case 'nonhttp':
+
+        var responseBody;
+
+        // CASE #1: It's not an HTTP error and it's meant to chain non-HTTP errors: chain (call next)
+        if( typeof( e[ err.name ] ) === 'undefined' && self.chainErrors === 'nonhttp' ){
+           next( error );
+
+        // CASE :2: Any other case. It might be an HTTP error or a JS error. Needs to handle both cases
+        } else {
+
+
+          // It's not an HTTP error: make up a new one, and inapsulate original error in it
+          if( typeof( e[ err.name ] ) === 'undefined'  ){
+            error = new self.ServiceUnavailableError( { originalErr: error } );
+          } 
+
+          // Make up the response body based on the error, and send it!
+          responseBody =  self.formatErrorResponse( error );
+          res.send( error.httpError, responseBody );
+        }
+      break;
+
     }
  
     self.logError( error );
@@ -272,7 +271,7 @@ var Store = declare( null,  {
     // return a BadRequestError
     self._checkParamIds( req.params, errors, true );
     if( errors.length ){
-      self._sendError( res, next, new self.BadRequestError( { errorFields: errors }  ) );
+      self._sendError( res, next, new self.BadRequestError( { errors: errors }  ) );
       return;
     }
   
@@ -293,7 +292,7 @@ var Store = declare( null,  {
       self._sendErrorOnErr( err, res, next, function(){
 
         if( errors.length ){
-          self._sendError( res, next, new self.UnprocessableEntityError( { errorFields: errors } ) );
+          self._sendError( res, next, new self.UnprocessableEntityError( { errors: errors } ) );
         } else {
 
           // Actually check permissions
@@ -368,7 +367,7 @@ var Store = declare( null,  {
     // return a BadRequestError
     self._checkParamIds( req.params, errors );
     if( errors.length ){
-      self._sendError( res, next, self.BadRequestError( { errorFields: errors } ) );
+      self._sendError( res, next, self.BadRequestError( { errors: errors } ) );
       return;
     }
    
@@ -387,7 +386,7 @@ var Store = declare( null,  {
       self._sendErrorOnErr( err, res, next, function(){
 
         if( errors.length ){
-          self._sendError( res, next, new self.UnprocessableEntityError( { errorFields: errors } ) );
+          self._sendError( res, next, new self.UnprocessableEntityError( { errors: errors } ) );
         } else {
           // Fetch the doc
           self.allDbFetch( req, function( err, fullDoc ){
@@ -481,7 +480,7 @@ var Store = declare( null,  {
     // return a BadRequestError
     self._checkParamIds( req.params, errors );
     if( errors.length ){
-      self._sendError( res, next, self.BadRequestError( { errorFields: errors }  ) );
+      self._sendError( res, next, self.BadRequestError( { errors: errors }  ) );
       return;
     }
     
@@ -500,7 +499,7 @@ var Store = declare( null,  {
       self._sendErrorOnErr( err, res, next, function(){
 
         if( errors.length ){
-          self._sendError( res, next, new self.UnprocessableEntityError( { errorFields: errors } ) );
+          self._sendError( res, next, new self.UnprocessableEntityError( { errors: errors } ) );
         } else {
 
           // Fetch the doc
@@ -663,14 +662,14 @@ var Store = declare( null,  {
     // return a BadRequestError
     self._checkParamIds( req.params, errors, true );
     if( errors.length ){
-      self._sendError( res, next, self.BadRequestError( { errorFields: errors } ) );
+      self._sendError( res, next, self.BadRequestError( { errors: errors } ) );
       return;
     }
     
     // The schema must be defined for queries. It's too important, as it defines
     // what's searchable and what's sortable
     if( self.schema == null ){
-      self._sendError( res, next, new self.ServiceUnavailableError( 'Query attempted on schema-less store' ) );
+      self._sendError( res, next, new Error('Query attempted on schema-less store' ) );
       return;
     }
 
@@ -789,7 +788,7 @@ var Store = declare( null,  {
  
     // There was a problem: return the errors
     if( errors.length ){
-      self._sendError( res, next, self.BadRequestError( { errorFields: errors } ) );
+      self._sendError( res, next, self.BadRequestError( { errors: errors } ) );
       return;
     }
 
@@ -859,7 +858,7 @@ var Store = declare( null,  {
  
     // There was a problem: return the errors
     if( errors.length ){
-      self._sendError( res, next, self.BadRequestError( { errorFields: errors } ) );
+      self._sendError( res, next, self.BadRequestError( { errors: errors } ) );
       return;
     }
 
