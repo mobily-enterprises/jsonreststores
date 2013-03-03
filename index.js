@@ -28,13 +28,16 @@ var Store = declare( null,  {
   echoAfterPost: false,
   echoAfterPostAppend: false,
 
-  // Default error objects
+  // Default error objects. There are the same as the ones defined in the
+  // HTTPErrors module, with a "fromStore" attribute in their prototype so that
+  // this module knows that it should handle these directly
+  // This module will only ever throw these errors in terms of HTTP responses
   BadRequestError: declare( e.BadRequestError, { fromStore: true } ),
   UnauthorizedError: declare( e.UnauthorizedError, { fromStore: true } ),
   ForbiddenError: declare( e.ForbiddenError, { fromStore: true } ),
   NotFoundError: declare( e.NotFoundError, { fromStore: true } ),
   PreconditionFailedError: declare( e.PreconditionFailedError, { fromStore: true } ),
-  ValidationError: declare( e.ValidationError, { fromStore: true } ),
+  UnprocessableEntityError: declare( e.UnprocessableEntityError, { fromStore: true } ),
   NotImplementedError: declare( e.NotImplementedError, { fromStore: true } ),
   ServiceUnavailableError: declare( e.ServiceUnavailableError, { fromStore: true } ),
 
@@ -84,6 +87,8 @@ var Store = declare( null,  {
 
 
   formatErrorResponse: function( error ){
+    console.log(" HERE 10");
+    console.log(error);
     if( error.errorFields ){
       return { message: error.message, errors: error.errorFields }
     } else {
@@ -211,13 +216,21 @@ var Store = declare( null,  {
     // This will happen when _sendError is passed an error straight from a callback
     // The idea is that jsonreststores _always_ throws an HTTP error of some sort.
 
+   
+    console.log(" Error: ");
+    console.log( error );
+
     if( ! error.fromStore ){
-      error = new self.ServiceUnavailableError( error.message || "Service Unavailable", error );
+      error = new self.ServiceUnavailableError( { originalErr: error } );
     } 
+    console.log(" Error: ");
+    console.log( error );
 
     switch( self.chainErrors ){
       case 'none':
       case 'some':
+
+        var responseBody;
 
         // Only for "some": if it's a ServiceUnavailableError, pass it through for Express to handle
         // (the next error handler will get called)
@@ -225,10 +238,9 @@ var Store = declare( null,  {
            next( error );
         } else {
 
-          // Sets errorFields, and formats the error response using this object's formatErrorResponse method
-          // (which might have been redefined by the user)
+          // Sets errorFields to null if it's not defined
           error.errorFields = typeof( error.errorFields ) !== 'object' ? null : error.errorFields;
-          var responseBody = self.formatErrorResponse( error );
+          responseBody =  self.formatErrorResponse( error );
 
           // End of story!
           res.send( error.httpError, responseBody );
@@ -260,7 +272,7 @@ var Store = declare( null,  {
     // return a BadRequestError
     self._checkParamIds( req.params, errors, true );
     if( errors.length ){
-      self._sendError( res, next, new self.BadRequestError( null, errors ) );
+      self._sendError( res, next, new self.BadRequestError( { errorFields: errors }  ) );
       return;
     }
   
@@ -281,7 +293,7 @@ var Store = declare( null,  {
       self._sendErrorOnErr( err, res, next, function(){
 
         if( errors.length ){
-          self._sendError( res, next, new self.ValidationError('Validation problems', errors));
+          self._sendError( res, next, new self.UnprocessableEntityError( { errorFields: errors } ) );
         } else {
 
           // Actually check permissions
@@ -356,7 +368,7 @@ var Store = declare( null,  {
     // return a BadRequestError
     self._checkParamIds( req.params, errors );
     if( errors.length ){
-      self._sendError( res, next, new self.BadRequestError( null, errors ) );
+      self._sendError( res, next, self.BadRequestError( { errorFields: errors } ) );
       return;
     }
    
@@ -375,7 +387,7 @@ var Store = declare( null,  {
       self._sendErrorOnErr( err, res, next, function(){
 
         if( errors.length ){
-          self._sendError( res, next, new self.ValidationError('Validation problems', errors ) );
+          self._sendError( res, next, new self.UnprocessableEntityError( { errorFields: errors } ) );
         } else {
           // Fetch the doc
           self.allDbFetch( req, function( err, fullDoc ){
@@ -469,7 +481,7 @@ var Store = declare( null,  {
     // return a BadRequestError
     self._checkParamIds( req.params, errors );
     if( errors.length ){
-      self._sendError( res, next, new self.BadRequestError( null, errors ) );
+      self._sendError( res, next, self.BadRequestError( { errorFields: errors }  ) );
       return;
     }
     
@@ -488,7 +500,7 @@ var Store = declare( null,  {
       self._sendErrorOnErr( err, res, next, function(){
 
         if( errors.length ){
-          self._sendError( res, next, new self.ValidationError('Validation problems', errors ) );
+          self._sendError( res, next, new self.UnprocessableEntityError( { errorFields: errors } ) );
         } else {
 
           // Fetch the doc
@@ -651,7 +663,7 @@ var Store = declare( null,  {
     // return a BadRequestError
     self._checkParamIds( req.params, errors, true );
     if( errors.length ){
-      self._sendError( res, next, new self.BadRequestError( null, errors ) );
+      self._sendError( res, next, self.BadRequestError( { errorFields: errors } ) );
       return;
     }
     
@@ -777,7 +789,7 @@ var Store = declare( null,  {
  
     // There was a problem: return the errors
     if( errors.length ){
-      self._sendError( res, next, new self.BadRequestError( null, errors ) );
+      self._sendError( res, next, self.BadRequestError( { errorFields: errors } ) );
       return;
     }
 
@@ -847,7 +859,7 @@ var Store = declare( null,  {
  
     // There was a problem: return the errors
     if( errors.length ){
-      self._sendError( res, next, new self.BadRequestError( null, errors ) );
+      self._sendError( res, next, self.BadRequestError( { errorFields: errors } ) );
       return;
     }
 
@@ -938,6 +950,7 @@ Store.make = {};
     }
   }
 })
+
 
 Store.make.All = function( app, url, idName, Class ){
   app.get(      url + idName, Store.make.Get( Class ) );
