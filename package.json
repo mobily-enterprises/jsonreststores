@@ -8,7 +8,7 @@
     "mongodb"
   ],
   "main" : "index.js",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "private": false,
   "repository": {
     "type": "git",
@@ -20,6 +20,7 @@
   "dependencies": {
     "allhttperrors": "*",
     "simpledeclare": "*",
-    "simpleschema": "*"
+    "simpleschema": "*",
+    "async": "*"
   }
 }
