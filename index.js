@@ -212,13 +212,6 @@ var Store = declare( null,  {
     // This will happen when _sendError is passed an error straight from a callback
     // The idea is that jsonreststores _always_ throws an HTTP error of some sort.
 
-   
-    console.log(" Error: ");
-    console.log( error );
-
-   console.log(" Error: ");
-    console.log( error );
-
     switch( self.chainErrors ){
 
       case 'all':
@@ -238,7 +231,7 @@ var Store = declare( null,  {
         } else {
 
 
-          // It's not an HTTP error: make up a new one, and inapsulate original error in it
+          // It's not an HTTP error: make up a new one, and incapsulate original error in it
           if( typeof( e[ err.name ] ) === 'undefined'  ){
             error = new self.ServiceUnavailableError( { originalErr: error } );
           } 
