@@ -181,6 +181,3 @@ These are the functions and attributes you are able to change:
 
 Note that the `MongoStore` module already _does_ overrides the **Database functions** (which would normally be redefined by you), in order to give a working store for you to enjoy. Your own overriding functions could be heavily inspired by these.
 
-# Implementing a DB class
-
-If you want to implement your own 
