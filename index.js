@@ -84,6 +84,7 @@ var Store = declare( null,  {
 
 
   formatErrorResponse: function( error ){
+
     if( error.errors ){
       return { message: error.message, errors: error.errors }
     } else {
@@ -221,7 +222,7 @@ var Store = declare( null,  {
         var responseBody;
 
         // CASE #1: It's not an HTTP error and it's meant to chain non-HTTP errors: chain (call next)
-        if( typeof( e[ err.name ] ) === 'undefined' && self.chainErrors === 'nonhttp' ){
+        if( typeof( e[ error.name ] ) === 'undefined' && self.chainErrors === 'nonhttp' ){
            next( error );
 
         // CASE :2: Any other case. It might be an HTTP error or a JS error. Needs to handle both cases
@@ -229,7 +230,7 @@ var Store = declare( null,  {
 
 
           // It's not an HTTP error: make up a new one, and incapsulate original error in it
-          if( typeof( e[ err.name ] ) === 'undefined'  ){
+          if( typeof( e[ error.name ] ) === 'undefined'  ){
             error = new self.ServiceUnavailableError( { originalErr: error } );
           } 
 
