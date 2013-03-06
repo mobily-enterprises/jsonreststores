@@ -28,20 +28,17 @@ var Store = declare( null,  {
   echoAfterPost: false,
   echoAfterPostAppend: false,
 
-  // Default error objects. There are the same as the ones defined in the
-  // HTTPErrors module, with a "fromStore" attribute in their prototype so that
-  // this module knows that it should handle these directly
-  // This module will only ever throw these errors in terms of HTTP responses
-  BadRequestError: declare( e.BadRequestError, { fromStore: true } ),
-  UnauthorizedError: declare( e.UnauthorizedError, { fromStore: true } ),
-  ForbiddenError: declare( e.ForbiddenError, { fromStore: true } ),
-  NotFoundError: declare( e.NotFoundError, { fromStore: true } ),
-  PreconditionFailedError: declare( e.PreconditionFailedError, { fromStore: true } ),
-  UnprocessableEntityError: declare( e.UnprocessableEntityError, { fromStore: true } ),
-  NotImplementedError: declare( e.NotImplementedError, { fromStore: true } ),
-  ServiceUnavailableError: declare( e.ServiceUnavailableError, { fromStore: true } ),
+  // Default error objects which might be used by this module.
+  BadRequestError: e.BadRequestError,
+  UnauthorizedError: e.UnauthorizedError,
+  ForbiddenError: e.ForbiddenError,
+  NotFoundError: e.NotFoundError,
+  PreconditionFailedError: e.PreconditionFailedError,
+  UnprocessableEntityError: e.UnprocessableEntityError,
+  NotImplementedError: e.NotImplementedError,
+  ServiceUnavailableError: e.ServiceUnavailableError,
 
-  chainErrors: 'none', // calls next(err) for 'none', 'most' (all except ServiceUnavailableError), 'all'
+  chainErrors: 'none', 
 
   // *** DB manupulation functions (to be overridden by inheriting classes) ***
 
@@ -270,10 +267,9 @@ var Store = declare( null,  {
   
     body = self._clone( req.body );
   
-    // Do schema and callback functon checks. They will both add to `errors`
+    // Do schema cast and check
     if( self.schema !== null ){
-      self.schema.cast(  body );
-      self.schema.check( body, req.body, errors, { notRequired: [ self.idProperty ]}  );
+      self.schema.apply(  body, errors, { notRequired: [ self.idProperty ]} );
     }
 
     var validateFunction = function( body, errors, cb ) { cb( null ) }
@@ -365,12 +361,12 @@ var Store = declare( null,  {
     }
    
     body = self._clone( req.body );
- 
-    // Do schema and callback functon checks. They will both add to `errors`
+
+    // Do schema cast and check
     if( self.schema !== null ){
-      self.schema.cast(  body);
-      self.schema.check( body, req.body, errors );
+      self.schema.apply(  body, errors );
     }
+ 
 
     var validateFunction = function( body, errors, cb ) { cb( null ) }
     if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
@@ -479,10 +475,9 @@ var Store = declare( null,  {
     
     body = self._clone( req.body );
 
-    // Do schema and callback functon checks. They will both add to `errors`
+    // Do schema cast and check
     if( self.schema !== null ){
-      self.schema.cast(  body );
-      self.schema.check( body, req.body, errors );
+      self.schema.apply(  body, errors );
     }
 
     var validateFunction = function( body, errors, cb ) { cb( null ) }
@@ -741,6 +736,7 @@ var Store = declare( null,  {
       var q = url_parts.query || '';
       var tokens, tokenLeft, tokenRight;
       var result = {};
+      var failedCasts;
 
       options = typeof( options) === 'object' ? options : {};
       options.partial = typeof(options.partial) === 'object' ? options.partial : {};
@@ -758,7 +754,10 @@ var Store = declare( null,  {
       })
 
       // Cast result values according to schema
-      self.schema.cast( result );
+      failedCasts = self.schema._cast( result );
+
+      // Failed casts are taken out of the result
+      for( var k in failedCasts ) delete result[ k ];
 
       return result;
     }

@@ -20,11 +20,11 @@ Point list:
 * It's well structured: there is a base class, that provides all of the important methods; it works out of the box, returning dummy data. The base class is obviously not very useful: Database-specific sub-classes are what developers will use. At the moment, the following databases are supported:
   * Mongodb
 
-* It uses OOP patterns neatly: each store is a javascript constructor which inherits from the database-specific constructor (which inherits itself from a generic, base constructor). Everything is done using a 1-page declare() method which deals with everything and gives you the opportunity to call the parent's method with `this.inherited(arguments)`
+* It uses simpleschema for simple, extendible error checking. 
 
-* DB-specific stores are build with the principle of "sane defaults": without giving them any special parameters, they will "just work" mapping a database table to a store/schema.
+* It uses OOP patterns neatly using simpledeclare: each store is a javascript constructor which inherits from the database-specific constructor (which inherits itself from a generic, base constructor).
 
-* It implements a simple schema, extendible schema. You can define your own field types, or redefine existing ones. Each database provides a specialised schema.
+* DB-specific stores are build with the principle of "sane defaults": without giving them any special parameters, they will "just work" mapping a database collection to a store/schema.
 
 * The schema is very simple, and there is always one schema per store (although you can obviously re-use a schema variable). Schemas are respinsible of 1) Casting input fields to their right type. This means that a field marked as "number" will be cast to a JS number 2) Trimming and input validation. Each type offers a bunch of helper functions. You can also define a schema-wide validate() function.
 
@@ -44,7 +44,7 @@ Having said all this, this is the easiest way to implement a schema:
 
 
     /// ...
-    JsonRestStores = require('JsonRestStores');
+    JsonRestStores = require('jsonreststores');
     
     var Store = JsonRestStores.Store;
     var Schema = JsonRestStore.SimpleSchema;
@@ -71,84 +71,51 @@ Having said all this, this is the easiest way to implement a schema:
       handleDelete: true,
     });
 
-    Store.makeAll( app,  '/call/People/', ':personId', PeopleStore );
+    Store.make.All( app,  '/call/People/', ':personId', PeopleStore );
 
 
 That's it: this is enough to make a full store which will handly properly all of the HTTP calls. Try it if you don't believe me!
+
 I have to put my honest hat on, and admit that although this store responds to all of the HTTP requests properly, it's a _cheat_: it doesn't actually store anything; it just pretends to.
 
-A much more meaningful store is one created using Mongodb:
-
-    /// ...
-    JsonRestStores = require('JsonRestStores');
-    
-    var Store = JsonRestStores.MongoStore;
-    var Schema = MongoStore.Schema; // Enriched schema. Knows how to check/cast Mongo's ObjectIds
-
-
-    var PeopleStore = declare( Store,  {
-      storeName: 'people',
-
-      schema: new Schema({
-        _id       : { type: 'id', required: true },
- 
-        name      : { type: 'string', notEmpty: true, trim: 50, searchable: true, sortable: true, searchPartial: true },
-        age       : { type: 'number', notEmpty: true , searchable: true, sortable: true },
-        occupation: { type: 'string', required: false },
-      }),
-
-      paramIds: [ 'personId' ],
-
-      handlePut: true,
-      handlePost: true,
-      handlePostAppend: true,
-      handleGet: true,
-      handleGetQuery: true,
-      handleDelete: true,
-    });
-
-    Store.makeAll( app,  '/call/People/', ':personId', PeopleStore );
-
-
-
-Now, this is no cheat: this is a _real_ implementation of a fully compliant store. At this point, you can go wild and test your Dojo grids, and programs, without spending more than 30 seconds creating fully compliant stores (this will handlea collection called "people" on your Mongo db server).
+To deal with real stores, have a look at the module [JsonRestStores-mongo (Github)](https://github.com/mercmobily/JsonRestStoresMongo) or [jsonreststores-mongo (NPM)](https://npmjs.org/package/jsonreststores-mongo), which is an implementation of a sub-class actually changing MongoDB collections.
 
 # What actually happend
 
 What actually happened is this.
-When you run Store.MakeAll, you actually ran this:
+When you run `Store.Make.All`, you actually ran this:
 
     Store.makeAll = function( app, url, idName, Class ){
-      app.get(      url + idName, Store.makeGet( Class ) );
-      app.get(      url,          Store.makeGetQuery( Class ) );
-      app.put(      url + idName, Store.makePut( Class ) );
-      app.post(     url,          Store.makePost( Class ) );
-      app.post(     url + idName, Store.makePostAppend( Class ) );
-      app.delete(   url + idName, Store.makeDelete( Class ) );
+      app.get(      url + idName, Store.make.Get( Class ) );
+      app.get(      url,          Store.make.GetQuery( Class ) );
+      app.put(      url + idName, Store.make.Put( Class ) );
+      app.post(     url,          Store.make.Post( Class ) );
+      app.post(     url + idName, Store.make.PostAppend( Class ) );
+      app.delete(   url + idName, Store.make.Delete( Class ) );
     }
 
-`Store.makeGet()`, called here, simply does this:
+The function `Store.make.Get()`, called here, simply does this:
 
     // Make Store.makeGet, Store.makeGetQuery, etc.
-    StoreGet = function( Class ){
+    Store.make.Get = function( Class ){
       return function( req, res, next ){
         var request = new Class();
         request._makeGet( req, res, next );
       }
     }
 
-Basically, an object of type `PeopleStore` was created, and its method `_makeGet()` was called passing it `req`, `res`, `next`. It's important to create a new object: even though the library itself doesn't define any object attributes, user defined method might well do.
+Basically, an object of type `PeopleStore` was created, and its method `_makeGet()` was called passing it `req`, `res`, `next`. It's important to create a new object: even though the library itself doesn't define any object attributes, user defined method might well do. If the module used the same object for every request, all requests would share the same namespace.
 
 # Customising your store: general overview
 
 At this point, you are aware that there are six crucial methods for each store:
 
- * `_makeGet()` (implement GET for one single document)
- * `_makeGetQuery()` (implement GET for a collection, no ID passed)
- * `_makePut()` (implement PUT for a collection)
- * `_makePost()` (implement POST for a collection)
- * `_makePostAppend()` (implement POST for a collection, when ID is present)
- * `_makeDelete()` (implement DELETE for a collection)
+ * `_makeGet()` (implements GET for one single document)
+ * `_makeGetQuery()` (implements GET for a collection, no ID passed)
+ * `_makePut()` (implements PUT for a collection)
+ * `_makePost()` (implements POST for a collection)
+ * `_makePostAppend()` (implements POST for a collection, when ID is present)
+ * `_makeDelete()` (implements DELETE for a collection)
 
 There are also some functions used by them, which will change according to the store:
 
@@ -157,10 +124,9 @@ There are also some functions used by them, which will change according to the s
 
 These are the functions and attributes you are able to change:
 
-
 **IMPORTANT: Database functions**  
- * `allDbFetch( req, cb )` (fetch a document based on `req`)
  * `allDbExtrapolateDoc( fullDoc, req, cb )`(from the fetched document, extrapolate the data you actually want)
+ * `allDbFetch( req, cb )` (fetch a document based on `req`)
  * `getDbQuery( req, res, next, sortBy, ranges, filters )` (executes the query; this is the only DB function that needs to handle the response)
  * `putDbInsert( body, req, cb )`(inserts a record in the DB after a PUT)
  * `putDbUpdate( body, req, doc, fullDoc, cb )`(updates a record in the DB after a PUT)
@@ -169,7 +135,13 @@ These are the functions and attributes you are able to change:
  * `deleteDbDo( id, cb )`(deletes a record)
  * `getDbPrepareBeforeSend( doc, cb )`(manipulate a record jut before sending it back to the client)
 
-**IMPORTANT: Attributes to set handled requests**  
+**IMPORTANT: Attributes**  
+ * `schema: null` (The schema, used to validate incoming data)
+ * `paramIds: [ ]` (List of IDs; this is a subset of the ones appearing in the URL)
+ * `storeName: null` (The name of the store)
+ *  chainErrors ('none': never call `next(err)`, 'nonhttp': only call `next(err)` for non-http errors, 'all': always call `next(err)`
+
+**IMPORTANT: Other attributes to set handled requests**  
  * `handlePut: true`
  * `handlePost: true`
  * `handlePostAppend: true`
@@ -177,13 +149,8 @@ These are the functions and attributes you are able to change:
  * `handleGetQuery: true`
  * `handleDelete: true`
 
-**Other attributes**  
- * `schema: null`
- * `paramIds: [ ]`
- * `storeName: null`
-
 **Permission functions**  
- * `checkPermissionsPost( req, cb )`
+ * `checkPermissionsPost( req, cb )` (`cb()` will be called with `cb(null, true)` if granted, `cb(null, false)` for not granted)
  * `checkPermissionsPostAppend( req, doc, fullDoc, cb )`
  * `checkPermissionsPutNew( req, cb )`
  * `checkPermissionsPutExisting( req, doc, fullDoc, cb )`
@@ -191,42 +158,29 @@ These are the functions and attributes you are able to change:
  * `checkPermissionsDelete( req, doc, fullDoc, cb )`
 
 **Redefinable after-op functions** 
- * `afterPutNew( req, body, doc, fullDoc, overwrite, cb )`
- * `afterPutExisting( req, body, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb )`
- * `afterPost( req, body, doc, fullDoc, cb )`
- * `afterPostAppend( req, body, doc, fullDoc, docAfter, fullDocAfter, cb )`
- * `afterDelete( req, doc, fullDoc cb )`
- * `afterGet( req, doc, fullDoc, cb )`
+ * `afterPutNew( req, body, doc, fullDoc, overwrite, cb )` (Called after a new record is PUT)
+ * `afterPutExisting( req, body, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb )` (After a record is overwritten with PUT)
+ * `afterPost( req, body, doc, fullDoc, cb )` (After a new record is POSTed)
+ * `afterPostAppend( req, body, doc, fullDoc, docAfter, fullDocAfter, cb )` (After an existing record is POSTed)
+ * `afterDelete( req, doc, fullDoc cb )` (After a record is deleted)
+ * `afterGet( req, doc, fullDoc, cb )` (After a record is retrieved)
 
 **Redefinable generic functions** 
-  * `formatErrorResponse( error )` 
-  * `logError( error )`
+  * `formatErrorResponse( error )` (Function to format the response in case of errors)
+  * `logError( error )` (Function called every time an error occurs)
 
 **HTTP Errors**
   * `BadRequestError`
   * `UnauthorizedError`
   * `ForbiddenError`
   * `NotFoundError`
-  * `ValidationError`
-  * `RuntimeError`
+  * `PreconditionFailedError`
+  * `UnprocessableEntityError`
+  * `NotImplementedError`
+  * `ServiceUnavailableError`
 
-Note that the `MongoStore` module already _does_ override the **Database functions**, in order to give a working store for you to enjoy. Other non-db functions are set to sane defaults (e.g. permission functions always accept a request, formatErrorResponse does something pretty standard, etc. )
+Note that the `MongoStore` module already _does_ overrides the **Database functions** (which would normally be redefined by you), in order to give a working store for you to enjoy. Your own overriding functions could be heavily inspired by these.
 
+# Implementing a DB class
 
-# Stores
-
-This module is meant to be used as "containers" to database-specific code (and as little as possible of it).
-
-## MongoStore
-
-MongoStore is the first engine developed for JsonRestStores.
-
-
-
-# MongoStore Examples
-
-Here are some practical examples on how to manage basic and not-so-basic mongo stores using JsonRestStores.
-
-## Straight store
-
-
+If you want to implement your own 
