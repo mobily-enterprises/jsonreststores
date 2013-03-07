@@ -18,9 +18,9 @@
     "name": "Tony Mobily"
   },
   "dependencies": {
-    "allhttperrors": "*",
-    "simpledeclare": "*",
-    "simpleschema": "*",
+    "allhttperrors": "0.1.x",
+    "simpledeclare": "0.1.x",
+    "simpleschema": "0.1.x",
     "async": "*"
   }
 }

@@ -198,8 +198,6 @@ var Store = declare( null,  {
   _sendErrorOnErr: function( err, res, next, cb ){
     if( err ) {
       this._sendError( res, next, err );
-      console.log("SENDING ERROR:");
-      console.log( err );
     } else {
       cb();
     }
