@@ -314,7 +314,7 @@ var Store = declare( null,  {
                                 res.json( 201, doc );
                               })
                             } else {
-                              res.send( 201, '' );
+                              res.send( 201, 'OK' );
                             }
 
                           }) // err
@@ -416,7 +416,7 @@ var Store = declare( null,  {
                                          res.json( 200, docAfter );
                                        })
                                     } else { 
-                                      res.send( 204, '' );
+                                      res.send( 204, 'OK' );
                                     }
 
                                   }) // err
@@ -549,7 +549,7 @@ var Store = declare( null,  {
                                         res.json( 201, doc );
                                       })
                                     } else {
-                                      res.send( 201, '' );
+                                      res.send( 201, 'OK' );
                                     }
 
                                   }) // err
@@ -602,7 +602,9 @@ var Store = declare( null,  {
                                             res.json( 200, docAfter );
                                           })
                                         } else {
-                                          res.send( 204, '' );
+                                          console.log("HEREEEEEEEE");
+                                          res.send( 200, '' );
+                                          //res.send( 204, 'OK' );
                                         }
                                       }) // err
                                     }) // self.afterPutExisting
@@ -883,7 +885,7 @@ var Store = declare( null,  {
                           self._sendErrorOnErr( err, res, next, function(){
                    
                             // Return 204 and empty contents as requested by RFC
-                            res.send( 204, '' );
+                            res.send( 204, 'OK' );
                           })  // err
                         })
 
