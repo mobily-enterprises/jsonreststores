@@ -314,7 +314,7 @@ var Store = declare( null,  {
                                 res.json( 201, doc );
                               })
                             } else {
-                              res.send( 201, 'OK' );
+                              res.send( 201, '' );
                             }
 
                           }) // err
@@ -416,7 +416,7 @@ var Store = declare( null,  {
                                          res.json( 200, docAfter );
                                        })
                                     } else { 
-                                      res.send( 204, 'OK' );
+                                      res.send( 204, '' );
                                     }
 
                                   }) // err
@@ -549,7 +549,7 @@ var Store = declare( null,  {
                                         res.json( 201, doc );
                                       })
                                     } else {
-                                      res.send( 201, 'OK' );
+                                      res.send( 201, '' );
                                     }
 
                                   }) // err
@@ -602,7 +602,6 @@ var Store = declare( null,  {
                                             res.json( 200, docAfter );
                                           })
                                         } else {
-                                          console.log("HEREEEEEEEE");
                                           res.send( 200, '' );
                                           //res.send( 204, 'OK' );
                                         }
@@ -757,7 +756,7 @@ var Store = declare( null,  {
       })
 
       // Cast result values according to schema
-      failedCasts = self.schema._cast( result );
+      failedCasts = self.schema._castObjectValues( result );
 
       // Failed casts are taken out of the result
       for( var k in failedCasts ) delete result[ k ];
@@ -885,7 +884,7 @@ var Store = declare( null,  {
                           self._sendErrorOnErr( err, res, next, function(){
                    
                             // Return 204 and empty contents as requested by RFC
-                            res.send( 204, 'OK' );
+                            res.send( 204, '' );
                           })  // err
                         })
 
