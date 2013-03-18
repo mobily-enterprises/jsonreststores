@@ -228,7 +228,6 @@ var Store = declare( null,  {
         // CASE :2: Any other case. It might be an HTTP error or a JS error. Needs to handle both cases
         } else {
 
-
           // It's not an HTTP error: make up a new one, and incapsulate original error in it
           if( typeof( e[ error.name ] ) === 'undefined'  ){
             error = new self.ServiceUnavailableError( { originalErr: error } );
