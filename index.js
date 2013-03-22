@@ -23,9 +23,9 @@ var Store = declare( null,  {
   handleGetQuery: true,
   handleDelete: true,
 
-  echoAfterPutNew: false,
+  echoAfterPutNew: true,
   echoAfterPutExisting: false,
-  echoAfterPost: false,
+  echoAfterPost: true,
   echoAfterPostAppend: false,
 
   // Default error objects which might be used by this module.
@@ -266,15 +266,14 @@ var Store = declare( null,  {
     }
   
     body = self._clone( req.body );
-  
+ 
     // Do schema cast and check
     if( self.schema !== null ){
-      self.schema.apply(  body, errors, { notRequired: [ self.idProperty ]} );
+      self.schema.apply(  body, errors, { notRequired: [ self.idProperty ], skipCast: [ self.idProperty ]  } );
     }
 
     var validateFunction = function( body, errors, cb ) { cb( null ) }
     if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
-
 
 
     validateFunction.call( self.schema, body,  errors, function( err ){
@@ -879,7 +878,7 @@ var Store = declare( null,  {
                       self._sendErrorOnErr( err, res, next, function(){
 
                         // Actually delete the document
-                        self.deleteDbDo( req.params, function( err ){
+                        self.deleteDbDo( req, function( err ){
                           self._sendErrorOnErr( err, res, next, function(){
                    
                             // Return 204 and empty contents as requested by RFC
