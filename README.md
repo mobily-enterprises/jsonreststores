@@ -100,7 +100,7 @@ These are the functions and attributes you are able to change:
  * `putDbUpdate( body, req, doc, fullDoc, cb )`(updates a record in the DB after a PUT)
  * `postDbInsertNoId( body, req, cb )`(adds a new record to the DB; a new ID will be created)
  * `postDbAppend( body, req, doc, fullDoc, cb )` (appends information to existing record after PUT)
- * `deleteDbDo( id, cb )`(deletes a record)
+ * `deleteDbDo( req, cb )`(deletes a record)
  * `getDbPrepareBeforeSend( doc, cb )`(manipulate a record jut before sending it back to the client)
 
 **IMPORTANT: Attributes**  
