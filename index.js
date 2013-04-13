@@ -11,8 +11,10 @@ var
 var Store = declare( null,  {
 
   paramIds: [ ],
+  ignoreIds: [ ],
+
   schema: null,
-  idProperty: 'id',
+  idProperty: null,
 
   storeName: null,
  
@@ -39,6 +41,26 @@ var Store = declare( null,  {
   ServiceUnavailableError: e.ServiceUnavailableError,
 
   chainErrors: 'none', 
+
+  constructor: function(){
+
+    // Sets this.paramId, which (as for the principle of 
+    // least surprise) must be the last paramId passed to
+    // the store
+    this.idProperty = this._lastParamId();
+
+    // Add the ID field to the schema for you, since it's
+    // something that will need to be done for _every_
+    // defined store
+    if( typeof( this.schema.structure[ this.idProperty ] ) === 'undefined' ){
+      this.schema.structure[ this.idProperty ] = { type: 'id', isRequired: true, searchable: true  };
+    }
+
+    //if( typeof( this.schema.structure[ '_id' ] ) === 'undefined' ){
+    // this.schema.structure[ '_id' ] = { type: 'id', isRequired: true, searchable: true  };
+    //}
+
+  },
 
   // *** DB manupulation functions (to be overridden by inheriting classes) ***
 
@@ -159,7 +181,7 @@ var Store = declare( null,  {
   },
 
 
-   _checkId: function( id ){ 
+  _checkId: function( id ){ 
     return true; 
   },
 
@@ -167,24 +189,29 @@ var Store = declare( null,  {
     return id; 
   },
 
+  _makeId: function( id ){ 
+    return 'id'; 
+  },
   
+
+
+  _lastParamId: function(){
+    return this.paramIds[ this.paramIds.length -1 ];
+  },
 
   // *** Internal, protected calls that should't be changed by users ***
 
-  _checkParamIds: function( reqParams, errors, skipLast ){
+  _checkParamIds: function( reqParams, errors, skipIdProperty ){
     var self = this;
-    var lastItem;
     // Check that paramsId are actually legal IDs. 
 
     if( self.paramIds.length === 0 ) return;
    
-    lastItem = self.paramIds[ self.paramIds.length - 1];
-
     if( self.paramIds ){
       self.paramIds.forEach( function(k){
 
         // Check that every ID passed is actually correct
-        if( !( skipLast && k == lastItem ) && !self._checkId( reqParams[ k ] )  )
+        if( !( skipIdProperty && k == self.idProperty ) && !self._checkId( reqParams[ k ] )  )
           errors.push( { field: k, message: 'Invalid ID in URL: ' + k, mustChange: false } );
 
         // Cast all IDs in req.params. This will make it much easier to use ID elements
@@ -193,6 +220,10 @@ var Store = declare( null,  {
 
       });
     }
+  },
+
+  _ignoredId: function( id ){
+    return ( Array.isArray( this.ignoreIds ) && this.ignoreIds.indexOf( id ) != -1 );
   },
  
   _sendErrorOnErr: function( err, res, next, cb ){
@@ -398,7 +429,7 @@ var Store = declare( null,  {
                         // Paranoid check
                         // Make sure that the id property in the body does match
                         // the one passed as last parameter in the list of IDs
-                        body[ self.idProperty ] = req.params[self.paramIds[ self.paramIds.length - 1 ]];
+                        body[ self.idProperty ] = req.params[ self.idProperty ];
 
                         self.postDbAppend( body, req, doc, fullDoc, function( err, fullDocAfter ){
                           self._sendErrorOnErr( err, res, next, function(){
@@ -528,7 +559,7 @@ var Store = declare( null,  {
                         // Paranoid check
                         // Make sure that the id property in the body does match
                         // the one passed as last parameter in the list of IDs
-                        body[ self.idProperty ] = req.params[self.paramIds[ self.paramIds.length - 1 ]];
+                        body[ self.idProperty ] = req.params[ self.idProperty ];
 
                         self.putDbInsert( body, req, function( err, fullDoc ){
                           self._sendErrorOnErr( err, res, next, function(){
@@ -783,6 +814,7 @@ var Store = declare( null,  {
       self._sendError( res, next, self.BadRequestError( { errors: errors } ) );
       return;
     }
+
 
     // Fetch the doc.
     self.allDbFetch( req, function( err, fullDoc ){
