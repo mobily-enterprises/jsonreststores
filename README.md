@@ -21,8 +21,6 @@ Having said all this, this is the easiest way to implement a store:
       storeName: 'people',
 
       schema: new Schema({
-        _id       : { type: 'id', required: true },
- 
         name      : { type: 'string', notEmpty: true, trim: 50, searchable: true, sortable: true, searchPartial: true },
         age       : { type: 'number', notEmpty: true , searchable: true, sortable: true },
         occupation: { type: 'string', required: false },
@@ -93,6 +91,7 @@ There are also some functions used by them, which will change according to the s
 These are the functions and attributes you are able to change:
 
 **IMPORTANT: Database functions**  
+ *  allMakeId( doc, cb ) (create an ID; for Mongo, this is likely to be a "ObjectId()", for MySql it will be the next autoIncrement, etc.
  * `allDbExtrapolateDoc( fullDoc, req, cb )`(from the fetched document, extrapolate the data you actually want)
  * `allDbFetch( req, cb )` (fetch a document based on `req`)
  * `getDbQuery( req, res, next, sortBy, ranges, filters )` (executes the query; this is the only DB function that needs to handle the response)
