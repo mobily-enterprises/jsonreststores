@@ -44,39 +44,90 @@ var Store = declare( null,  {
 
   constructor: function(){
 
-    // Sets this.paramId, which (as for the principle of 
+    var self = this;
+
+    // Sets proto.paramId, which (as for the principle of 
     // least surprise) must be the last paramId passed to
-    // the store
-    this.idProperty = this._lastParamId();
+    // the store.
+    this.idProperty = self._lastParamId();
 
-    // Add the ID field to the schema for you, since it's
-    // something that will need to be done for _every_
-    // defined store
-    if( typeof( this.schema.structure[ this.idProperty ] ) === 'undefined' ){
-      this.schema.structure[ this.idProperty ] = { type: 'id', isRequired: true, searchable: true  };
+
+    // JAVASCRIPT WARNING == READ AND UNDERSTAND THIS
+    // ----------------------------------------------
+    // The schema here is taken, and manipulated. This
+    // constructor is run every time a new object is created.
+    // However, this manipulation only needs to happen once, as
+    // the schema data lives in the PROTOTYPE (and it's therefore
+    // shared by all derived objects).
+    // Note that the created `paramsSchema` is stores in the self.schema,
+    // object itself.
+    // If you derive a store from another, and redefine `stores` in the
+    // prototype, this code will re-run for (once) when you instance
+    // a new object using the derived constructor.
+    //
+    // If a derived class wants to change `paramIds`, it
+    // will need to redefine the schema in order for this
+    // init code to actually run
+
+    // The schema hasn't been analysed before
+    if( ! self.schema.analysed ){
+
+      self.schema.analysed = true;
+
+      // `paramsSchema` is a secondary schema used for all parameter in paramIds.
+      // It's stored in the prototype, on the same level as `schema`
+      self.schema.paramsSchema = new self.schema.constructor( {} );
+
+
+      if( typeof( self.schema.structure[ self.idProperty ] ) === 'undefined'){
+        self.schema.structure[ self.idProperty ] = self.allDbDefaultParamIdsDef();
+      }
+
+      // Populate the paramsSchema schema, either with IDs defined in
+      // the main schema (which will be _moved_) or defining them as
+      // self.allDbDefaultParamIdsDef()
+      self.paramIds.forEach( function( k ) {
+
+        // If it's in the main schema's structure...
+        if( typeof( self.schema.structure[ k ] ) !== 'undefined' ){
+          // Move it to the paramsSchema structure
+          self.schema.paramsSchema.structure[ k ] = self.schema.structure[ k ];
+          if( k != self.idProperty ) delete self.schema.structure[ k ];
+        } else {
+          // Otherwise, create it in the paramsSchema structure,
+          // using the creator self.allDbDefaultParamIdsDef()
+          self.schema.paramsSchema.structure[ k ] = self.allDbDefaultParamIdsDef();
+        }
+
+      });
     }
-
-    //if( typeof( this.schema.structure[ '_id' ] ) === 'undefined' ){
-    // this.schema.structure[ '_id' ] = { type: 'id', isRequired: true, searchable: true  };
-    //}
-
   },
+
 
   // *** DB manupulation functions (to be overridden by inheriting classes) ***
 
-  allDbExtrapolateDoc: function( fullDoc, req, cb ){
-    cb( null, fullDoc );
+  allDbDefaultParamIdsDef: function(){
+    return { type: 'number', isRequired: true, searchable: true  };
   },
 
 
-  getDbPrepareBeforeSend: function( doc, cb ){
-    cb( null, doc );
+  // The default id maker (just return an ObjectId )
+  allDbMakeId: function( object, cb ){
+    cb( null, Math.floor(Math.random()*10000) );
+  },
+
+  allDbExtrapolateDoc: function( fullDoc, req, cb ){
+    cb( null, fullDoc );
   },
 
   allDbFetch: function( req, cb ){
     var doc = { id: 'id', dummyData: 'value'};
     cb( null, doc );
   }, 
+
+  getDbPrepareBeforeSend: function( doc, cb ){
+    cb( null, doc );
+  },
 
   getDbQuery: function( req, res, next, sortBy, ranges, filters ){
 
@@ -92,7 +143,7 @@ var Store = declare( null,  {
     cb( null, doc );
   },
 
-  postDbInsertNoId: function( body, req, cb ){
+  postDbInsertNoId: function( body, req, generatedId, cb ){
     cb( null, doc );
   },
 
@@ -142,6 +193,7 @@ var Store = declare( null,  {
     cb( null );
   },
 
+  // *** Internal, protected calls that should't be changed by users ***
 
   _clone: function( obj ){
     return  JSON.parse( JSON.stringify( obj ) );
@@ -181,45 +233,61 @@ var Store = declare( null,  {
   },
 
 
-  _checkId: function( id ){ 
-    return true; 
-  },
-
-  _castId: function( id ){ 
-    return id; 
-  },
-
-  _makeId: function( id ){ 
-    return 'id'; 
-  },
-  
-
-
   _lastParamId: function(){
     return this.paramIds[ this.paramIds.length -1 ];
   },
 
-  // *** Internal, protected calls that should't be changed by users ***
 
+  // Check that paramsId are actually legal IDs using
+  // paramsSchema
   _checkParamIds: function( reqParams, errors, skipIdProperty ){
     var self = this;
-    // Check that paramsId are actually legal IDs. 
+    var fakeRecord = {}, castOptions = {};
 
+    // This shouldn't happen
     if( self.paramIds.length === 0 ) return;
-   
-    if( self.paramIds ){
-      self.paramIds.forEach( function(k){
+ 
+    // This is to optimise a little: if there is only
+    // one self.paramIds and skipIdProperty is on,
+    // the resulting fakeRecord would be empty and
+    // this would be a big waste of time
+    if( self.paramIds.length === 1 && skipIdProperty ) return;
 
-        // Check that every ID passed is actually correct
-        if( !( skipIdProperty && k == self.idProperty ) && !self._checkId( reqParams[ k ] )  )
-          errors.push( { field: k, message: 'Invalid ID in URL: ' + k, mustChange: false } );
+    // Create the fake record I will cast against
+    self.paramIds.forEach( function( k ){
 
-        // Cast all IDs in req.params. This will make it much easier to use ID elements
-        // in req.params in MongoDb queries
-        reqParams[ k ] = self._castId( reqParams[ k ] );
+      // Avoid copying over the idProperty if it's to be skipped
+      if( skipIdProperty && k == self.idProperty ) return; // LOCAL return
 
-      });
-    }
+      // If there is a missing ID in reqParams, add to `errors` and
+      // skip it. Note: I don't want to trust the presence of the "required"
+      // parameter for an id for this check to happen
+      if( typeof( reqParams[ k ] ) === 'undefined' ){
+        errors.push( { field: k, message: 'Missing ID in URL: ' + k, mustChange: false } );
+        return; // LOCAL return
+      }
+
+      // At this point, all is well
+      fakeRecord[ k ] = reqParams[ k ];
+    });
+
+    // If `errors` has... well, errors, then there were missing IDs and the
+    // URL is broken. No point in continuing
+    if( errors.length != 0 ) return;
+
+    // Actually cast/check the temporary (id-only) object, making
+    // sure that self.idProperty IS in the skipList if skipIdProperty
+    // is trye
+    if( skipIdProperty ) castOptions.skipCast = [ self.idProperty ];
+    self.schema.paramsSchema.apply( fakeRecord, errors, castOptions );
+ 
+    // Copy those casted value back onto the reqParams, so that
+    // the rest of the application will have ready-to-use cast
+    // elements in req.params
+    self.paramIds.forEach( function( k ){
+      if( typeof( fakeRecord[ k ] ) !== 'undefined' ) reqParams[ k ] = fakeRecord[ k ];
+    });
+
   },
 
   _ignoredId: function( id ){
@@ -275,6 +343,8 @@ var Store = declare( null,  {
     self.logError( error );
   },
 
+  // *** The real dance ***
+
   _makePost: function( req, res, next ){
 
     var self = this;
@@ -325,36 +395,42 @@ var Store = declare( null,  {
                 // Clean up req.body from things that are not to be submitted
                 if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
 
-                self.postDbInsertNoId( body, req, function( err, fullDoc ){
+                self.allDbMakeId( body, function( err, generatedId){
                   self._sendErrorOnErr( err, res, next, function(){
 
-                    self.allDbExtrapolateDoc( fullDoc, req, function( err, doc) {
+
+                    self.postDbInsertNoId( body, req, generatedId, function( err, fullDoc ){
                       self._sendErrorOnErr( err, res, next, function(){
 
-
-                        self.afterPost( req, body, doc, fullDoc, function( err ){
+                        self.allDbExtrapolateDoc( fullDoc, req, function( err, doc) {
                           self._sendErrorOnErr( err, res, next, function(){
 
 
-                            res.setHeader( 'Location', req.originalUrl + doc[ self.idProperty ] );
+                            self.afterPost( req, body, doc, fullDoc, function( err ){
+                              self._sendErrorOnErr( err, res, next, function(){
 
-                            if( self.echoAfterPost ){
-                              self.getDbPrepareBeforeSend( doc, function( err, doc ){
-                                res.json( 201, doc );
-                              })
-                            } else {
-                              res.send( 201, '' );
-                            }
 
-                          }) // err
-                        }) // self.afterPost
+                                res.setHeader( 'Location', req.originalUrl + doc[ self.idProperty ] );
+
+                                if( self.echoAfterPost ){
+                                  self.getDbPrepareBeforeSend( doc, function( err, doc ){
+                                    res.json( 201, doc );
+                                  })
+                                } else {
+                                  res.send( 201, '' );
+                                }
+
+                              }) // err
+                            }) // self.afterPost
                        
-                      }) // err
-                    })
+                          }) // err
+                        }) // self.allDbExtrapolateDoc
 
+                      }) // err
+                    }) // postDbInsertNoId
 
                   }) // err
-                }) // postDbInsertNoId
+                }) // self.allDbMakeId
 
               } // granted
 
@@ -811,10 +887,9 @@ var Store = declare( null,  {
  
     // There was a problem: return the errors
     if( errors.length ){
-      self._sendError( res, next, self.BadRequestError( { errors: errors } ) );
+      self._sendError( res, next, new self.BadRequestError( { errors: errors } ) );
       return;
     }
-
 
     // Fetch the doc.
     self.allDbFetch( req, function( err, fullDoc ){
@@ -882,7 +957,7 @@ var Store = declare( null,  {
  
     // There was a problem: return the errors
     if( errors.length ){
-      self._sendError( res, next, self.BadRequestError( { errors: errors } ) );
+      self._sendError( res, next, new self.BadRequestError( { errors: errors } ) );
       return;
     }
 
