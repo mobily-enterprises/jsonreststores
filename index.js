@@ -17,6 +17,8 @@ var Store = declare( null,  {
   idProperty: null,
 
   storeName: null,
+
+  queryFilterType: 'and',
  
   handlePut: true,
   handlePost: true,
@@ -78,14 +80,15 @@ var Store = declare( null,  {
       // It's stored in the prototype, on the same level as `schema`
       self.schema.paramsSchema = new self.schema.constructor( {} );
 
-
+      // Add the idProperty using the self.allDbDefaultParamIdsDef() if it wasn't
+      // defined
       if( typeof( self.schema.structure[ self.idProperty ] ) === 'undefined'){
-        self.schema.structure[ self.idProperty ] = self.allDbDefaultParamIdsDef();
+        self.schema.structure[ self.idProperty ] = self.defaultParamIdsDef();
       }
 
       // Populate the paramsSchema schema, either with IDs defined in
       // the main schema (which will be _moved_) or defining them as
-      // self.allDbDefaultParamIdsDef()
+      // self.defaultParamIdsDef()
       self.paramIds.forEach( function( k ) {
 
         // If it's in the main schema's structure...
@@ -95,8 +98,8 @@ var Store = declare( null,  {
           if( k != self.idProperty ) delete self.schema.structure[ k ];
         } else {
           // Otherwise, create it in the paramsSchema structure,
-          // using the creator self.allDbDefaultParamIdsDef()
-          self.schema.paramsSchema.structure[ k ] = self.allDbDefaultParamIdsDef();
+          // using the creator self.defaultParamIdsDef()
+          self.schema.paramsSchema.structure[ k ] = self.defaultParamIdsDef();
         }
 
       });
@@ -106,15 +109,17 @@ var Store = declare( null,  {
 
   // *** DB manupulation functions (to be overridden by inheriting classes) ***
 
-  allDbDefaultParamIdsDef: function(){
+  defaultParamIdsDef: function(){
     return { type: 'number', isRequired: true, searchable: true  };
   },
 
-
   // The default id maker (just return an ObjectId )
-  allDbMakeId: function( object, cb ){
+  makeId: function( object, cb ){
     cb( null, Math.floor(Math.random()*10000) );
   },
+
+
+
 
   allDbExtrapolateDoc: function( fullDoc, req, cb ){
     cb( null, fullDoc );
@@ -395,7 +400,7 @@ var Store = declare( null,  {
                 // Clean up req.body from things that are not to be submitted
                 if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
 
-                self.allDbMakeId( body, function( err, generatedId){
+                self.makeId( body, function( err, generatedId){
                   self._sendErrorOnErr( err, res, next, function(){
 
 
@@ -430,7 +435,7 @@ var Store = declare( null,  {
                     }) // postDbInsertNoId
 
                   }) // err
-                }) // self.allDbMakeId
+                }) // self.makeId
 
               } // granted
 
