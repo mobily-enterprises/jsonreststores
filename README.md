@@ -1,7 +1,151 @@
 JsonRestStores
 ==============
 
-A module to create JsonRest stores compatible with Dojo in secods (or minutes, depending how how complex the underlying structure is).
+A module to create JsonRest stores that are fully compatible with Dojo (and other frameworks) in secods. Literally, seconds.
+Supported databases:
+
+* MongoDb
+* ... (more to come)
+
+
+# Quick start
+
+Here are three very common use-cases for JsonRest stores. Note: examples here use `jsonreststores-mongo`. However, you can use any other layer (when/if available).
+
+## A basic store
+
+Here is how you make a fully compliant store using Mongo JsonrestStore:
+
+    // ...
+    mw = require('mongowrapper');
+
+    Store = require('jsonreststores-mongo');
+
+    var PeopleStore = declare( Store,  {
+
+      storeName: 'people',
+
+      schema: new Store.Schema({
+        name      : { type: 'string', notEmpty: true, trim: 50, searchable: true, sortable: true, searchPartial: true },
+        age       : { type: 'number', notEmpty: true , searchable: true, sortable: true },
+        occupation: { type: 'string', required: false },
+      }),
+
+      db: mw.db,
+
+      paramIds: [ '_id' ],
+
+      // All handleXXX functions are off by default
+      handlePut: true,
+      handlePost: true,
+      handlePostAppend: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+
+    // Create the `app.use` entries for the calls
+    Store.make.All( app,  '/call/People/', ':_id', PeopleStore );
+
+Notes:
+
+* The last entry in paramIds (in this case, also the only one: `_id`) is special: it represents the record ID. The last element in paramIds needs to be the same as the third argument in `Store.make.All`.
+* The `_id` field will automatically be set on your new records depending on the `_id` passed in the URL (see: the URL always "wins") 
+* The `db` attribute needs to be a valid MongoDb `db` object (returned by `connect()`). In the examples, I use [mongoWrapper (GitHub)](https://github.com/mercmobily/mongoWrapper) [mongowrapper (NPM)](https://npmjs.org/package/mongowrapper) which offers the minimal amounts of extras to use the Mongodb native driver.
+
+## A nested store
+
+You can apply extra filters, to make a "nested store", very easily:
+
+    // ...
+    mw = require('mongowrapper');
+
+    Store = require('jsonreststores-mongo');
+
+    var PeopleNickNamesStore = declare( Store,  {
+      storeName: 'peopleNickNames',
+
+      schema: new Store.Schema({
+        nickName  : { type: 'string', notEmpty: true, trim: 50, searchable: true, sortable: true, searchPartial: true },
+      }),
+
+      db: mw.db,
+
+      paramIds: [ 'personId', '_id' ],
+
+      // All handleXXX functions are off by default
+      handlePut: true,
+      handlePost: true,
+      handlePostAppend: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+
+    // Create the `app.use` entries for the calls
+    Store.make.All( app,  '/call/People/:personId/nickNames', ':_id', PeopleStore );
+
+
+Notes:
+
+* In this case, there is more than one entry in paramIds: the last one, `_id`, is special as it represents the records' ID
+* Queries will always honour `personId` (both queries, and single record fetching). So, by requesting `/call/People/45/nickNames`, you will only get nickNames for the person with ID `45`.
+
+# A basic store with a different `_id` and different mongo collection name
+
+Up to this point, all the stores have used `_id` as their main ID. This is not a strict constraint (even though most people using MongoDb are very accustomed to this as a default). As a plus, you can also change your collection's name.
+
+You can easily do this:
+
+    // ...
+    mw = require('mongowrapper');
+
+    Store = require('jsonreststores-mongo');
+
+    var PeopleStore = declare( Store,  {
+      storeName: 'people',
+      collectionName: 'peopleOnMongo', // NOTE: the MongoDb collection 'peopleOnMongo' will be used
+
+      schema: new Store.Schema({
+        name      : { type: 'string', notEmpty: true, trim: 50, searchable: true, sortable: true, searchPartial: true },
+        age       : { type: 'number', notEmpty: true , searchable: true, sortable: true },
+        occupation: { type: 'string', required: false },
+      }),
+
+      db: mw.db,
+
+      paramIds: [ 'personId' ],
+
+      // All handleXXX functions are off by default
+      handlePut: true,
+      handlePost: true,
+      handlePostAppend: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+
+    // Create the `app.use` entries for the calls
+    Store.make.All( app,  '/call/People/', ':personId', PeopleStore );
+
+Notes:
+
+* To illustrate this option, the property `collectionName` was set as `peopleOnMongo`
+* The `personId` field represents the records' ID field. Note that `Store.make.All`'s third parameter matches the last element in `paramIds`.
+
+
+
+# More features
+
+* queryFilterType
+* makeId()
+* defaultParamIdsRef
+* "after" hooks
+* Permissions
+* Error formatting function
+* Error logging
+
+
 
 
 # Implementing a store
@@ -72,10 +216,11 @@ Basically, an object of type `PeopleStore` was created, and its method `_makeGet
 
 The method `_makeGet()` is a general method that handles GET requests. In your application, you will need the method to do very specialised things. That's why `_makeGet()` (but allso all of the others: `_makePut()`, `_makePost()`, etc. ) do everything using class functions that you will most definitely override. (Note that you don't _have to_ override them: no override will give you a fully functional, "default" store).
 
-# Customising your store: general overview
+# TECHNICAL INFO (not needed to use the class, but important for DB-layer developers)
 
 At this point, you are aware that there are six crucial methods for each store:
 
+**Request builder functions**
  * `_makeGet()` (implements GET for one single document)
  * `_makeGetQuery()` (implements GET for a collection, no ID passed)
  * `_makePut()` (implements PUT for a collection)
@@ -83,15 +228,11 @@ At this point, you are aware that there are six crucial methods for each store:
  * `_makePostAppend()` (implements POST for a collection, when ID is present)
  * `_makeDelete()` (implements DELETE for a collection)
 
-There are also some functions used by them, which will change according to the store:
-
- * `_checkId()` (check that the passed ID is OK for the DB engine)
- * `_castId()` (cast the passed value to one of type ID for that DB engine)
-
-These are the functions and attributes you are able to change:
+**Index functions**
+ * makeId( doc, cb ) (create an ID; for Mongo, this is likely to be a "ObjectId()", for MySql it will be the next autoIncrement, etc.
+ * defaultParamIdsDef() (create a default schema entry for fields listed in paramIds
 
 **IMPORTANT: Database functions**  
- *  allMakeId( doc, cb ) (create an ID; for Mongo, this is likely to be a "ObjectId()", for MySql it will be the next autoIncrement, etc.
  * `allDbExtrapolateDoc( fullDoc, req, cb )`(from the fetched document, extrapolate the data you actually want)
  * `allDbFetch( req, cb )` (fetch a document based on `req`)
  * `getDbQuery( req, res, next, sortBy, ranges, filters )` (executes the query; this is the only DB function that needs to handle the response)
