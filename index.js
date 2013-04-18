@@ -44,6 +44,11 @@ var Store = declare( null,  {
 
   chainErrors: 'none', 
 
+
+  driverInit: function(){
+
+  },
+
   constructor: function(){
 
     var self = this;
@@ -104,6 +109,9 @@ var Store = declare( null,  {
 
       });
     }
+
+    // Initialise the driver
+    self.driverInit();
   },
 
 
@@ -119,46 +127,48 @@ var Store = declare( null,  {
   },
 
 
-
-
-  allDbExtrapolateDoc: function( fullDoc, req, cb ){
+  extrapolateDoc: function( fullDoc, req, cb ){
     cb( null, fullDoc );
   },
 
-  allDbFetch: function( req, cb ){
+  prepareBeforeSend: function( doc, cb ){
+    cb( null, doc );
+  },
+
+
+
+  // DRIVER FUNCTIONS
+
+  driverAllDbFetch: function( req, cb ){
     var doc = { id: 'id', dummyData: 'value'};
     cb( null, doc );
   }, 
 
-  getDbPrepareBeforeSend: function( doc, cb ){
-    cb( null, doc );
-  },
-
-  getDbQuery: function( req, res, next, sortBy, ranges, filters ){
-
+  driverGetDbQuery: function( req, res, next, sortBy, ranges, filters ){
     res.json( 200, [] );
   },
 
-  putDbInsert: function( body, req, cb ){
-
+  driverPutDbInsert: function( body, req, cb ){
     cb( null, doc );
   },
 
-  putDbUpdate: function( body, req, doc, fullDoc, cb ){
+  driverPutDbUpdate: function( body, req, doc, fullDoc, cb ){
     cb( null, doc );
   },
 
-  postDbInsertNoId: function( body, req, generatedId, cb ){
+  driverPostDbInsertNoId: function( body, req, generatedId, cb ){
     cb( null, doc );
   },
 
-  postDbAppend: function( body, req, doc, fullDoc, cb ){
+  driverPostDbAppend: function( body, req, doc, fullDoc, cb ){
     cb( null, doc );
   },
 
-  deleteDbDo: function( id, cb ){
+  driverDeleteDbDo: function( id, cb ){
     cb( null );
   },
+
+
 
 
   formatErrorResponse: function( error ){
@@ -214,12 +224,12 @@ var Store = declare( null,  {
 
       changeFunctions.push( function( callback ){
 
-        self.allDbExtrapolateDoc( fullDoc, req, function( err, extrapolatedDoc ){
+        self.extrapolateDoc( fullDoc, req, function( err, extrapolatedDoc ){
           if( err ){
             callback( err, null );
           } else {
 
-            self.getDbPrepareBeforeSend( extrapolatedDoc, function( err, preparedDoc ){
+            self.prepareBeforeSend( extrapolatedDoc, function( err, preparedDoc ){
               if( err ){
                 callback( err, null );
               } else {
@@ -404,10 +414,10 @@ var Store = declare( null,  {
                   self._sendErrorOnErr( err, res, next, function(){
 
 
-                    self.postDbInsertNoId( body, req, generatedId, function( err, fullDoc ){
+                    self.driverPostDbInsertNoId( body, req, generatedId, function( err, fullDoc ){
                       self._sendErrorOnErr( err, res, next, function(){
 
-                        self.allDbExtrapolateDoc( fullDoc, req, function( err, doc) {
+                        self.extrapolateDoc( fullDoc, req, function( err, doc) {
                           self._sendErrorOnErr( err, res, next, function(){
 
 
@@ -418,7 +428,7 @@ var Store = declare( null,  {
                                 res.setHeader( 'Location', req.originalUrl + doc[ self.idProperty ] );
 
                                 if( self.echoAfterPost ){
-                                  self.getDbPrepareBeforeSend( doc, function( err, doc ){
+                                  self.prepareBeforeSend( doc, function( err, doc ){
                                     res.json( 201, doc );
                                   })
                                 } else {
@@ -429,10 +439,10 @@ var Store = declare( null,  {
                             }) // self.afterPost
                        
                           }) // err
-                        }) // self.allDbExtrapolateDoc
+                        }) // self.extrapolateDoc
 
                       }) // err
-                    }) // postDbInsertNoId
+                    }) // driverPostDbInsertNoId
 
                   }) // err
                 }) // self.makeId
@@ -489,11 +499,11 @@ var Store = declare( null,  {
           self._sendError( res, next, new self.UnprocessableEntityError( { errors: errors } ) );
         } else {
           // Fetch the doc
-          self.allDbFetch( req, function( err, fullDoc ){
+          self.driverAllDbFetch( req, function( err, fullDoc ){
             self._sendErrorOnErr( err, res, next, function(){
 
               // Get the extrapolated doc
-              self.allDbExtrapolateDoc( fullDoc, req, function( err, doc ){
+              self.extrapolateDoc( fullDoc, req, function( err, doc ){
                 self._sendErrorOnErr( err, res, next, function(){
 
                   // Actually check permissions
@@ -512,17 +522,17 @@ var Store = declare( null,  {
                         // the one passed as last parameter in the list of IDs
                         body[ self.idProperty ] = req.params[ self.idProperty ];
 
-                        self.postDbAppend( body, req, doc, fullDoc, function( err, fullDocAfter ){
+                        self.driverPostDbAppend( body, req, doc, fullDoc, function( err, fullDocAfter ){
                           self._sendErrorOnErr( err, res, next, function(){
   
-                            self.allDbExtrapolateDoc( fullDoc, req, function( err, docAfter ){
+                            self.extrapolateDoc( fullDoc, req, function( err, docAfter ){
                               self._sendErrorOnErr( err, res, next, function(){
 
                                 self.afterPostAppend( req, body, doc, fullDoc, docAfter, fullDocAfter, function( err ){
                                   self._sendErrorOnErr( err, res, next, function(){
 
                                     if( self.echoAfterPostAppend ){
-                                       self.getDbPrepareBeforeSend( docAfter, function( err, docAfter ){
+                                       self.prepareBeforeSend( docAfter, function( err, docAfter ){
                                          res.json( 200, docAfter );
                                        })
                                     } else { 
@@ -533,19 +543,19 @@ var Store = declare( null,  {
                                 }) // self.afterPostAppend
 
                               }) // err
-                            }); // self.allDbExtrapolateDoc
+                            }); // self.extrapolateDoc
 
                           }) // err
-                        }) // postDbAppend
+                        }) // driverPostDbAppend
 
                       } // granted
 
 
                     }) // err
-                  }) // allDbExtrapolateDoc 
+                  }) // extrapolateDoc 
 
                 }) // err
-              }) // allDbFetch
+              }) // driverAllDbFetch
 
             }) // err
           }) // checkPermissionsPostAppend
@@ -602,7 +612,7 @@ var Store = declare( null,  {
         } else {
 
           // Fetch the doc
-          self.allDbFetch( req, function( err, fullDoc ){
+          self.driverAllDbFetch( req, function( err, fullDoc ){
             self._sendErrorOnErr( err, res, next, function(){
   
  
@@ -642,11 +652,11 @@ var Store = declare( null,  {
                         // the one passed as last parameter in the list of IDs
                         body[ self.idProperty ] = req.params[ self.idProperty ];
 
-                        self.putDbInsert( body, req, function( err, fullDoc ){
+                        self.driverPutDbInsert( body, req, function( err, fullDoc ){
                           self._sendErrorOnErr( err, res, next, function(){
 
                             // Update "doc" to be the complete version of the doc from the DB
-                            self.allDbExtrapolateDoc( fullDoc, req, function( err, doc ){
+                            self.extrapolateDoc( fullDoc, req, function( err, doc ){
                               self._sendErrorOnErr( err, res, next, function(){
 
                                 self.afterPutNew( req, body, doc, fullDoc, overwrite, function( err ){
@@ -655,7 +665,7 @@ var Store = declare( null,  {
                                     res.setHeader( 'Location', req.originalUrl + doc[ self.idProperty ] );
 
                                     if( self.echoAfterPutNew ){
-                                      self.getDbPrepareBeforeSend( doc, function( err, doc ){
+                                      self.prepareBeforeSend( doc, function( err, doc ){
                                         res.json( 201, doc );
                                       })
                                     } else {
@@ -666,10 +676,10 @@ var Store = declare( null,  {
                                 }) // self.afterPutNew
 
                               }) // err
-                            }) // self.allDbExtrapolateDoc
+                            }) // self.extrapolateDoc
                         
                           }) // err
-                        }) // putDbInsert
+                        }) // driverPutDbInsert
 
                       } // granted
 
@@ -681,7 +691,7 @@ var Store = declare( null,  {
                 // done on inputted data AND existing doc
                 } else {
 
-                  self.allDbExtrapolateDoc( fullDoc, req, function( err, doc ){
+                  self.extrapolateDoc( fullDoc, req, function( err, doc ){
                     self._sendErrorOnErr( err, res, next, function(){
 
                       // Actually check permissions
@@ -695,11 +705,11 @@ var Store = declare( null,  {
                             // Clean up req.body from things that are not to be submitted
                             if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
 
-                            self.putDbUpdate(body, req, doc, fullDoc, function( err, fullDocAfter ){
+                            self.driverPutDbUpdate(body, req, doc, fullDoc, function( err, fullDocAfter ){
                               self._sendErrorOnErr( err, res, next, function(){
 
                                 // Update "doc" to be the complete version of the doc from the DB
-                                self.allDbExtrapolateDoc( fullDocAfter, req, function( err, docAfter ){
+                                self.extrapolateDoc( fullDocAfter, req, function( err, docAfter ){
                                   self._sendErrorOnErr( err, res, next, function(){
 
                                     res.setHeader( 'Location', req.originalUrl + doc[ self.idProperty ] );
@@ -708,7 +718,7 @@ var Store = declare( null,  {
                                       self._sendErrorOnErr( err, res, next, function(){
 
                                         if( self.echoAfterPutExisting ){
-                                          self.getDbPrepareBeforeSend( docAfter, function( err, docAfter ){
+                                          self.prepareBeforeSend( docAfter, function( err, docAfter ){
                                             res.json( 200, docAfter );
                                           })
                                         } else {
@@ -720,10 +730,10 @@ var Store = declare( null,  {
  
 
                                   }) // err
-                                }) // self.allDbExtrapolateDoc
+                                }) // self.extrapolateDoc
 
                               }) // err
-                            }) // self.putDbUpdate
+                            }) // self.driverPutDbUpdate
 
                           } // granted
 
@@ -731,13 +741,13 @@ var Store = declare( null,  {
                       }) // self.checkPermissionsPutExisting
 
                     }) // err
-                  }) // self.allDbExtrapolateDoc
+                  }) // self.extrapolateDoc
                 }
 
               } // function continueAfterFetch()
     
             }) // err
-          }) // allDbFetch
+          }) // driverAllDbFetch
 
         } // if errors.length  
 
@@ -762,7 +772,7 @@ var Store = declare( null,  {
     // return a BadRequestError
     self._checkParamIds( req.params, errors, true );
     if( errors.length ){
-      self._sendError( res, next, self.BadRequestError( { errors: errors } ) );
+      self._sendError( res, next, new self.BadRequestError( { errors: errors } ) );
       return;
     }
     
@@ -781,7 +791,7 @@ var Store = declare( null,  {
     // console.log( ranges );
     // console.log( filters );
    
-    self.getDbQuery( req, res, next, sortBy, ranges, filters );
+    self.driverGetDbQuery( req, res, next, sortBy, ranges, filters );
 
     function parseSortBy(){
 
@@ -897,14 +907,14 @@ var Store = declare( null,  {
     }
 
     // Fetch the doc.
-    self.allDbFetch( req, function( err, fullDoc ){
+    self.driverAllDbFetch( req, function( err, fullDoc ){
       self._sendErrorOnErr( err, res, next, function(){
 
         if( ! fullDoc ){
           self._sendError( res, next, new self.NotFoundError());
         } else {
 
-          self.allDbExtrapolateDoc( fullDoc, req, function( err, doc ){
+          self.extrapolateDoc( fullDoc, req, function( err, doc ){
             self._sendErrorOnErr( err, res, next, function(){
 
               // Check the permissions 
@@ -919,13 +929,13 @@ var Store = declare( null,  {
                       self._sendErrorOnErr( err, res, next, function(){
 
                         // "preparing" the doc. The same function is used by GET for collections 
-                        self.getDbPrepareBeforeSend( doc, function( err, doc ){
+                        self.prepareBeforeSend( doc, function( err, doc ){
                           self._sendErrorOnErr( err, res, next, function(){
                    
                             // Send "prepared" doc
                             res.json( 200, doc );
                           }) // err
-                        }) // self.getDbPrepareBeforeSend
+                        }) // self.prepareBeforeSend
 
                       }) // err
                     }) // self.afterGet
@@ -937,12 +947,12 @@ var Store = declare( null,  {
 
 
             }) // err
-          }) // self.allDbExtrapolateDoc
+          }) // self.extrapolateDoc
 
         } // if self.fetchedDoc
 
       }) // err
-    }) // self.allDbFetchDoc
+    }) // self.driverAllDbFetchDoc
   },
 
 
@@ -967,14 +977,14 @@ var Store = declare( null,  {
     }
 
     // Fetch the doc.
-    self.allDbFetch( req, function( err, fullDoc ){
+    self.driverAllDbFetch( req, function( err, fullDoc ){
       self._sendErrorOnErr( err, res, next, function(){
 
         if( ! fullDoc ){
           self._sendError( res, next, new self.NotFoundError());
         } else {
 
-          self.allDbExtrapolateDoc( fullDoc, req, function( err, doc ){
+          self.extrapolateDoc( fullDoc, req, function( err, doc ){
             self._sendErrorOnErr( err, res, next, function(){
 
 
@@ -990,7 +1000,7 @@ var Store = declare( null,  {
                       self._sendErrorOnErr( err, res, next, function(){
 
                         // Actually delete the document
-                        self.deleteDbDo( req, function( err ){
+                        self.driverDeleteDbDo( req, function( err ){
                           self._sendErrorOnErr( err, res, next, function(){
                    
                             // Return 204 and empty contents as requested by RFC
@@ -1008,12 +1018,12 @@ var Store = declare( null,  {
               }) // self.checkPermissionsGet
 
             }) // err
-          }) // self.allDbExtrapolateDoc
+          }) // self.extrapolateDoc
 
         } // if self.fetchedDoc
 
       }) // err
-    }) // self.allDbFetchDoc
+    }) // self.driverAllDbFetchDoc
 
   },
 
@@ -1048,14 +1058,46 @@ Store.make = {};
   Store.make[mn] = function( Class ){
     return function( req, res, next ){
       var request = new Class();
+      request.remote = true;
+
+      // var body = req.body;
+      // var params = req.params;
+      // request['_make' + mn ]( params, body, options, next );
+
       request['_make' + mn ]( req, res, next );
       
     }
   }
+});
+
+/*
+// Make Store.makeGet, Store.makeGetQuery, etc.
+[ 'Get', 'GetQuery', 'Put', 'Post', 'PostAppend', 'Delete' ].forEach( function(mn){
+  Store[mn] = function( Class, params, body, options, next ){
+    var request = new Class();
+    request.remote = false;
+    request['_make' + mn ]( params, body, options, next );
+  }
 })
+*/
+
+// var get = Store.Get( Users, { ... params ...}, { doc } );
+// ..OR...
+// var get = Users.Get( { ... params ...}, { doc }, { options } );
 
 
 Store.make.All = function( app, url, idName, Class ){
+
+/*
+  console.log("COMPAREEEEEEEEEEEEEEEEEEEEEEE");
+  console.log(Class);
+  console.log("ANDDDDDDDDDD");
+  console.log( this );
+  console.log("\n\n\n");
+
+  if( typeof( Class ) === 'undefined' ) var Class = this;
+*/
+
   app.get(      url + idName, Store.make.Get( Class ) );
   app.get(      url,          Store.make.GetQuery( Class ) );
   app.put(      url + idName, Store.make.Put( Class ) );
