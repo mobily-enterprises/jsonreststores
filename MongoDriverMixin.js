@@ -15,7 +15,6 @@ var MongoDriverMixin = {
     // This.collectionName will default to the store's name if not set
     this.collectionName = this.collectionName ? this.collectionName : this.storeName;
     this.collection = this.db.collection( this.collectionName );
-
   },
 
   collectionName: null,
@@ -33,13 +32,13 @@ var MongoDriverMixin = {
   // The default Mongo id maker (just return an ObjectId )
 
 
-  _makeMongoFilter: function( req ){
+  _makeMongoFilter: function( params ){
     var self = this;
 
     var filter = {};
     self.paramIds.forEach( function( paramId ){
-      if( ! self._ignoredId( paramId ) && typeof( req.params[ paramId ]) !== 'undefined' ){
-        filter[ paramId ] = req.params[ paramId ];
+      if( ! self._ignoredId( paramId ) && typeof( params[ paramId ]) !== 'undefined' ){
+        filter[ paramId ] = params[ paramId ];
       }
     });
     return filter;
@@ -63,16 +62,16 @@ var MongoDriverMixin = {
 
 
 
-  driverAllDbFetch: function( req, cb ){
+  driverAllDbFetch: function( body, params, options, cb ){
 
     var self = this;
 
     // Make up the filter, based on the store's IDs (used as filters).
-    var filter = self._makeMongoFilter( req );
+    var filter = self._makeMongoFilter( params );
     this.collection.findOne( filter, self.schema.fieldsHash, cb );
   }, 
 
-  driverPostDbInsertNoId: function( body, req, generatedId, cb ){
+  driverPostDbInsertNoId: function( body, params, options, generatedId, cb ){
    
     var self = this;
 
@@ -82,8 +81,8 @@ var MongoDriverMixin = {
     // honouring the self.ignoreId 
     for( var k in body ) record[ k ] = body[ k ];
     self.paramIds.forEach( function( paramId ){
-      if( !self._ignoredId( paramId ) && typeof( req.params[ paramId ] ) !== 'undefined' ){
-        record[ paramId ] = req.params[ paramId ];
+      if( !self._ignoredId( paramId ) && typeof( params[ paramId ] ) !== 'undefined' ){
+        record[ paramId ] = params[ paramId ];
       }
     });
 
@@ -107,13 +106,13 @@ var MongoDriverMixin = {
 
   },
 
-  driverPutDbUpdate: function( body, req, doc, fullDoc, cb ){
+  driverPutDbUpdate: function( body, params, options, doc, fullDoc, cb ){
 
     var self = this;
     var updateObject = {};
 
     // Make up the filter, based on the store's IDs (used as filters).
-    var filter = self._makeMongoFilter( req );
+    var filter = self._makeMongoFilter( params );
 
     // Simply copy values over except self.idProperty (which mustn't be
     // overwritten)
@@ -132,7 +131,7 @@ var MongoDriverMixin = {
   },
 
 
-  driverPutDbInsert: function( body, req, cb ){
+  driverPutDbInsert: function( body, params, options, cb ){
   
     var self = this;
 
@@ -142,8 +141,8 @@ var MongoDriverMixin = {
     // honouring the self.ignoreId 
     for( var k in body ) record[ k ] = body[ k ];
     self.paramIds.forEach( function( paramId ){
-      if( !self._ignoredId( paramId ) && typeof( req.params[ paramId ] ) !== 'undefined' ){
-        record[ paramId ] = req.params[ paramId ];
+      if( !self._ignoredId( paramId ) && typeof( params[ paramId ] ) !== 'undefined' ){
+        record[ paramId ] = params[ paramId ];
       }
     });
 
@@ -162,19 +161,19 @@ var MongoDriverMixin = {
 
   },
 
-  driverPostDbAppend: function( body, req, doc, fullDoc, cb ){
+  driverPostDbAppend: function( body, params, options, doc, fullDoc, cb ){
 
     // Is this _ever_ implemented, really? Seriously?
     cb( null, doc );
   },
 
 
-  driverDeleteDbDo: function( req, cb ){
+  driverDeleteDbDo: function( body, params, options, cb ){
 
     var self = this;
 
     // Make up the filter
-    var filter = self._makeMongoFilter( req );
+    var filter = self._makeMongoFilter( params );
 
     // Actually remove the field
     self.collection.remove( filter, function( err, doc ){
@@ -187,45 +186,37 @@ var MongoDriverMixin = {
 
   },
 
-  driverGetDbQuery: function( req, res, next, sortBy, ranges, filters ){
+  driverGetDbQuery: function( body, params, options, next ){
 
     var self = this;
 
     var cursor;
     var selector = {};
    
-    this._queryEnrichFilters( filters ); 
+    this._queryEnrichFilters( options.filters ); 
 
     // Select according to selector
-    selector = self._queryMakeSelector( filters, req );
+    selector = self._queryMakeSelector( options.filters, params );
     cursor = self.collection.find( selector, self.schema.fieldsHash );
 
     // Skipping/limiting according to ranges/limits
-    if( typeof( ranges) !== 'undefined' ){
-      if( ranges.rangeFrom != 0 )
-        cursor.skip( ranges.rangeFrom );
-      if( ranges.limit != 0 )
-        cursor.limit( ranges.limit );
+    if( typeof( options.ranges) !== 'undefined' ){
+      if( options.ranges.rangeFrom != 0 )
+        cursor.skip( options.ranges.rangeFrom );
+      if( options.ranges.limit != 0 )
+        cursor.limit( options.ranges.limit );
     }
 
     cursor.count( function( err, total ){
-      self._sendErrorOnErr( err, res, next, function(){
-
-        self._querySetRangeHeaders( res, ranges, total );
-
-        cursor.sort( self._queryMakeMongoSortArray( sortBy ) );        
-
+      self._sendErrorOnErr( err, next, function(){
+        
+        cursor.sort( self._queryMakeMongoSortArray( options.sortBy ) );        
         cursor.toArray( function( err, queryDocs ){
-          self._sendErrorOnErr( err, res, next, function(){
-       
-            self._extrapolateAndPrepareAll( queryDocs, req, function( err ){ 
-              self._sendErrorOnErr( err, res, next, function(){
-                res.json( 200, queryDocs );
-              })
-            })
-
-          }) // err
-        }) // cursort.toArray
+          self._sendErrorOnErr( err, next, function(){
+            queryDocs.total = total;
+            next( null, queryDocs );
+          });
+        });
 
       }) // err
     }) // cursor.count 
@@ -234,7 +225,7 @@ var MongoDriverMixin = {
 
 
   // Make up the query selector
-  _queryMakeSelector: function( filters, req ){
+  _queryMakeSelector: function( filters, params ){
     var selector, s;
     var item;
     var foundOne;
@@ -254,7 +245,7 @@ var MongoDriverMixin = {
     }
 
     // Make up the URL-based filter
-    var urlFilter = this._makeMongoFilter( req );
+    var urlFilter = this._makeMongoFilter( params );
 
     // No criteria found: just return the URL-based filter
     // and nothing else
@@ -290,10 +281,6 @@ var MongoDriverMixin = {
     }
   },
 
-
-  _querySetRangeHeaders: function( res, ranges, total ){
-    res.setHeader('Content-Range', 'items ' + ranges.rangeFrom + '-' + ranges.rangeTo + '/' + total );
-  },
 
   _queryMakeMongoSortArray: function( sortBy ){
     var sortArray = [];  

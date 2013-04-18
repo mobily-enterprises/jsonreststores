@@ -7,7 +7,7 @@
     "Dojo",
     "mongodb"
   ],
-  "main": "index.js",
+  "main": "JsonRestStores.js",
   "version": "0.1.11",
   "private": false,
   "repository": {
