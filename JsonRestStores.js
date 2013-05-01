@@ -440,15 +440,15 @@ var Store = declare( null,  {
                                   self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
                                   if( self.echoAfterPost ){
                                     self.prepareBeforeSend( doc, function( err, doc ){
-                                      res.json( 201, doc );
+                                      self._res.json( 201, doc );
                                     })
                                   } else {
-                                    res.send( 201, '' );
+                                    self._res.send( 201, '' );
                                   }
 
                                 // Local request: simply return the doc to the asking function
                                 } else {
-                                  next( null, doc );
+                                  next( null, doc, self.idProperty );
                                 } 
 
                               }) // err
@@ -549,15 +549,15 @@ var Store = declare( null,  {
                                     if( self.remote ){
                                       if( self.echoAfterPostAppend ){
                                          self.prepareBeforeSend( docAfter, function( err, docAfter ){
-                                           _res.json( 200, docAfter );
+                                           self._res.json( 200, docAfter );
                                          })
                                       } else { 
-                                        _res.send( 204, '' );
+                                        self._res.send( 204, '' );
                                       }
 
                                     // Local request: simply return the doc to the asking function
                                     } else {
-                                      next( null, docAfter );
+                                      next( null, docAfter, self.idProperty );
                                     }
 
                                   }) // err
@@ -693,7 +693,7 @@ var Store = declare( null,  {
 
                                     // Local request: simply return the doc to the asking function
                                     } else {
-                                      next( null, doc );
+                                      next( null, doc, self.idProperty );
                                     }
 
                                   }) // err
@@ -757,7 +757,7 @@ var Store = declare( null,  {
 
                                     // Local request: simply return the doc to the asking function
                                     } else {
-                                      next( null, doc );
+                                      next( null, doc, self.idProperty );
                                     }
 
                                   }) // err
@@ -792,6 +792,7 @@ var Store = declare( null,  {
     var self = this;
     var errors = [];
     var sortBy, range, filters;
+
 
     // Check that the method is implemented
     if( ! self.handleGetQuery ){
@@ -837,7 +838,7 @@ var Store = declare( null,  {
               self._res.json( 200, queryDocs );
             // Local request: simply return the doc to the asking function
             } else {
-              next( null, doc );
+              next( null, queryDocs, self.idProperty );
             }
 
           })
@@ -901,7 +902,7 @@ var Store = declare( null,  {
 
                             // Local request: simply return the doc to the asking function
                              } else {
-                               next( null, doc );
+                               next( null, doc, self.idProperty );
                              }
 
 
@@ -982,7 +983,7 @@ var Store = declare( null,  {
 
                             // Local request: simply return the doc to the asking function
                             } else {
-                              next( null, doc );
+                              next( null, doc, self.idProperty );
                             }
 
                           })  // err
