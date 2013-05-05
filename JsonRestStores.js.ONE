@@ -123,7 +123,7 @@ var Store = declare( null,  {
 
   // *** DB manupulation functions (to be overridden by inheriting classes) ***
 
-  extrapolateDoc: function( params, body, options, fullDoc, cb ){
+  extrapolateDoc: function( body, params, options, fullDoc, cb ){
     cb( null, fullDoc );
   },
 
@@ -151,32 +151,32 @@ var Store = declare( null,  {
 
   // DRIVER FUNCTIONS
 
-  driverAllDbFetch: function( params, body, options, cb ){
+  driverAllDbFetch: function( body, params, options, cb ){
     var doc = { id: 'id', dummyData: 'value'};
     cb( null, doc );
   }, 
 
-  driverGetDbQuery: function( params, body, options, cb ){
+  driverGetDbQuery: function( body, params, options, cb ){
     cb( null, [{ id: 'id1', dummyData: 'value1'}, { id: 'id2', dummyData: 'value2'} ] );
   },
 
-  driverPutDbInsert: function( params, body, options, cb ){
+  driverPutDbInsert: function( body, params, options, cb ){
     cb( null, body );
   },
 
-  driverPutDbUpdate: function( params, body, options, doc, fullDoc, cb ){
+  driverPutDbUpdate: function( body, params, options, doc, fullDoc, cb ){
     cb( null, doc );
   },
 
-  driverPostDbInsertNoId: function(params, body, options, generatedId, cb ){
+  driverPostDbInsertNoId: function(body, params, options, generatedId, cb ){
     cb( null, body );
   },
 
-  driverPostDbAppend: function( params, body, options, doc, fullDoc, cb ){
+  driverPostDbAppend: function( body, params, options, doc, fullDoc, cb ){
     cb( null, doc );
   },
 
-  driverDeleteDbDo: function( params, body, options, id, cb ){
+  driverDeleteDbDo: function( body, params, options, id, cb ){
     cb( null );
   },
 
@@ -196,26 +196,26 @@ var Store = declare( null,  {
 
 
   // *** "after" calls ***
-  afterPutNew: function( params, body, options, doc, fullDoc, overwrite, cb ){
+  afterPutNew: function( body, params, options, doc, fullDoc, overwrite, cb ){
     cb( null )
   },
-  afterPutExisting: function( params, body, options, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb ){
+  afterPutExisting: function( body, params, options, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb ){
     cb( null )
   },
 
-  afterPost: function( params, body, options, doc, fullDoc, cb){
+  afterPost: function( body, params, options, doc, fullDoc, cb){
     cb( null );
   },
 
-  afterPostAppend: function( params, body, options, doc, fullDoc, docAfter, fullDocAfter, cb ){
+  afterPostAppend: function( body, params, options, doc, fullDoc, docAfter, fullDocAfter, cb ){
     cb( null );
   },
 
-  afterDelete: function( params, body, options, doc, fullDoc, cb ){
+  afterDelete: function( body, params, options, doc, fullDoc, cb ){
     cb( null );
   },
 
-  afterGet: function( params, body, options, doc, fullDoc, cb ) {
+  afterGet: function( body, params, options, doc, fullDoc, cb ) {
     cb( null );
   },
 
@@ -226,7 +226,7 @@ var Store = declare( null,  {
   },
 
 
-  _extrapolateAndPrepareAll: function( params, body, options, docs, cb ){
+  _extrapolateAndPrepareAll: function( body, params, options, docs, cb ){
 
     var self = this;
 
@@ -236,7 +236,7 @@ var Store = declare( null,  {
 
       changeFunctions.push( function( callback ){
 
-        self.extrapolateDoc(  params, body, options, fullDoc, function( err, extrapolatedDoc ){
+        self.extrapolateDoc(  body, params, options, fullDoc, function( err, extrapolatedDoc ){
           if( err ){
             callback( err, null );
           } else {
@@ -264,64 +264,126 @@ var Store = declare( null,  {
     return this.paramIds[ this.paramIds.length -1 ];
   },
 
-
-  
-
-  // Check that paramsId are actually legal IDs using
-  // paramsSchema
-  _checkParamIds: function( params, body, errors, skipIdProperty ){
-
+  _paramIdsToBody: function( params, body, errors, skipIdProperty ){
     var self = this;
-    var fakeRecord = {}, fakeSchema = {}, fakeSchemaDef = {}, castOptions = {};
 
     // This shouldn't happen
     if( self.paramIds.length === 0 ) return;
+ 
+    // This is to optimise a little: if there is only
+    // one self.paramIds and skipIdProperty is on,
+    // the resulting fakeRecord would be empty and
+    // this would be a big waste of time
 
+    if( self.paramIds.length === 1 && skipIdProperty ) return
+
+    // Copy params over to the body
+    console.log("Body before: ");
+    console.log( body );
+    for( var k in self.paramIds ){
+
+      // Copy properties over (honouring skipIdProperty)
+      if( ! (skipIdProperty && k == self.idProperty) ){
+        body[ k ] = params[ k ];
+      }
+
+    };
+    console.log("Body after: ");
+    console.log( body );
+  },
+
+  _bodyToParamIds: function( params, body, errors, skipIdProperty ){
+    var self = this;
+
+    // This shouldn't happen
+    if( self.paramIds.length === 0 ) return;
+ 
+    // This is to optimise a little: if there is only
+    // one self.paramIds and skipIdProperty is on,
+    // the resulting fakeRecord would be empty and
+    // this would be a big waste of time
+
+    if( self.paramIds.length === 1 && skipIdProperty ) return
+
+    // Copy params over to the body
+    console.log("Params before: ");
+    console.log( params );
+    for( var k in self.paramIds ){
+
+      // Copy properties over (honouring skipIdProperty)
+      if( ! (skipIdProperty && k == self.idProperty) ){
+        params[ k ] = body[ k ];
+      }
+
+    };
+    console.log("Params after: ");
+    console.log( params );
+  },
+
+
+
+
+
+
+
+
+
+  /*  
+
+  // Check that paramsId are actually legal IDs using
+  // paramsSchema
+  _checkParamIds: function( params, errors, skipIdProperty ){
+    var self = this;
+    var fakeRecord = {}, castOptions = {};
+
+    // This shouldn't happen
+    if( self.paramIds.length === 0 ) return;
+ 
     // This is to optimise a little: if there is only
     // one self.paramIds and skipIdProperty is on,
     // the resulting fakeRecord would be empty and
     // this would be a big waste of time
     if( self.paramIds.length === 1 && skipIdProperty ) return;
 
-    // Make up the fake schema definition, based on the paramIds of the "real" schema
-    self.paramIds.forEach( function(k ) {
-      if( typeof( self.schema.structure[ k ] ) === 'undefined' ){
-        throw new Error( 'This paramId must be in schema: ' + k);
+    // Create the fake record I will cast against
+    self.paramIds.forEach( function( k ){
 
-      } else {
+      // Avoid copying over the idProperty if it's to be skipped
+      if( skipIdProperty && k == self.idProperty ) return; // LOCAL return
 
-        if( !( skipIdProperty && k == self.idProperty ) ){
-          fakeSchemaDef[ k ] = self.schema.structure[ k ];
-          fakeSchemaDef[ k ].required = true;
-          if( typeof( params[ k ]) !== 'undefined' ){  fakeRecord[ k ] = params[ k ]; }
-        }
+      // If there is a missing ID in params, add to `errors` and
+      // skip it. Note: I don't want to trust the presence of the "required"
+      // parameter for an id for this check to happen
+      if( typeof( params[ k ] ) === 'undefined' ){
+        errors.push( { field: k, message: 'Missing ID: ' + k, mustChange: false } );
+        return; // LOCAL return
       }
+
+      // At this point, all is well
+      fakeRecord[ k ] = params[ k ];
     });
 
-    // Make up the fake schema
-    fakeSchema = new self.schema.constructor( fakeSchemaDef );
+    // If `errors` has... well, errors, then there were missing IDs and the
+    // URL is broken. No point in continuing
+    if( errors.length != 0 ) return;
 
-    /*
-    console.log( "FAKE RECORD: ");
-    console.log( fakeRecord );
-    console.log( "FAKE SCHEMA: ");
-    console.log( fakeSchema );
-    */
-
-    // Apply the fake schema (just paramIds) to the fake record (just the paramIds values)
-    fakeSchema.apply( fakeRecord, errors );
-
-    // Copy those cast values back onto the params and body, so that
+    // Actually cast/check the temporary (id-only) object, making
+    // sure that self.idProperty IS in the skipList if skipIdProperty
+    // is true
+    if( skipIdProperty ) castOptions.skipCast = [ self.idProperty ];
+    self.schema.paramsSchema.apply( fakeRecord, errors, castOptions );
+ 
+    // Copy those cast values back onto the params, so that
     // other store calls will have ready-to-use cast
-    // elements in `params` and `body`
-    self.paramIds.forEach( function( k ) {
-      if( typeof( fakeRecord[ k ] ) !== 'undefined' ){
-        params[ k ] = fakeRecord[ k ];
-        body[ k ] = fakeRecord[ k ];
-      }
+    // elements in `params`
+    self.paramIds.forEach( function( k ){
+      if( typeof( fakeRecord[ k ] ) !== 'undefined' ) params[ k ] = fakeRecord[ k ];
     });
 
   },
+
+  */
+
 
   /*
   _ignoredId: function( id ){
@@ -387,7 +449,7 @@ var Store = declare( null,  {
 
   // *** The real dance ***
 
-  _makePost: function( params, body, options, next ){
+  _makePost: function( body, params, options, next ){
 
     var self = this;
     var errors = [];
@@ -399,20 +461,38 @@ var Store = declare( null,  {
       return;
     }
    
+    
+    /*
+
     // Check the IDs. If there is a problem, it means an ID is broken:
     // return a BadRequestError
-    self._checkParamIds( params, body, errors, true );
+    self._checkParamIds( params, errors, true );
     if( errors.length ){
       self._sendError( next, new self.BadRequestError( { errors: errors }  ) );
       return;
     }
-  
+    */  
+
     //body = self._clone( body );
+
+    
+    // Copy the paramIds over
+    self._paramIdsToBody( params, body, errors, true );
  
     // Do schema cast and check
     if( self.schema !== null ){
       self.schema.apply(  body, errors, { notRequired: [ self.idProperty ], skipCast: [ self.idProperty ]  } );
     }
+
+    // Check if there are errors
+    if( errors.length ){
+      self._sendError( next, new self.UnprocessableEntityError( { errors: errors }  ) );
+      return;
+    }
+    
+    // Copy verified and cast paramIds in `body` back to params
+    self._bodyToParamIds( params, body, errors, true );
+    
 
     var validateFunction = function( body, errors, cb ) { cb( null ) }
     if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
@@ -426,7 +506,7 @@ var Store = declare( null,  {
         } else {
 
           // Actually check permissions
-          self.checkPermissionsPost( params, body, options, function( err, granted ){
+          self.checkPermissionsPost( body, params, options, function( err, granted ){
             self._sendErrorOnErr( err, next, function(){
 
               if( ! granted ){
@@ -440,14 +520,14 @@ var Store = declare( null,  {
                   self._sendErrorOnErr( err, next, function(){
 
 
-                    self.driverPostDbInsertNoId( params, body, options, generatedId, function( err, fullDoc ){
+                    self.driverPostDbInsertNoId( body, params, options, generatedId, function( err, fullDoc ){
                       self._sendErrorOnErr( err, next, function(){
 
-                        self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
+                        self.extrapolateDoc( body, params, options, fullDoc, function( err, doc) {
                           self._sendErrorOnErr( err, next, function(){
 
 
-                            self.afterPost( params, body, options, doc, fullDoc, function( err ){
+                            self.afterPost( body, params, options, doc, fullDoc, function( err ){
                               self._sendErrorOnErr( err, next, function(){
 
                                 // Remote request: set headers, and send the doc back (if echo is on)
@@ -493,7 +573,7 @@ var Store = declare( null,  {
 
   },
 
-  _makePostAppend: function( params, body, options, next ){
+  _makePostAppend: function( body, params, options, next ){
 
     var self = this;
     var errors = [];
@@ -505,20 +585,43 @@ var Store = declare( null,  {
       return;
     }
    
+
+    /* 
     // Check the IDs. If there is a problem, it means an ID is broken:
     // return a BadRequestError
-    self._checkParamIds( params, body, errors );
+    self._checkParamIds( params, errors );
     if( errors.length ){
-      self._sendError( next, new self.BadRequestError( { errors: errors } ) );
+      self._sendError( next, self.BadRequestError( { errors: errors } ) );
       return;
     }
+    */
    
     //body = self._clone( req.body );
+
+
+    // Copy the paramIds over
+    self._paramIdsToBody( params, body, errors );
 
     // Do schema cast and check
     if( self.schema !== null ){
       self.schema.apply(  body, errors );
     }
+
+    // Check if there are errors
+    if( errors.length ){
+      self._sendError( next, new self.UnprocessableEntityError( { errors: errors }  ) );
+      return;
+    }
+
+    // Copy verified and cast paramIds in `body` back to params
+    self._bodyToParamIds( params, body, errors );
+
+    /*
+    // Do schema cast and check
+    if( self.schema !== null ){
+      self.schema.apply(  body, errors );
+    }
+    */
  
     var validateFunction = function( body, errors, cb ) { cb( null ) }
     if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
@@ -530,15 +633,15 @@ var Store = declare( null,  {
           self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
         } else {
           // Fetch the doc
-          self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
+          self.driverAllDbFetch( body, params, options, function( err, fullDoc ){
             self._sendErrorOnErr( err, next, function(){
 
               // Get the extrapolated doc
-              self.extrapolateDoc( params, body, options, fullDoc, function( err, doc ){
+              self.extrapolateDoc( body, params, options, fullDoc, function( err, doc ){
                 self._sendErrorOnErr( err, next, function(){
 
                   // Actually check permissions
-                  self.checkPermissionsPostAppend( params, body, options, doc, fullDoc, function( err, granted ){
+                  self.checkPermissionsPostAppend( body, params, options, doc, fullDoc, function( err, granted ){
                     self._sendErrorOnErr( err, next, function(){
 
                       if( ! granted ){
@@ -553,13 +656,13 @@ var Store = declare( null,  {
                         // the one passed as last parameter in the list of IDs
                         body[ self.idProperty ] = params[ self.idProperty ];
 
-                        self.driverPostDbAppend( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
+                        self.driverPostDbAppend( body, params, options, doc, fullDoc, function( err, fullDocAfter ){
                           self._sendErrorOnErr( err, next, function(){
   
-                            self.extrapolateDoc( params, body, options, fullDoc, function( err, docAfter ){
+                            self.extrapolateDoc( body, params, options, fullDoc, function( err, docAfter ){
                               self._sendErrorOnErr( err, next, function(){
 
-                                self.afterPostAppend( params, body, options, doc, fullDoc, docAfter, fullDocAfter, function( err ){
+                                self.afterPostAppend( body, params, options, doc, fullDoc, docAfter, fullDocAfter, function( err ){
                                   self._sendErrorOnErr( err, next, function(){
 
                                     // Remote request: set headers, and send the doc back (if echo is on)
@@ -606,7 +709,7 @@ var Store = declare( null,  {
   },
 
 
-  _makePut: function( params, body, options, next ){
+  _makePut: function( body, params, options, next ){
 
     var self = this;
     var errors = [];
@@ -619,20 +722,44 @@ var Store = declare( null,  {
       return;
     }
    
+
     // Check the IDs. If there is a problem, it means an ID is broken:
     // return a BadRequestError
-    self._checkParamIds( params, body, errors );
+    /*
+    self._checkParamIds( params, errors );
     if( errors.length ){
-      self._sendError( next, new self.BadRequestError( { errors: errors }  ) );
-      return;
-    }
-    
-    // body = self._clone( req.body );
+      self._sendError( next, self.BadRequestError( { errors: errors }  ) );
+      self._return;
+    }*/
+
+   // Copy the paramIds over
+    self._paramIdsToBody( params, body, errors );
 
     // Do schema cast and check
     if( self.schema !== null ){
       self.schema.apply(  body, errors );
     }
+
+    // Check if there are errors
+    if( errors.length ){
+      self._sendError( next, new self.UnprocessableEntityError( { errors: errors }  ) );
+      return;
+    }
+
+    // Copy verified and cast paramIds in `body` back to params
+    self._bodyToParamIds( params, body, errors );
+
+
+
+    
+    // body = self._clone( req.body );
+
+    /*
+    // Do schema cast and check
+    if( self.schema !== null ){
+      self.schema.apply(  body, errors );
+    }
+    */
 
     var validateFunction = function( body, errors, cb ) { cb( null ) }
     if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
@@ -645,7 +772,7 @@ var Store = declare( null,  {
         } else {
 
           // Fetch the doc
-          self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
+          self.driverAllDbFetch( body, params, options, function( err, fullDoc ){
             self._sendErrorOnErr( err, next, function(){
   
  
@@ -669,7 +796,7 @@ var Store = declare( null,  {
                 if( ! fullDoc ){
                 
                   // Actually check permissions
-                  self.checkPermissionsPutNew( params, body, options, function( err, granted ){
+                  self.checkPermissionsPutNew( body, params, options, function( err, granted ){
                     self._sendErrorOnErr( err, next, function(){
 
 
@@ -685,14 +812,14 @@ var Store = declare( null,  {
                         // the one passed as last parameter in the list of IDs
                         body[ self.idProperty ] = params[ self.idProperty ];
 
-                        self.driverPutDbInsert( params, body, options, function( err, fullDoc ){
+                        self.driverPutDbInsert( body, params, options, function( err, fullDoc ){
                           self._sendErrorOnErr( err, next, function(){
 
                             // Update "doc" to be the complete version of the doc from the DB
-                            self.extrapolateDoc( params, body, options, fullDoc, function( err, doc ){
+                            self.extrapolateDoc( body, params, options, fullDoc, function( err, doc ){
                               self._sendErrorOnErr( err, next, function(){
 
-                                self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
+                                self.afterPutNew( body, params, options, doc, fullDoc, options.overwrite, function( err ){
                                   self._sendErrorOnErr( err, next, function(){
 
                                     // Remote request: set headers, and send the doc back (if echo is on)
@@ -732,11 +859,11 @@ var Store = declare( null,  {
                 // done on inputted data AND existing doc
                 } else {
 
-                  self.extrapolateDoc( params, body, options, fullDoc, function( err, doc ){
+                  self.extrapolateDoc( body, params, options, fullDoc, function( err, doc ){
                     self._sendErrorOnErr( err, next, function(){
 
                       // Actually check permissions
-                      self.checkPermissionsPutExisting( params, body, options, doc, fullDoc, function( err, granted ){
+                      self.checkPermissionsPutExisting( body, params, options, doc, fullDoc, function( err, granted ){
                         self._sendErrorOnErr( err, next, function(){
 
                           if( ! granted ){
@@ -746,11 +873,11 @@ var Store = declare( null,  {
                             // Clean up body from things that are not to be submitted
                             if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
 
-                            self.driverPutDbUpdate( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
+                            self.driverPutDbUpdate( body, params, options, doc, fullDoc, function( err, fullDocAfter ){
                               self._sendErrorOnErr( err, next, function(){
 
                                 // Update "doc" to be the complete version of the doc from the DB
-                                self.extrapolateDoc( params, body, options, fullDocAfter, function( err, docAfter ){
+                                self.extrapolateDoc( body, params, options, fullDocAfter, function( err, docAfter ){
                                   self._sendErrorOnErr( err, next, function(){
 
                                     // Remote request: set headers, and send the doc back (if echo is on)
@@ -758,7 +885,7 @@ var Store = declare( null,  {
 
                                       // Set the Location header if it was a remote request
                                       self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
-                                      self.afterPutExisting( params, body, options, doc, docAfter, fullDoc, fullDocAfter, options.overwrite, function( err ) {
+                                      self.afterPutExisting( body, params, options, doc, docAfter, fullDoc, fullDocAfter, options.overwrite, function( err ) {
                                         self._sendErrorOnErr( err, next, function(){
 
                                           if( self.echoAfterPutExisting ){
@@ -804,7 +931,7 @@ var Store = declare( null,  {
 
   },
 
-  _makeGetQuery: function( params, body, options, next ){
+  _makeGetQuery: function( body, params, options, next ){
 
     var self = this;
     var errors = [];
@@ -819,7 +946,7 @@ var Store = declare( null,  {
    
     // Check the IDs. If there is a problem, it means an ID is broken:
     // return a BadRequestError
-    self._checkParamIds( params, body, errors, true );
+    self._checkParamIds( params, errors, true );
     if( errors.length ){
       self._sendError( next, new self.BadRequestError( { errors: errors } ) );
       return;
@@ -832,26 +959,21 @@ var Store = declare( null,  {
       return;
     }
 
-    // Set reasonable (good) defaults
     sortBy = options.sortBy;
     ranges = options.ranges;
-    filters = options.filters;
     if( typeof( ranges ) === 'undefined' ) ranges = {};
     if( typeof( ranges.rangeFrom ) === 'undefined' ) ranges.rangeFrom = 0;
     if( typeof( ranges.rangeTo )   === 'undefined' ) ranges.rangeTo   = 0;
-    if( typeof( filters) === 'undefined' ) filters = {};
+    filters = options.flters;
 
-    // Cast the filter object
-    self.schema._castObjectValues( filters );
-
-    //console.log( sortBy );
-    //console.log( ranges );
-    //console.log( filters );
+    // console.log( sortBy );
+    // console.log( ranges );
+    // console.log( filters );
    
-    self.driverGetDbQuery( params, body, options, function( err, queryDocs ){
+    self.driverGetDbQuery( body, params, options, function( err, queryDocs ){
       self._sendErrorOnErr( err, next, function(){
 
-        self._extrapolateAndPrepareAll( params, body, options, queryDocs, function( err ){
+        self._extrapolateAndPrepareAll( body, params, options, queryDocs, function( err ){
           self._sendErrorOnErr( err, next, function(){
 
             // Remote request: set headers, and send the doc back (if echo is on)
@@ -870,7 +992,7 @@ var Store = declare( null,  {
   },
 
 
-  _makeGet: function( params, body, options, next ){
+  _makeGet: function( body, params, options, next ){
 
     var self = this;
     var errors = [];
@@ -882,34 +1004,34 @@ var Store = declare( null,  {
     }
 
     // Check the IDs
-    self._checkParamIds( params, body, errors );
+    self._checkParamIds( params, errors );
  
     // There was a problem: return the errors
     if( errors.length ){
       self._sendError( next, new self.BadRequestError( { errors: errors } ) );
       return;
     }
- 
+
     // Fetch the doc.
-    self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
+    self.driverAllDbFetch( body, params, options, function( err, fullDoc ){
       self._sendErrorOnErr( err, next, function(){
 
         if( ! fullDoc ){
           self._sendError( next, new self.NotFoundError());
         } else {
 
-          self.extrapolateDoc( params, body, options, fullDoc, function( err, doc ){
+          self.extrapolateDoc( body, params, options, fullDoc, function( err, doc ){
             self._sendErrorOnErr( err, next, function(){
 
               // Check the permissions 
-              self.checkPermissionsGet( params, body, options, doc, fullDoc, function( err, granted ){
+              self.checkPermissionsGet( body, params, options, doc, fullDoc, function( err, granted ){
                 self._sendErrorOnErr( err, next, function(){
 
                   if( ! granted ){
                     self._sendError( next, new self.ForbiddenError() ); 
                   } else {
                 
-                    self.afterGet( params, body, options,  doc, fullDoc, function( err ) {
+                    self.afterGet( body, params, options,  doc, fullDoc, function( err ) {
                       self._sendErrorOnErr( err, next, function(){
 
                         // "preparing" the doc. The same function is used by GET for collections 
@@ -951,7 +1073,7 @@ var Store = declare( null,  {
   },
 
 
-  _makeDelete: function( params, body, options, next ){
+  _makeDelete: function( body, params, options, next ){
 
     var self = this;
     var errors = [];
@@ -963,7 +1085,7 @@ var Store = declare( null,  {
     }
 
     // Check the IDs
-    self._checkParamIds( params, body, errors );
+    self._checkParamIds( params, errors );
  
     // There was a problem: return the errors
     if( errors.length ){
@@ -972,36 +1094,36 @@ var Store = declare( null,  {
     }
 
     // Fetch the doc.
-    self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
+    self.driverAllDbFetch( body, params, options, function( err, fullDoc ){
       self._sendErrorOnErr( err, next, function(){
 
         if( ! fullDoc ){
           self._sendError( next, new self.NotFoundError());
         } else {
 
-          self.extrapolateDoc( params, body, options, fullDoc, function( err, doc ){
+          self.extrapolateDoc( body, params, options, fullDoc, function( err, doc ){
             self._sendErrorOnErr( err, next, function(){
 
 
               // Check the permissions 
-              self.checkPermissionsDelete( params, body, options, doc, fullDoc, function( err, granted ){
+              self.checkPermissionsDelete( body, params, options, doc, fullDoc, function( err, granted ){
                 self._sendErrorOnErr( err, next, function(){
 
                   if( ! granted ){
                     self._sendError( next, new self.ForbiddenError() );
                   } else {
               
-                    self.afterDelete( params, body, options, doc, fullDoc, function( err ) {
+                    self.afterDelete( body, params, options, doc, fullDoc, function( err ) {
                       self._sendErrorOnErr( err, next, function(){
 
                         // Actually delete the document
-                        self.driverDeleteDbDo( params, body, options, function( err ){
+                        self.driverDeleteDbDo( body, params, options, function( err ){
                           self._sendErrorOnErr( err, next, function(){
 
                             // Remote request: set headers, and send the doc back (if echo is on)
                             if( self.remote ){
                               // Return 204 and empty contents as requested by RFC
-                              self._res.send( 204, '' );
+                              res.send( 204, '' );
 
                             // Local request: simply return the doc to the asking function
                             } else {
@@ -1031,22 +1153,22 @@ var Store = declare( null,  {
   },
 
   // Permission stock functions
-  checkPermissionsPost: function( params, body, options, cb ){
+  checkPermissionsPost: function( body, params, options, cb ){
     cb( null, true );
   },
-  checkPermissionsPostAppend: function( params, body, options, doc, fullDoc, cb ){
+  checkPermissionsPostAppend: function( body, params, options, doc, fullDoc, cb ){
     cb( null, true );
   },
-  checkPermissionsPutNew: function( params, body, options, cb ){
+  checkPermissionsPutNew: function( body, params, options, cb ){
     cb( null, true );
   },
-  checkPermissionsPutExisting: function( params, body, options, doc, fullDoc, cb ){
+  checkPermissionsPutExisting: function( body, params, options, doc, fullDoc, cb ){
     cb( null, true );
   },
-  checkPermissionsGet: function( params, body, options, doc, fullDoc, cb ){
+  checkPermissionsGet: function( body, params, options, doc, fullDoc, cb ){
     cb( null, true );
   },
-  checkPermissionsDelete: function( params, body, options, doc, fullDoc, cb ){
+  checkPermissionsDelete: function( body, params, options, doc, fullDoc, cb ){
     cb( null, true );
   },
 
@@ -1197,7 +1319,7 @@ Store.online = {};
       var options = request.initOptionsFromReq( mn, req );
 
       // Actually run the request
-      request['_make' + mn ]( params, body, options, next );
+      request['_make' + mn ]( body, params, options, next );
 
       //request['_make' + mn ]( req, res, next );
       
@@ -1206,157 +1328,10 @@ Store.online = {};
 });
 
 
-function fixRequestForApi( request ){
-
-    // Strip all of the paramIds dictated by the original
-    // definition, just leaves the last one
-    request.paramIds = Array( request._lastParamId() );
-
-    // Makes sure it handles all types of requests
-    request.handlePut = true;
-    request.handlePost = true;
-    request.handlePostAppend = true;
-    request.handleGet = true;
-    request.handleGetQuery = true;
-    request.handleDelete = true;
-
-    // It's not a remote request
-    request.remote = false;   
-}
-
-
-Store.Get = function( id, options, next ){
-
-  var Class = this;
-
-  // Make `options` argument optional
-  var len =  arguments.length;
-  if( len == 2 ) { next = options; options = {}; };
-
-  // Make up the request
-  var request = new Class();
-
-  // Fix it for the API
-  fixRequestForApi( request );
-
-  // Make up "params" to be passed to the _makeGet function
-  var params = {};
-  params[ request._lastParamId() ] = id;
-
-
-  console.log("LOOKING:");
-  console.log( params );
-  console.log( id );
-  // Actually run the request
-  request._makeGet( params, {}, options, next );
-}
-
-
-Store.GetQuery = function( options, next ){
-
-  var Class = this;
-
-  // Make up the request
-  var request = new Class();
-
-  // Fix it for the API
-  fixRequestForApi( request );
-
-  // Actually run the request
-  request._makeGetQuery( {}, {}, options, next );
-}
-
-Store.Put = function( id, body, options, next ){
-
-  var Class = this;
-
-  // Make `options` argument optional
-  var len =  arguments.length;
-  if( len == 3 ) { next = options; options = {}; };
-
-  // Make up the request
-  var request = new Class();
-
-  // Fix it for the API
-  fixRequestForApi( request );
-
-  // Make up "params" to be passed to the _makeGet function
-  var params = {};
-  params[ request._lastParamId() ] = id;
-
-  // Actually run the request
-  request._makePut( params, body, options, next );
-}
-
-Store.Post = function( body, options, next ){
-
-  var Class = this;
-
-  // Make `options` argument optional
-  var len =  arguments.length;
-  if( len == 2 ) { next = options; options = {}; };
-
-  // Make up the request
-  var request = new Class();
-
-  // Fix it for the API
-  fixRequestForApi( request );
-
-  // Actually run the request
-  request._makePost( {}, body, options, next );
-}
-
-Store.PostAppend = function( id, body, options, next ){
-
-  var Class = this;
-
-  // Make `options` argument optional
-  var len =  arguments.length;
-  if( len == 3 ) { next = options; options = {}; };
-
-  // Make up the request
-  var request = new Class();
-
-  // Fix it for the API
-  fixRequestForApi( request );
-
-  // Make up "params" to be passed to the _makeGet function
-  var params = {};
-  params[ request._lastParamId() ] = id;
-
-  // Actually run the request
-  request._makePostAppend( params, body, options, next );
-}
-
-Store.Delete = function( id, options, next ){
-
-  var Class = this;
-
-  // Make `options` argument optional
-  var len =  arguments.length;
-  if( len == 2 ) { next = options; options = {}; };
-
-  // Make up the request
-  var request = new Class();
-
-  // Fix it for the API
-  fixRequestForApi( request );
-
-  // Make up "params" to be passed to the _makeGet function
-  var params = {};
-  params[ request._lastParamId() ] = id;
-
-  // Actually run the request
-  request._makeGet( params, {}, options, next );
-}
-
-
-
-/*
-
-
+// Store.api = {};
+// Make Store.makeGet, Store.makeGetQuery, etc.
 [ 'Get', 'GetQuery', 'Put', 'Post', 'PostAppend', 'Delete' ].forEach( function(mn){
-  Store[mn] = function( params, body, options, Class, next ){
+  Store[mn] = function( body, params, options, Class, next ){
 
     // Make arguments optional
     var len =  arguments.length;
@@ -1373,11 +1348,9 @@ Store.Delete = function( id, options, next ){
 
     var request = new Class();
     request.remote = false;
-    request['_make' + mn ]( params, body, options, next );
+    request['_make' + mn ]( body, params, options, next );
   }
 })
-
-*/
 
 
 

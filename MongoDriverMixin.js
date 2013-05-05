@@ -37,7 +37,8 @@ var MongoDriverMixin = {
 
     var filter = {};
     self.paramIds.forEach( function( paramId ){
-      if( ! self._ignoredId( paramId ) && typeof( params[ paramId ]) !== 'undefined' ){
+      // if( ! self._ignoredId( paramId ) && typeof( params[ paramId ]) !== 'undefined' ){
+      if( typeof( params[ paramId ]) !== 'undefined' ){
         filter[ paramId ] = params[ paramId ];
       }
     });
@@ -46,9 +47,12 @@ var MongoDriverMixin = {
 
 
   
+
+  /*
   defaultParamIdsDef: function(){
     return { type: 'id', isRequired: true, searchable: true  };
   },
+  */
 
 
   makeId: function( object, cb ){
@@ -62,7 +66,7 @@ var MongoDriverMixin = {
 
 
 
-  driverAllDbFetch: function( body, params, options, cb ){
+  driverAllDbFetch: function( params, body, options, cb ){
 
     var self = this;
 
@@ -71,7 +75,7 @@ var MongoDriverMixin = {
     this.collection.findOne( filter, self.schema.fieldsHash, cb );
   }, 
 
-  driverPostDbInsertNoId: function( body, params, options, generatedId, cb ){
+  driverPostDbInsertNoId: function( params, body, options, generatedId, cb ){
    
     var self = this;
 
@@ -81,7 +85,8 @@ var MongoDriverMixin = {
     // honouring the self.ignoreId 
     for( var k in body ) record[ k ] = body[ k ];
     self.paramIds.forEach( function( paramId ){
-      if( !self._ignoredId( paramId ) && typeof( params[ paramId ] ) !== 'undefined' ){
+      // if( !self._ignoredId( paramId ) && typeof( params[ paramId ] ) !== 'undefined' ){
+      if( typeof( params[ paramId ] ) !== 'undefined' ){
         record[ paramId ] = params[ paramId ];
       }
     });
@@ -91,9 +96,8 @@ var MongoDriverMixin = {
     record[ self.idProperty ] = generatedId;
 
     // Set the record ID to keep Mongo happy and make
-    // subsequent search easier. Setting _id to the same
-    // as the self.idProperty
-    if( self.idProperty !== '_id' ) record._id  = record[ self.idProperty ];
+    // subsequent search easier. 
+    if( self.idProperty !== '_id' ) record._id  = ObjectId();
 
     // Insert the made up record
     self.collection.insert( record, function( err ){
@@ -106,7 +110,7 @@ var MongoDriverMixin = {
 
   },
 
-  driverPutDbUpdate: function( body, params, options, doc, fullDoc, cb ){
+  driverPutDbUpdate: function( params, body, options, doc, fullDoc, cb ){
 
     var self = this;
     var updateObject = {};
@@ -124,14 +128,14 @@ var MongoDriverMixin = {
       if( err ){
         cb( err, null );
       } else {
-        self.collection.findOne( {_id: fullDoc._id }, self.schema.fieldsHash, cb );
+        self.collection.findOne( filter, self.schema.fieldsHash, cb );
       }
 
     });
   },
 
 
-  driverPutDbInsert: function( body, params, options, cb ){
+  driverPutDbInsert: function( params, body, options, cb ){
   
     var self = this;
 
@@ -141,7 +145,8 @@ var MongoDriverMixin = {
     // honouring the self.ignoreId 
     for( var k in body ) record[ k ] = body[ k ];
     self.paramIds.forEach( function( paramId ){
-      if( !self._ignoredId( paramId ) && typeof( params[ paramId ] ) !== 'undefined' ){
+      // if( !self._ignoredId( paramId ) && typeof( params[ paramId ] ) !== 'undefined' ){
+      if( typeof( params[ paramId ] ) !== 'undefined' ){
         record[ paramId ] = params[ paramId ];
       }
     });
@@ -149,7 +154,7 @@ var MongoDriverMixin = {
     // There is actually a chance that _id is not defined,
     // in case the store is using a different ID to the one
     // in the database.
-    if( self.idProperty !== '_id' ) record._id  = record[ self.idProperty ];
+    if( self.idProperty !== '_id' ) record._id  = ObjectId();
 
     this.collection.insert( record, function( err ){
       if( err ) {
@@ -161,14 +166,14 @@ var MongoDriverMixin = {
 
   },
 
-  driverPostDbAppend: function( body, params, options, doc, fullDoc, cb ){
+  driverPostDbAppend: function( params, body, options, doc, fullDoc, cb ){
 
     // Is this _ever_ implemented, really? Seriously?
     cb( null, doc );
   },
 
 
-  driverDeleteDbDo: function( body, params, options, cb ){
+  driverDeleteDbDo: function( params, body, options, cb ){
 
     var self = this;
 
@@ -186,7 +191,7 @@ var MongoDriverMixin = {
 
   },
 
-  driverGetDbQuery: function( body, params, options, next ){
+  driverGetDbQuery: function( params, body, options, next ){
 
     var self = this;
 
