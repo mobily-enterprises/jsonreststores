@@ -26,6 +26,7 @@ Here is how you make a fully compliant store using Mongo JsonrestStore:
       storeName: 'people',
 
       schema: new Store.Schema({
+        _id       : { type: 'id' },
         name      : { type: 'string', notEmpty: true, trim: 50, searchable: true, sortable: true, searchPartial: true },
         age       : { type: 'number', notEmpty: true , searchable: true, sortable: true },
         occupation: { type: 'string', required: false },
@@ -45,7 +46,7 @@ Here is how you make a fully compliant store using Mongo JsonrestStore:
     });
 
     // Create the `app.use` entries for the calls
-    Store.make.All( app,  '/call/People/', ':_id', PeopleStore );
+    PeopleStore.make.All( app,  '/call/People/', ':_id' );
 
 Notes:
 
@@ -66,6 +67,8 @@ You can apply extra filters, to make a "nested store", very easily:
       storeName: 'peopleNickNames',
 
       schema: new Store.Schema({
+        _id       : { type: 'id' },
+        personId  : { type: 'id' },
         nickName  : { type: 'string', notEmpty: true, trim: 50, searchable: true, sortable: true, searchPartial: true },
       }),
 
@@ -83,7 +86,7 @@ You can apply extra filters, to make a "nested store", very easily:
     });
 
     // Create the `app.use` entries for the calls
-    Store.make.All( app,  '/call/People/:personId/nickNames', ':_id', PeopleStore );
+    PeopleStore.make.All( app,  '/call/People/:personId/nickNames', ':_id' );
 
 
 Notes:
@@ -107,6 +110,7 @@ You can easily do this:
       collectionName: 'peopleOnMongo', // NOTE: the MongoDb collection 'peopleOnMongo' will be used
 
       schema: new Store.Schema({
+        personId  : { type: 'id' },
         name      : { type: 'string', notEmpty: true, trim: 50, searchable: true, sortable: true, searchPartial: true },
         age       : { type: 'number', notEmpty: true , searchable: true, sortable: true },
         occupation: { type: 'string', required: false },
@@ -126,7 +130,7 @@ You can easily do this:
     });
 
     // Create the `app.use` entries for the calls
-    Store.make.All( app,  '/call/People/', ':personId', PeopleStore );
+    PeopleStore.make.All( app,  '/call/People/', ':personId' );
 
 Notes:
 
@@ -148,6 +152,11 @@ Notes:
 
 
 
+
+
+
+
+
 # Implementing a store
 
 First of all, if you are new to REST and web stores, I suggest you read my friend's [John Calcote's article about REST, PUT, POST, etc.](http://jcalcote.wordpress.com/2008/10/16/put-or-post-the-rest-of-the-story/). (It's a fantastic read, and I realised that it was written by John only much later!).
@@ -165,6 +174,7 @@ Having said all this, this is the easiest way to implement a store:
       storeName: 'people',
 
       schema: new Schema({
+        personId  : { type: 'id' },
         name      : { type: 'string', notEmpty: true, trim: 50, searchable: true, sortable: true, searchPartial: true },
         age       : { type: 'number', notEmpty: true , searchable: true, sortable: true },
         occupation: { type: 'string', required: false },
@@ -180,7 +190,7 @@ Having said all this, this is the easiest way to implement a store:
       handleDelete: true,
     });
 
-    Store.make.All( app,  '/call/People/', ':personId', PeopleStore );
+    PeopleStore.make.All( app,  '/call/People/', ':personId' );
 
 
 That's it: this is enough to make a full store which will handly properly all of the HTTP calls. Try it if you don't believe me!
