@@ -14,6 +14,8 @@ var Store = declare( null,  {
   // ignoreIds: [ ],
 
   schema: null,
+  searchSchema: null,
+
   idProperty: null,
 
   storeName: null,
@@ -45,11 +47,9 @@ var Store = declare( null,  {
   chainErrors: 'none', 
 
 
-  driverInit: function(){
-
-  },
-
   constructor: function(){
+
+    //console.log("********************************************* CONSTRUCTOR: JsonRestStores")
 
     var self = this;
 
@@ -58,6 +58,10 @@ var Store = declare( null,  {
     // the store.
     this.idProperty = self._lastParamId();
 
+    // Sets SearchSchema
+    if( this.searchSchema == null ){
+      this.searchSchema = this.schema;
+    }
 
     // JAVASCRIPT WARNING == READ AND UNDERSTAND THIS
     // ----------------------------------------------
@@ -114,10 +118,7 @@ var Store = declare( null,  {
     }
     */
 
-    
-
-    // Initialise the driver
-    self.driverInit();
+   
   },
 
 
@@ -300,13 +301,6 @@ var Store = declare( null,  {
 
     // Make up the fake schema
     fakeSchema = new self.schema.constructor( fakeSchemaDef );
-
-    /*
-    console.log( "FAKE RECORD: ");
-    console.log( fakeRecord );
-    console.log( "FAKE SCHEMA: ");
-    console.log( fakeSchema );
-    */
 
     // Apply the fake schema (just paramIds) to the fake record (just the paramIds values)
     fakeSchema.apply( fakeRecord, errors );
@@ -810,13 +804,19 @@ var Store = declare( null,  {
     var errors = [];
     var sortBy, range, filters;
 
-
     // Check that the method is implemented
     if( ! self.handleGetQuery ){
       self._sendError( next, new self.NotImplementedError( ) );
       return;
     }
-   
+  
+    // The schema must be defined for queries. It's too important, as it defines
+    // what's searchable and what's sortable
+    if( self.searchSchema == null ){
+      self._sendError( next, new Error('Query attempted on schema-less store' ) );
+      return;
+    }
+
     // Check the IDs. If there is a problem, it means an ID is broken:
     // return a BadRequestError
     self._checkParamIds( params, body, errors, true );
@@ -824,30 +824,35 @@ var Store = declare( null,  {
       self._sendError( next, new self.BadRequestError( { errors: errors } ) );
       return;
     }
-    
-    // The schema must be defined for queries. It's too important, as it defines
-    // what's searchable and what's sortable
-    if( self.schema == null ){
-      self._sendError( next, new Error('Query attempted on schema-less store' ) );
-      return;
-    }
-
+ 
     // Set reasonable (good) defaults
     sortBy = options.sortBy;
     ranges = options.ranges;
     filters = options.filters;
-    if( typeof( ranges ) === 'undefined' ) ranges = {};
+    if( typeof( ranges ) === 'undefined' || ! ranges ) ranges = {};
     if( typeof( ranges.rangeFrom ) === 'undefined' ) ranges.rangeFrom = 0;
     if( typeof( ranges.rangeTo )   === 'undefined' ) ranges.rangeTo   = 0;
     if( typeof( filters) === 'undefined' ) filters = {};
 
-    // Cast the filter object
-    self.schema._castObjectValues( filters );
+    // If filters were passed locally, cast them
+    //if( ! self.remote ){
+    var fc = self.searchSchema._cast( filters, { onlyObjectValues: true } );
 
-    //console.log( sortBy );
-    //console.log( ranges );
-    //console.log( filters );
-   
+    // This replicates what schema.apply() would do, but deleting
+    // non-castable search fields rather than giving out errors
+    var originalFilters = self._clone( filters );
+    var failedCasts = self.searchSchema._cast( filters, { onlyObjectValues: true }  );
+    Object.keys( failedCasts ).forEach( function( fieldName ){
+      delete( filters[ fieldName ] ); 
+    });
+    self.searchSchema._check( filters, originalFilters, errors, { onlyObjectValues: true }, failedCasts );
+
+    // Errors in casting: give up, run away
+    if( errors.length ){
+      self._sendError( next, new self.BadRequestError( { errors: errors } ) );
+      return;
+    }
+
     self.driverGetDbQuery( params, body, options, function( err, queryDocs ){
       self._sendErrorOnErr( err, next, function(){
 
@@ -1052,7 +1057,9 @@ var Store = declare( null,  {
 
 
 
-  initOptionsFromReq: function( req, mn ){
+  initOptionsFromReq: function( mn, req ){
+
+    var self = this;
 
     var options = {};
   
@@ -1100,7 +1107,7 @@ var Store = declare( null,  {
             subToken = subTokens[ i ];
             subTokenClean = subToken.replace( '+', '' ).replace( '-', '' );
 
-            if( self.schema.structure[ subTokenClean ] && self.schema.structure[ subTokenClean ].sortable ){
+            if( self.searchSchema.structure[ subTokenClean ] && self.searchSchema.structure[ subTokenClean ].sortable ){
               var sortDirection = subTokens[i][0] == '+' ? 1 : -1;
               sortBy = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
               sortObject[ sortBy ] = sortDirection;
@@ -1156,16 +1163,17 @@ var Store = declare( null,  {
         tokenRight = tokens[1];
 
         // Only add it to the filter if it's in the schema AND if it's searchable
-        if( tokenLeft != 'sortBy' && self.schema.structure[ tokenLeft ] && self.schema.structure[ tokenLeft ].searchable ) {
+        // if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].searchable ) {
+        if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] ) {
           result[ tokenLeft ] = tokenRight;
         }
       })
 
       // Cast result values according to schema
-      failedCasts = self.schema._castObjectValues( result );
+      //failedCasts = self.schema._castObjectValues( result );
 
       // Failed casts are taken out of the result
-      for( var k in failedCasts ) delete result[ k ];
+      //for( var k in failedCasts ) delete result[ k ];
 
       return result;
     }
@@ -1183,7 +1191,11 @@ Store.online = {};
 [ 'Get', 'GetQuery', 'Put', 'Post', 'PostAppend', 'Delete' ].forEach( function(mn){
   Store.online[mn] = function( Class ){
     return function( req, res, next ){
+
+      debugger;
+  
       var request = new Class();
+   
       request.remote = true;
 
       request._req = req;
@@ -1243,10 +1255,6 @@ Store.Get = function( id, options, next ){
   var params = {};
   params[ request._lastParamId() ] = id;
 
-
-  console.log("LOOKING:");
-  console.log( params );
-  console.log( id );
   // Actually run the request
   request._makeGet( params, {}, options, next );
 }
@@ -1387,6 +1395,7 @@ Store.Delete = function( id, options, next ){
 // var get = Users.Get( { ... params ...}, { doc }, { options } );
 
 Store.onlineAll = function( app, url, idName, Class ){
+
 
   // If the last parameter wasn't passed, it will default
   // to `this` (which will be the constructor itself)

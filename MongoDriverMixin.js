@@ -8,14 +8,17 @@ var
 ;
 
 
-var MongoDriverMixin = {
+var MongoDriverMixin = declare( null, {
 
-  driverInit: function( ){
+  constructor: function(){
+    // console.log("********************************************* CONSTRUCTOR: MongoDriverMixin");
 
     // This.collectionName will default to the store's name if not set
     this.collectionName = this.collectionName ? this.collectionName : this.storeName;
     this.collection = this.db.collection( this.collectionName );
+
   },
+
 
   collectionName: null,
   idProperty: null,
@@ -45,15 +48,11 @@ var MongoDriverMixin = {
     return filter;
   },
 
-
-  
-
   /*
   defaultParamIdsDef: function(){
     return { type: 'id', isRequired: true, searchable: true  };
   },
   */
-
 
   makeId: function( object, cb ){
     cb( null, ObjectId() );
@@ -205,7 +204,7 @@ var MongoDriverMixin = {
     cursor = self.collection.find( selector, self.schema.fieldsHash );
 
     // Skipping/limiting according to ranges/limits
-    if( typeof( options.ranges) !== 'undefined' ){
+    if( typeof( options.ranges) == 'object' && options.ranges != null ){
       if( options.ranges.rangeFrom != 0 )
         cursor.skip( options.ranges.rangeFrom );
       if( options.ranges.limit != 0 )
@@ -297,7 +296,7 @@ var MongoDriverMixin = {
 
   },
 
-};
+});
 
 
 // "Inherit" the class function "make" so that modules using this don't have to

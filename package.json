@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "allhttperrors": "0.1.x",
-    "simpledeclare": "0.1.x",
+    "simpledeclare": "0.2.x",
     "simpleschema": "0.1.x",
     "async": "*"
   }
