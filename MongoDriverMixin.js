@@ -32,8 +32,6 @@ var MongoDriverMixin = declare( null, {
   handleDelete: false,
 
 
-  // The default Mongo id maker (just return an ObjectId )
-
 
   _makeMongoFilter: function( params ){
     var self = this;
@@ -54,15 +52,18 @@ var MongoDriverMixin = declare( null, {
   },
   */
 
+  /*
   makeId: function( object, cb ){
     cb( null, ObjectId() );
   },
+  */
 
 
+  /*
   getDbPrepareBeforeSend: function( doc, cb ){
     cb( null, doc );
   },
-
+  */
 
 
   driverAllDbFetch: function( params, body, options, cb ){

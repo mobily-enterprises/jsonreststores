@@ -58,6 +58,10 @@ var Store = declare( null,  {
     // the store.
     this.idProperty = self._lastParamId();
 
+    if( typeof( this.schema ) === 'undefined' || this.schema == null ){
+      throw( new Error("You must define a schema") );
+    }
+
     // Sets SearchSchema
     if( this.searchSchema == null ){
       this.searchSchema = this.schema;
@@ -133,21 +137,12 @@ var Store = declare( null,  {
   },
 
 
-  /* 
-  // NOT STRICTLY DRIVER FUNCTIONS, BUT NEARLY ALWAYS
-  // REDEFINED BY DRIVERS
-  defaultParamIdsDef: function(){
-    return { type: 'number', isRequired: true, searchable: true  };
+  /*
+  // The default id maker (just return a random number )
+  makeId: function( object, cb ){
+    cb( null, Math.floor(Math.random()*10000000) );
   },
   */
-
-
-  // The default id maker (just return an ObjectId )
-  makeId: function( object, cb ){
-    cb( null, Math.floor(Math.random()*10000) );
-  },
-
-
 
 
   // DRIVER FUNCTIONS
@@ -303,7 +298,7 @@ var Store = declare( null,  {
     fakeSchema = new self.schema.constructor( fakeSchemaDef );
 
     // Apply the fake schema (just paramIds) to the fake record (just the paramIds values)
-    fakeSchema.apply( fakeRecord, errors );
+    fakeSchema.castAndCheck( fakeRecord, errors );
 
     // Copy those cast values back onto the params and body, so that
     // other store calls will have ready-to-use cast
@@ -404,15 +399,17 @@ var Store = declare( null,  {
     //body = self._clone( body );
  
     // Do schema cast and check
-    if( self.schema !== null ){
-      self.schema.apply(  body, errors, { notRequired: [ self.idProperty ], skipCast: [ self.idProperty ]  } );
-    }
+    //if( self.schema !== null ){
+    self.schema.castAndCheck(  body, errors, { notRequired: [ self.idProperty ], skipCast: [ self.idProperty ]  } );
+    //}
 
-    var validateFunction = function( body, errors, cb ) { cb( null ) }
-    if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
+    //var validateFunction = function( body, errors, cb ) { cb( null ) }
+    //if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
 
 
-    validateFunction.call( self.schema, body,  errors, function( err ){
+    //validateFunction.call( self.schema, body,  errors, function( err ){
+    self.schema.validate( body,  errors, function( err ){
+    
       self._sendErrorOnErr( err, next, function(){
 
         if( errors.length ){
@@ -428,9 +425,10 @@ var Store = declare( null,  {
               } else {
 
                 // Clean up body from things that are not to be submitted
-                if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                //if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                self.schema.cleanup( body, 'doNotSave' );
 
-                self.makeId( body, function( err, generatedId){
+                self.schema.makeId( body, function( err, generatedId){
                   self._sendErrorOnErr( err, next, function(){
 
 
@@ -509,15 +507,16 @@ var Store = declare( null,  {
    
     //body = self._clone( req.body );
 
-    // Do schema cast and check
-    if( self.schema !== null ){
-      self.schema.apply(  body, errors );
-    }
+    //// Do schema cast and check
+    //if( self.schema !== null ){
+    self.schema.castAndCheck(  body, errors );
+    //}
  
-    var validateFunction = function( body, errors, cb ) { cb( null ) }
-    if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
+    //var validateFunction = function( body, errors, cb ) { cb( null ) }
+    //if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
 
-    validateFunction.call( self.schema, body,  errors, function( err ){
+    //validateFunction.call( self.schema, body,  errors, function( err ){
+    self.schema.validate( body,  errors, function( err ){
       self._sendErrorOnErr( err, next, function(){
 
         if( errors.length ){
@@ -540,7 +539,8 @@ var Store = declare( null,  {
                       } else {
 
                         // Clean up body from things that are not to be submitted
-                        if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                        //if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                        self.schema.cleanup( body, 'doNotSave' );
 
                         // Paranoid check
                         // Make sure that the id property in the body does match
@@ -624,14 +624,15 @@ var Store = declare( null,  {
     // body = self._clone( req.body );
 
     // Do schema cast and check
-    if( self.schema !== null ){
-      self.schema.apply(  body, errors );
-    }
+    //if( self.schema !== null ){
+    self.schema.castAndCheck(  body, errors );
+    //}
 
-    var validateFunction = function( body, errors, cb ) { cb( null ) }
-    if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
+    //var validateFunction = function( body, errors, cb ) { cb( null ) }
+    //if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
 
-    validateFunction.call( self.schema, body,  errors, function( err ){
+    //validateFunction.call( self.schema, body,  errors, function( err ){
+    self.schema.validate( body,  errors, function( err ){
       self._sendErrorOnErr( err, next, function(){
 
         if( errors.length ){
@@ -672,7 +673,8 @@ var Store = declare( null,  {
                       } else {
 
                         // Clean up body from things that are not to be submitted
-                        if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                        // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                        self.schema.cleanup( body, 'doNotSave' );
 
                         // Paranoid check
                         // Make sure that the id property in the body does match
@@ -738,7 +740,8 @@ var Store = declare( null,  {
                           } else {
 
                             // Clean up body from things that are not to be submitted
-                            if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                            // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                            self.schema.cleanup( body, 'doNotSave' );
 
                             self.driverPutDbUpdate( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
                               self._sendErrorOnErr( err, next, function(){
@@ -838,7 +841,7 @@ var Store = declare( null,  {
     //if( ! self.remote ){
     var fc = self.searchSchema._cast( filters, { onlyObjectValues: true } );
 
-    // This replicates what schema.apply() would do, but deleting
+    // This replicates what schema.castAndCheck() would do, but deleting
     // non-castable search fields rather than giving out errors
     var originalFilters = self._clone( filters );
     var failedCasts = self.searchSchema._cast( filters, { onlyObjectValues: true }  );

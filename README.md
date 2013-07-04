@@ -251,7 +251,7 @@ At this point, you are aware that there are six crucial methods for each store:
  * `postDbInsertNoId( body, req, cb )`(adds a new record to the DB; a new ID will be created)
  * `postDbAppend( body, req, doc, fullDoc, cb )` (appends information to existing record after PUT)
  * `deleteDbDo( req, cb )`(deletes a record)
- * `getDbPrepareBeforeSend( doc, cb )`(manipulate a record jut before sending it back to the client)
+ * `prepareBeforeSend( doc, cb )`(manipulate a record jut before sending it back to the client)
 
 **IMPORTANT: Attributes**  
  * `schema: null` (The schema, used to validate incoming data. An object created by a SimpleSchema constructor)
@@ -321,7 +321,7 @@ When using JsonRestStores, you are likely to 1) Use a specialised store 2) Redef
 
 * **Runs `self.afterGet()`**. This is a hook called "after" everything is done in terms of send. However, it's called *before* sending the response to the client. So, it can still make things fail if needed.
 
-* **Runs `self.getDbPrepareBeforeSend()`**. This is a "preparation" function: a function that can manipulate the item just before sending it
+* **Runs `self.prepareBeforeSend()`**. This is a "preparation" function: a function that can manipulate the item just before sending it
 
 * **SEND item to client**
 
