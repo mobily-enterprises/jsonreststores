@@ -124,8 +124,8 @@ The reference implementation for the client is JsonRest by Dojo
   `200 OK` - If everything went well. Note: there should always be contents, even if it's just []
 
 
-ERROR RETURNS:
---------------
+COMMON ERROR MESSAGES
+---------------------
 * `400 - Bad request` --  Maybe some of the IDs are malformed
 * `401 - Unautorized` --  Need to login to see the URL
 * `403 - Forbidden` -- You are logged in but cannot access this URL
