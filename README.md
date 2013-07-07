@@ -1,7 +1,7 @@
 JsonRestStores
 ==============
 
-JsonRestStores is a one-stop module that allows you to create fully functional, configurable Json REST stores using NodeJS. A store can be inherited from another store, and can define all sorts of hooks to configure how it behaves.
+JsonRestStores is a one-stop module that allows you to create fully functional, configurable Json REST stores using NodeJS. A store can be inherited from another store, and can define all sorts of hooks to configure how it behaves (including permissions). It's also very easy to create "nested" stores.
 
 Database access is abstracted. At the moment, it supports the following database servers:
 
@@ -71,19 +71,14 @@ That's it: this is enough to make a full store which will handly properly all of
 
     // get (specific ID)
     app.get(      url + idName,  function( req, res, next ){ /* ... */ } );
-
     // getQuery (array of objects)
     app.get(      url,          function( req, res, next ){ /* ... */ } );
-
     // put (specific ID)
     app.put(      url + idName, function( req, res, next ){ /* ... */ } );
-
     // post (new record)
     app.post(     url,          function( req, res, next ){ /* ... */ } );
-
     // postAppend (append to existing record)
     app.post(     url + idName, function( req, res, next ){ /* ... */ } );
-
     // delete (specific ID)
     app.delete(   url + idName, function( req, res, next ){ /* ... */ } );
 
@@ -182,35 +177,76 @@ This is enough to create a store that will respond to `GET /workspace/2222/users
 * The third parameter of `onlineAll()` needs to include the field that will be used as unique ID
 * The third parameter actually needs to identify unique records in the table
 
-
-
 ## A store derived/inherited from another store
 
-TODO
+Sometimes, you need to create a basic store that interfaces with a specific database table, and then create different ways to "view" that table.
+For example, you might have a store that can access users and workspaces:
 
-# Errors thrown and error management
+    // The basic schema for the WorkspaceUsers table
+    var WorkspacesUsersBase = declare( Store, {
 
-This is the comprehensive list of errors the class can throw:
+      schema: new Schema({
+        userId:      { type: 'id' },
+        workspaceId: { type: 'id' },
+        _id:         { type: 'id' },
+      }),
 
-  * BadRequestError
-  * UnauthorizedError
-  * ForbiddenError
-  * NotFoundError
-  * PreconditionFailedError
-  * UnprocessableEntityError
-  * NotImplementedError
-  * ServiceUnavailableError
+      db: db,
 
-TODO: describe what errors can actually contain, the whole "chaining" thing, etc. as well as error formatting functions and logger
-From OLD doc:
+      storeName: 'workspacesUsersBase',
+      collectionName: 'workspaceUsers',
 
- * `formatErrorResponse( error )` (Function to format the response in case of errors)
- * `logError( error )` (Function called every time an error occurs)
- *  chainErrors ('none': never call `next(err)`, 'nonhttp': only call `next(err)` for non-http errors, 'all': always call `next(err)`
+      paramIds: [ '_id' ],
+    });
 
+The main difference is that we defined the collection name explicitly. So, the MongoDB driver will actually manipulate the collection `workspaceUsers`, whereas this store's name is `workspaceUsersBase`.
 
+You cannot really do very much with this store: it doesn't handle any HTTP requests, and in fact it doesn't even have a route managed!
+However, imagine that you want two stores: one that lists all workspaces belonging to a specific user, and another one that lists all users that are part of a workspace.
 
-# Permissions
+You can do that by creating two stores derived from this base one:
+
+    var WorkspaceUsers = declare( WorkspacesUsersBase, {
+
+      handlePut: false,
+      handlePost: true,
+      handleGet: false,
+      handleGetQuery: true,
+      handleDelete: true,
+
+      storeName:  'WorkspaceUsers',
+      paramIds: [ 'workspaceId', '_id' ],
+    });
+    WorkspaceUsers.onlineAll( app, '/workspace/:workspaceId/users/', ':_id' );
+
+    var UserWorkspaces = declare( WorkspacesUsersBase, {
+
+      handlePut: false,
+      handlePost: true,
+      handleGet: false,
+      handleGetQuery: true,
+      handleDelete: true,
+
+      storeName:  'UserWorkspaces',
+      paramIds: [ 'userId', '_id' ],
+    });
+    UserWorkspaces.onlineAll( app, '/user/:userId/workspaces/', '_id' );
+
+That's it! You didn't have to re-define the schema again. Both stores inherit from `WorkspacesUsersBase`, but mark some differences:
+
+* `handleXXX` entries are different.
+* `storeName` is different . Each store needs to have a unique name.
+* `paramIds` elements, as well as route strings, are different
+
+The last difference is what makes the stores truly uniques: in `WorkspaceUsers`, when querying for example `GET /workspace/2222/users/`, JsonRestStores will filter the results so that only records where `workspaceId` is `2222` will be returned; in `UserWorkspaces`, when querying for example `GET /user/3333/workspaces`, only records where `userId` is `3333` will be returned.
+
+The beauty of it is that you only had to define the schema once; the two different variations can be as similar, or as different, to the "base" store as you like.
+
+Finally, note that the derived stores `WorkspaceUsers` and `UserWorkspaces` only allow `Post` (adding new entries), `GetQuery` and `Delete`.
+
+# Important hooks: permissions and "after" hooks
+
+## Permissions
 
 In permission functions, `cb()` will be called with `cb( null, true )` if granted, `cb( null, false )` for not granted.
 
@@ -221,11 +257,69 @@ In permission functions, `cb()` will be called with `cb( null, true )` if grante
  * `checkPermissionsGet( params, body, options, doc, fullDoc, cb )`
  * `checkPermissionsDelete( params, body, options, doc, fullDoc, cb )`
 
+TODO: finish explanation
 
+## "After" hooks
+
+These hooks are run **after** data has been written to the database, but **before** a response is provided to the user.
+You can redefine them as you wish.
+
+ * `afterPutNew( params, body, options, doc, fullDoc, overwrite, cb )` (Called after a new record is PUT)
+ * `afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb )` (After a record is overwritten with PUT)
+ * `afterPost( params, body, options, doc, fullDoc, cb )` (After a new record is POSTed)
+ * `afterPostAppend( params, body, options, doc, fullDoc, docAfter, fullDocAfter, cb )` (After an existing record is POSTed)
+ * `afterDelete( params, body, options, doc, fullDoc, cb )` (After a record is deleted)
+ * `afterGet( params, body, options, doc, fullDoc, cb  )` (After a record is retrieved)
+
+TODO: finish explanation
+
+# Errors returned and error management
+
+This is the comprehensive list of errors the class can throw:
+
+  * `BadRequestError`
+  * `UnauthorizedError`
+  * `ForbiddenError`
+  * `NotFoundError`
+  * `PreconditionFailedError`
+  * `UnprocessableEntityError`
+  * `NotImplementedError`
+  * `ServiceUnavailableError`
+
+
+TODO: describe what errors can actually contain, the whole "chaining" thing, etc. as well as error formatting functions and logger
+From OLD doc:
+
+ * `formatErrorResponse( error )` (Function to format the response in case of errors)
+ * `logError( error )` (Function called every time an error occurs)
+ *  chainErrors ('none': never call `next(err)`, 'nonhttp': only call `next(err)` for non-http errors, 'all': always call `next(err)`
+
+
+# Store APIs
+
+JsonRestStores allows you to run methods from within your programs, rather than accessing them via URL. This is very helpful if you need to query a store within your own programs.
+This is achieved with the following class functions:
+
+* `Store.Get( id, options, next )`
+* `Store.GetQuery( options, next )`
+* `Store.Put( id, body, options, next )`
+* `Store.Post( body, options, next )`
+* `Store.PostAppend( id, body, options, next )`
+* `Store.Delete( id, options, next )`
+
+All normal hooks are called when using these functions. However:
+
+* The `paramIds` array is shortened so that it only has its last element. This means that you are free to query a store without any pre-set limitations imposed by `paramIds`
+* All `request.handleXXX` are set to `true`
+* The `request.remote` variable is set to false
+
+The last item is especially important: when developing your own permission model, you will probably want to make sure you have different permissions for local requests and remote ones (or, more often, have no restrictions for local ones since you are the one initiating them).
+
+TODO: explain `options` in detail, and in fact check that it makes sense to have it every single time
 
 # Developing a driver layer
 
-_TODO: Change the DB layer so that only necessary parameters are passed, because this is just plain silly_
+TODO: Change the DB layer so that only necessary parameters are passed, because this is just plain silly
 
 The Store class itself is database-agnostic: it uses a set of functions to perform operations that require access to the database.
 Such functions all start with the name `driver` and are:
@@ -245,19 +339,6 @@ Notes:
 * You can see that all functions always have `params, body, options` as first parameters, even though they don't always make sense (in a `DELETE` operation, there is no "body" posted). This is only to keep the codebase sane: `driverDeleteDbDo()` will safely ignore `body` (always passed empty) and `options` (which only apply to search fiters).
 
 * The functions `driverPutDbUpdate()` and `driverPostDbAppend()` both work on existing records; they have as parameters `doc` and `fullDoc`, which represent the record _before_ the change; `doc` is basically `fullDoc` after `extrapolateDoc()` is run. 
-
-# "After" hooks
-
-These hooks are run **after** data has been written to the database, but **before** a response is provided to the user.
-You can redefine them as you wish.
-
- * `afterPutNew( params, body, options, doc, fullDoc, overwrite, cb )` (Called after a new record is PUT)
- * `afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb )` (After a record is overwritten with PUT)
- * `afterPost( params, body, options, doc, fullDoc, cb )` (After a new record is POSTed)
- * `afterPostAppend( params, body, options, doc, fullDoc, docAfter, fullDocAfter, cb )` (After an existing record is POSTed)
- * `afterDelete( params, body, options, doc, fullDoc, cb )` (After a record is deleted)
- * `afterGet( params, body, options, doc, fullDoc, cb  )` (After a record is retrieved)
-
 
 # Behind the scenes
 
@@ -372,8 +453,6 @@ This is what happens in `_makeGet()`. Once you understand this, it's actually qu
 * **Runs `self.prepareBeforeSend()`**. This is a "preparation" function: a function that can manipulate the item just before sending it
 
 * **SEND item to client**
-
-
 
 
 
