@@ -8,6 +8,7 @@ Database access is abstracted. At the moment, it supports the following database
 * MongoDb
 * ... (more to come)
 
+
 # Requirements
 
 ## Understand a little about REST stores
