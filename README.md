@@ -184,30 +184,9 @@ This is enough to create a store that will respond to `GET /workspace/2222/users
 
 
 
+## A store derived/inherited from another store
 
-
-# Developing a driver layer
-
-_TODO: Change the DB layer so that only necessary parameters are passed, because this is just plain silly_
-
-The Store class itself is database-agnostic: it uses a set of functions to perform operations that require access to the database.
-Such functions all start with the name `driver` and are:
-
-* `driverAllDbFetch( params, body, options, cb )` (fetch a document)
-* `driverGetDbQuery( params, body, options, cb )` (executes the query)
-* `driverPutDbInsert( params, body, options, cb )`(inserts a record in the DB after a PUT)
-* `driverPutDbUpdate( params, body, options, doc, fullDoc, cb )`(updates a record in the DB after a PUT)
-* `driverPostDbInsertNoId( params, body, options, generatedId, cb  )`(adds a new record to the DB; a new ID will be created)
-* `driverPostDbAppend( params, body, options, doc, fullDoc, cb )` (appends information to existing record via POST)
-* `driverDeleteDbDo( params, body, options, id, cb )`(deletes a record)
-
-Writing a database layer is a matter of implementing these functions. Doing so is easy: you should use the MongoDriverMixin file as a template on how to implement those functions for other database layers.
-
-Notes:
-
-* You can see that all functions always have `params, body, options` as first parameters, even though they don't always make sense (in a `DELETE` operation, there is no "body" posted). This is only to keep the codebase sane: `driverDeleteDbDo()` will safely ignore `body` (always passed empty) and `options` (which only apply to search fiters).
-
-* The functions `driverPutDbUpdate()` and `driverPostDbAppend()` both work on existing records; they have as parameters `doc` and `fullDoc`, which represent the record _before_ the change; `doc` is basically `fullDoc` after `extrapolateDoc()` is run. 
+TODO
 
 # Errors thrown and error management
 
@@ -243,7 +222,157 @@ In permission functions, `cb()` will be called with `cb( null, true )` if grante
  * `checkPermissionsDelete( params, body, options, doc, fullDoc, cb )`
 
 
+
+# Developing a driver layer
+
+_TODO: Change the DB layer so that only necessary parameters are passed, because this is just plain silly_
+
+The Store class itself is database-agnostic: it uses a set of functions to perform operations that require access to the database.
+Such functions all start with the name `driver` and are:
+
+* `driverAllDbFetch( params, body, options, cb )` (fetch a document)
+* `driverGetDbQuery( params, body, options, cb )` (executes the query)
+* `driverPutDbInsert( params, body, options, cb )`(inserts a record in the DB after a PUT)
+* `driverPutDbUpdate( params, body, options, doc, fullDoc, cb )`(updates a record in the DB after a PUT)
+* `driverPostDbInsertNoId( params, body, options, generatedId, cb  )`(adds a new record to the DB; a new ID will be created)
+* `driverPostDbAppend( params, body, options, doc, fullDoc, cb )` (appends information to existing record via POST)
+* `driverDeleteDbDo( params, body, options, id, cb )`(deletes a record)
+
+Writing a database layer is a matter of implementing these functions. Doing so is easy: you should use the MongoDriverMixin file as a template on how to implement those functions for other database layers.
+
+Notes:
+
+* You can see that all functions always have `params, body, options` as first parameters, even though they don't always make sense (in a `DELETE` operation, there is no "body" posted). This is only to keep the codebase sane: `driverDeleteDbDo()` will safely ignore `body` (always passed empty) and `options` (which only apply to search fiters).
+
+* The functions `driverPutDbUpdate()` and `driverPostDbAppend()` both work on existing records; they have as parameters `doc` and `fullDoc`, which represent the record _before_ the change; `doc` is basically `fullDoc` after `extrapolateDoc()` is run. 
+
 # "After" hooks
+
+These hooks are run **after** data has been written to the database, but **before** a response is provided to the user.
+You can redefine them as you wish.
+
+ * `afterPutNew( params, body, options, doc, fullDoc, overwrite, cb )` (Called after a new record is PUT)
+ * `afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb )` (After a record is overwritten with PUT)
+ * `afterPost( params, body, options, doc, fullDoc, cb )` (After a new record is POSTed)
+ * `afterPostAppend( params, body, options, doc, fullDoc, docAfter, fullDocAfter, cb )` (After an existing record is POSTed)
+ * `afterDelete( params, body, options, doc, fullDoc, cb )` (After a record is deleted)
+ * `afterGet( params, body, options, doc, fullDoc, cb  )` (After a record is retrieved)
+
+
+# Behind the scenes
+
+Understanding what happens behind the scenes is important to understand how the library works.
+This is the list of functions that actually do the work behind the scenes:
+
+ * `_makeGet()` (implements GET for one single document)
+ * `_makeGetQuery()` (implements GET for a collection, no ID passed)
+ * `_makePut()` (implements PUT for a collection)
+ * `_makePost()` (implements POST for a collection)
+ * `_makePostAppend()` (implements POST for a collection, when ID is present)
+ * `_makeDelete()` (implements DELETE for a collection)
+
+When you write:
+
+    Workspaces.onlineAll( app, '/workspaces/', ':_id' );
+
+You are actually running:
+
+    // Make entries in "app", so that the application
+    // will give the right responses
+    app.get(      url + idName, Store.online.Get( Class ) );
+    app.get(      url,          Store.online.GetQuery( Class ) );
+    app.put(      url + idName, Store.online.Put( Class ) );
+    app.post(     url,          Store.online.Post( Class ) );
+    app.post(     url + idName, Store.online.PostAppend( Class ) );
+    app.delete(   url + idName, Store.online.Delete( Class ) );
+
+Note that "Class" is the constructor class (in this case `Workspaces`).
+Let's take for example the first line: it creates a route for `/workspaces/:id` and adds, as a route handler, `Store.online.Put( Workspaces )`. 
+
+This is what happens in that route handler:
+
+    return function( req, res, next ){
+
+      var request = new Class();
+
+      // It's definitely remote
+      request.remote = true;
+
+      // Sets the request's _req and _res variables
+      request._req = req;
+      request._res = res;
+
+      // Set the params and body options, copying them from `req`
+      var params = {}; for( var k in req.params) params[ k ] = req.params[ k ];
+      var body = {}; for( var k in req.body) body[ k ] = req.body[ k ];
+
+      // Since it's an online request, options are set by "req"
+      // This will set things like ranges, sort options, etc.
+      var options = request._initOptionsFromReq( mn, req );
+
+      // Actually run the request
+      request._makePut( params, body, options, next );
+
+    }
+
+Basically, an object of type `Workspaces` is created. The `request` variable is an object able to perform exactly one operation -- which is exactly what will happen.
+
+After that, the object variables `remote`, `_req` and `_res` are set. `remote` will be used by the object methods to determine how to return their results. `_req` and `_res` are set as they will be important for `remote` requests.
+
+At that point, `req.params` and `req.body` are cloned into two variables with the same names.
+
+Then, something interesting happens: the function `_initOptionsFromReq()` is run. `_initOptionsFromReq()` basically analyses the request and returns the right `options` depending on browser headers. For example, the `overwrite` attribute will depend on the browser headers `if-match` and `if-none-match` (for `Put`) whereas `sortBy `, `ranges` and `filters` will be set depending on the requested URL (for `GetQuery`).
+
+Finally, `request._makePut()` is run, passing it `params`, `body`, `options` and `next`. `request._makePut()` is where the real magic actually happens: it will run the correct hooks, eventually performing the requested `PUT`.
+
+## Analysis of a inner function: `_makePut()`
+
+JsonRestStores does all of the boring stuff for you -- the kind things that you would write over and over and over again while developing a server store.
+
+This is what happens in `_makePut()`. Once you understand this, it's actually quite trivial to see the code of the module to figure out what the others do too:
+
+TODO: NOTE, THE FOLLOWING IS ACTUALLY WHAT HAPPENS IN makeGet(). I NEED TO UPDATE IT, ALTHOUGH THEY ARE VERY SIMILAR
+
+
+* **Checks that `self.handleGet` is true** If not, the method is not actually allowed.
+
+* **Runs `self._checkParamIds( params, body, errors )`**. This will cast `params` so that each field listed in the `paramIds` array is cast and checked fully. Since elements in `paramIds` are the ones in the URL, it's important that this check is done beforehand.
+
+* **Runs `self.driverAllDbFetch()**. The record is fetched. It's important that the _whole_ record is fetched by this function.
+
+* **Runs `self.extrapolateDoc()`**. This is important as in some cases you only want a sub-section of the fetched record (for example, only a bunch of fields or the result of `JSON.parse()` of a specific field, etc. Basically, this turns whatever was fetched from the DB into whatever you want returned.
+
+* **Runs `self.checkPermissionsGet()`** This is obviously the function that will check permissions
+
+* **Runs `self.afterGet()`**. This is a hook called "after" everything is done in terms of send. However, it's called *before* sending the response to the client. So, it can still make things fail if needed.
+
+* **Runs `self.prepareBeforeSend()`**. This is a "preparation" function: a function that can manipulate the item just before sending it
+
+* **SEND item to client**
+
+
+
+
+## Analysis of a inner function: `_makeGet()`
+
+This is what happens in `_makeGet()`. Once you understand this, it's actually quite trivial to see the code of the module to figure out what the others do too:
+
+* **Checks that `self.handleGet` is true** If not, the method is not actually allowed.
+
+* **Runs `self._checkParamIds( params, body, errors )`**. This will cast `params` so that each field listed in the `paramIds` array is cast and checked fully. Since elements in `paramIds` are the ones in the URL, it's important that this check is done beforehand.
+
+* **Runs `self.driverAllDbFetch()**. The record is fetched. It's important that the _whole_ record is fetched by this function.
+
+* **Runs `self.extrapolateDoc()`**. This is important as in some cases you only want a sub-section of the fetched record (for example, only a bunch of fields or the result of `JSON.parse()` of a specific field, etc. Basically, this turns whatever was fetched from the DB into whatever you want returned.
+
+* **Runs `self.checkPermissionsGet()`** This is obviously the function that will check permissions
+
+* **Runs `self.afterGet()`**. This is a hook called "after" everything is done in terms of send. However, it's called *before* sending the response to the client. So, it can still make things fail if needed.
+
+* **Runs `self.prepareBeforeSend()`**. This is a "preparation" function: a function that can manipulate the item just before sending it
+
+* **SEND item to client**
+
 
 
 
@@ -276,86 +405,14 @@ Point list:
 
 
 
-
-
-
 # NOTES
 
 * In documentation about the MongoMixin, describe `collectionName` and how the unique ID doesn't need to be `_id` (the driver will create an `_id` record on its own)
 
 * Describe queryFilterType
 
-# DO NOT READ BEHOND THIS POINT. DOCUMENTATION IS BEING WRITTEN RIGHT NOW, AND WHAT FOLLOWS IS MOST DEFINITELY OUTDATED AND VERY VERY WRONG
+* Describe `extrapolateDoc( params, body, options, fullDoc, cb )`(from the fetched document, extrapolate the data you actually want)
+* Describe `prepareBeforeSend( doc, cb )`(manipulate a record jut before sending it back to the client)
 
 
-
-# What actually happend
-
-
-Basically, an object of type `PeopleStore` was created, and its method `_makeGet()` was called passing it `req`, `res`, `next`. It's important to create a new object: even though the library itself doesn't define any object attributes, user defined method might well do. If the module used the same object for every request, all requests would share the same namespace.
-
-The method `_makeGet()` is a general method that handles GET requests. In your application, you will need the method to do very specialised things. That's why `_makeGet()` (but allso all of the others: `_makePut()`, `_makePost()`, etc. ) do everything using class functions that you will most definitely override. (Note that you don't _have to_ override them: no override will give you a fully functional, "default" store).
-
-
-# Behind the scenes
-
-This is the list of functions that actually do the work behind the scenes:
-
- * `_makeGet()` (implements GET for one single document)
- * `_makeGetQuery()` (implements GET for a collection, no ID passed)
- * `_makePut()` (implements PUT for a collection)
- * `_makePost()` (implements POST for a collection)
- * `_makePostAppend()` (implements POST for a collection, when ID is present)
- * `_makeDelete()` (implements DELETE for a collection)
-
-
-## Analysis of a inner function: `_makeGet()`
-
-This is what happens in `_makeGet()`. Once you understand this, it's actually quite trivial to see the code of the module to figure out what the others do too:
-
-* **Checks that `self.handleGet` is true** If not, the method is not actually allowed.
-
-* **Runs `self._checkParamIds( params, body, errors )`**. This will cast `params` so that each field listed in the `paramIds` array is cast and checked fully. Since elements in `paramIds` are the ones in the URL, it's important that this check is done beforehand.
-
-* **Runs `self.driverAllDbFetch()**. The record is fetched. It's important that the _whole_ record is fetched by this function.
-
-* **Runs `self.extrapolateDoc()`**. This is important as in some cases you only want a sub-section of the fetched record (for example, only a bunch of fields or the result of `JSON.parse()` of a specific field, etc. Basically, this turns whatever was fetched from the DB into whatever you want returned.
-
-* **Runs `self.checkPermissionsGet()`** This is obviously the function that will check permissions
-
-* **Runs `self.afterGet()`**. This is a hook called "after" everything is done in terms of send. However, it's called *before* sending the response to the client. So, it can still make things fail if needed.
-
-* **Runs `self.prepareBeforeSend()`**. This is a "preparation" function: a function that can manipulate the item just before sending it
-
-* **SEND item to client**
-
-
-
-
-
-# TECHNICAL INFO (not needed to use the class, but important for DB-layer developers)
-
-At this point, you are aware that there are six crucial methods for each store:
-
-**Manipulation functions**  
- * `extrapolateDoc( params, body, options, fullDoc, cb )`(from the fetched document, extrapolate the data you actually want)
- * `prepareBeforeSend( doc, cb )`(manipulate a record jut before sending it back to the client)
-
-
-**Redefinable after-op functions** 
- * `afterPutNew( req, body, doc, fullDoc, overwrite, cb )` (Called after a new record is PUT)
- * `afterPutExisting( req, body, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb )` (After a record is overwritten with PUT)
- * `afterPost( req, body, doc, fullDoc, cb )` (After a new record is POSTed)
- * `afterPostAppend( req, body, doc, fullDoc, docAfter, fullDocAfter, cb )` (After an existing record is POSTed)
- * `afterDelete( req, doc, fullDoc cb )` (After a record is deleted)
- * `afterGet( req, doc, fullDoc, cb )` (After a record is retrieved)
-
-**Redefinable generic functions** 
-Note that the `MongoStore` module already _does_ overrides the **Database functions** (which would normally be redefined by you), in order to give a working store for you to enjoy. Your own overriding functions could be heavily inspired by these.
-
-# What happens in each call
-
-JsonRestStores does all of the boring stuff for you -- the kind things that you would write over and over and over again while developing a server store.
-
-When using JsonRestStores, you are likely to 1) Use a specialised store 2) Redefine the functions marked above as **IMPORTANT: Database functions**. However, in order to really get it right, it's important to know what actually happens in each call.
 
