@@ -46,25 +46,6 @@ var MongoDriverMixin = declare( null, {
     return filter;
   },
 
-  /*
-  defaultParamIdsDef: function(){
-    return { type: 'id', isRequired: true, searchable: true  };
-  },
-  */
-
-  /*
-  makeId: function( object, cb ){
-    cb( null, ObjectId() );
-  },
-  */
-
-
-  /*
-  getDbPrepareBeforeSend: function( doc, cb ){
-    cb( null, doc );
-  },
-  */
-
 
   driverAllDbFetch: function( params, body, options, cb ){
 

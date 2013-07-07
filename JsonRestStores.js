@@ -96,7 +96,7 @@ var Store = declare( null,  {
     cb( null, doc );
   },
 
-  driverPostDbInsertNoId: function(params, body, options, generatedId, cb ){
+  driverPostDbInsertNoId: function( params, body, options, generatedId, cb ){
     cb( null, body );
   },
 
@@ -348,7 +348,6 @@ var Store = declare( null,  {
     var self = this;
 
     var options = {};
-  
 
     // Set the 'overwrite' option if the right header
     // is there
@@ -1319,7 +1318,7 @@ Store.Delete = function( id, options, next ){
   params[ request._lastParamId() ] = id;
 
   // Actually run the request
-  request._makeGet( params, {}, options, next );
+  request._makeDelete( params, {}, options, next );
 }
 
 function fixRequestForApi( request ){
