@@ -11,7 +11,6 @@ var
 var Store = declare( null,  {
 
   paramIds: [ ],
-  // ignoreIds: [ ],
 
   schema: null,
   searchSchema: null,
@@ -46,10 +45,7 @@ var Store = declare( null,  {
 
   chainErrors: 'none', 
 
-
   constructor: function(){
-
-    //console.log("********************************************* CONSTRUCTOR: JsonRestStores")
 
     var self = this;
 
@@ -58,94 +54,30 @@ var Store = declare( null,  {
     // the store.
     this.idProperty = self._lastParamId();
 
+    // The schema must be defined
     if( typeof( this.schema ) === 'undefined' || this.schema == null ){
       throw( new Error("You must define a schema") );
     }
+
+    // the store name must be defined
+    if( this.storeName === null  ){
+      throw( new Error("You must define a store name for a store") );
+    }
+
 
     // Sets SearchSchema
     if( this.searchSchema == null ){
       this.searchSchema = this.schema;
     }
 
-    // JAVASCRIPT WARNING == READ AND UNDERSTAND THIS
-    // ----------------------------------------------
-    // The schema here is taken, and manipulated. This
-    // constructor is run every time a new object is created.
-    // However, this manipulation only needs to happen once, as
-    // the schema data lives in the PROTOTYPE (and it's therefore
-    // shared by all derived objects).
-    // Note that the created `paramsSchema` is stores in the self.schema,
-    // object itself.
-    // If you derive a store from another, and redefine `stores` in the
-    // prototype, this code will re-run for (once) when you instance
-    // a new object using the derived constructor.
-    //
-    // If a derived class wants to change `paramIds`, it
-    // will need to redefine the schema in order for this
-    // init code to actually run
-
-
-    /*
-
-    // The schema hasn't been analysed before
-    if( ! self.schema.analysed ){
-
-      self.schema.analysed = true;
-
-      // `paramsSchema` is a secondary schema used for all parameters in paramIds.
-      // It's stored in the prototype, on the same level as `schema`
-      self.schema.paramsSchema = new self.schema.constructor( {} );
-
-      // Add the idProperty using the self.allDbDefaultParamIdsDef() if it wasn't
-      // defined
-      if( typeof( self.schema.structure[ self.idProperty ] ) === 'undefined'){
-        self.schema.structure[ self.idProperty ] = self.defaultParamIdsDef();
-      }
-
-      // Populate the paramsSchema schema, either with IDs defined in
-      // the main schema (which will be _moved_) or defining them as
-      // self.defaultParamIdsDef()
-      self.paramIds.forEach( function( k ) {
-
-        // If it's in the main schema's structure...
-        if( typeof( self.schema.structure[ k ] ) !== 'undefined' ){
-          // Move it to the paramsSchema structure
-          self.schema.paramsSchema.structure[ k ] = self.schema.structure[ k ];
-          if( k != self.idProperty ) delete self.schema.structure[ k ];
-        } else {
-          // Otherwise, create it in the paramsSchema structure,
-          // using the creator self.defaultParamIdsDef()
-          self.schema.paramsSchema.structure[ k ] = self.defaultParamIdsDef();
-        }
-
-      });
-    }
-    */
-
-   
   },
 
 
-  // *** DB manupulation functions (to be overridden by inheriting classes) ***
-
-  extrapolateDoc: function( params, body, options, fullDoc, cb ){
-    cb( null, fullDoc );
-  },
-
-  prepareBeforeSend: function( doc, cb ){
-    cb( null, doc );
-  },
-
-
-  /*
-  // The default id maker (just return a random number )
-  makeId: function( object, cb ){
-    cb( null, Math.floor(Math.random()*10000000) );
-  },
-  */
-
-
-  // DRIVER FUNCTIONS
+  // *********************************************************************
+  // *** DRIVER FUNCTIONS THAT MUST BE OVERRIDDEN BY DB-SPECIFIC DRIVERS
+  // *** (Only sample data here)
+  // *********************************************************************
+  
 
   driverAllDbFetch: function( params, body, options, cb ){
     var doc = { id: 'id', dummyData: 'value'};
@@ -177,6 +109,21 @@ var Store = declare( null,  {
   },
 
 
+  // ****************************************************
+  // *** FUNCTIONS THAT CAN BE OVERRIDDEN BY DEVELOPERS
+  // ****************************************************
+
+  // DB manupulation functions (to be overridden by inheriting classes) ***
+
+  extrapolateDoc: function( params, body, options, fullDoc, cb ){
+    cb( null, fullDoc );
+  },
+
+  prepareBeforeSend: function( doc, cb ){
+    cb( null, doc );
+  },
+
+  // Error management/logging functions
 
   formatErrorResponse: function( error ){
 
@@ -191,7 +138,8 @@ var Store = declare( null,  {
   },
 
 
-  // *** "after" calls ***
+  // "after" calls
+
   afterPutNew: function( params, body, options, doc, fullDoc, overwrite, cb ){
     cb( null )
   },
@@ -215,7 +163,33 @@ var Store = declare( null,  {
     cb( null );
   },
 
-  // *** Internal, protected calls that should't be changed by users ***
+  // Permission stock functions
+
+  checkPermissionsPost: function( params, body, options, cb ){
+    cb( null, true );
+  },
+  checkPermissionsPostAppend: function( params, body, options, doc, fullDoc, cb ){
+    cb( null, true );
+  },
+  checkPermissionsPutNew: function( params, body, options, cb ){
+    cb( null, true );
+  },
+  checkPermissionsPutExisting: function( params, body, options, doc, fullDoc, cb ){
+    cb( null, true );
+  },
+  checkPermissionsGet: function( params, body, options, doc, fullDoc, cb ){
+    cb( null, true );
+  },
+  checkPermissionsDelete: function( params, body, options, doc, fullDoc, cb ){
+    cb( null, true );
+  },
+
+
+
+  // ****************************************************
+  // *** INTERNAL FUNCTIONS, DO NOT TOUCH
+  // ****************************************************
+
 
   _clone: function( obj ){
     return  JSON.parse( JSON.stringify( obj ) );
@@ -298,7 +272,7 @@ var Store = declare( null,  {
     fakeSchema = new self.schema.constructor( fakeSchemaDef );
 
     // Apply the fake schema (just paramIds) to the fake record (just the paramIds values)
-    fakeSchema.castAndCheck( fakeRecord, errors );
+    fakeSchema.castAndParams( fakeRecord, errors );
 
     // Copy those cast values back onto the params and body, so that
     // other store calls will have ready-to-use cast
@@ -312,12 +286,6 @@ var Store = declare( null,  {
 
   },
 
-  /*
-  _ignoredId: function( id ){
-    return ( Array.isArray( this.ignoreIds ) && this.ignoreIds.indexOf( id ) != -1 );
-  },
-  */
- 
   _sendErrorOnErr: function( err, next, cb ){
     if( err ) {
       this._sendError( next, err );
@@ -374,7 +342,136 @@ var Store = declare( null,  {
     self.logError( error );
   },
 
-  // *** The real dance ***
+
+  _initOptionsFromReq: function( mn, req ){
+
+    var self = this;
+
+    var options = {};
+  
+
+    // Set the 'overwrite' option if the right header
+    // is there
+    if( mn == 'Put' ){
+      if( req.headers[ 'if-match' ] === '*' )
+        options.overwrite = true;
+      if( req.headers[ 'if-none-match' ] === '*' )
+        options.overwrite = false;
+    }
+
+
+    // Set the 'SortBy', 'ranges' and 'filters' in
+    // the options, based on the passed headers
+
+    if( mn == 'GetQuery' ){
+      options.sortBy = parseSortBy( req );
+      options.ranges = parseRangeHeaders( req );
+      options.filters = parseFilters( req );
+    }
+
+    return options;
+
+
+    function parseSortBy( req ){
+
+      var url_parts = url.parse( req.url, false );
+      var q = url_parts.query || '';
+      var sortBy;
+      var tokens, subTokens, subToken, subTokenClean, i;
+      var sortObject = {};
+
+      tokens = q.split( '&' ).forEach( function( item ) {
+
+        var tokens = item.split('=');
+        var tokenLeft = tokens[0];
+        var tokenRight = tokens[1];
+
+        if(tokenLeft === 'sortBy'){
+          subTokens = tokenRight.split(',');
+          for( i = 0; i < subTokens.length; i++ ){
+
+            subToken = subTokens[ i ];
+            subTokenClean = subToken.replace( '+', '' ).replace( '-', '' );
+
+            if( self.searchSchema.structure[ subTokenClean ] && self.searchSchema.structure[ subTokenClean ].sortable ){
+              var sortDirection = subTokens[i][0] == '+' ? 1 : -1;
+              sortBy = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
+              sortObject[ sortBy ] = sortDirection;
+            }
+          }
+        }
+      });
+      return sortObject;
+    }
+
+    function parseRangeHeaders( req ){
+
+      var tokens;
+      var rangeFrom, rangeTo, limit;
+      var hr;
+
+      
+
+      // If there was a range request, then set the range to the
+      // query and return the count
+      if( (hr = req.headers['range']) && ( tokens = hr.match(/items=([0-9]+)\-([0-9]+)$/))  ){
+        rangeFrom = tokens[1] - 0;
+        rangeTo = tokens[2] - 0;
+        limit =  rangeTo - rangeFrom + 1;
+
+        return( {
+          rangeFrom: rangeFrom,
+          rangeTo: rangeTo,
+          limit:  limit,
+        });
+      } 
+
+      // Range headers not found or not valid, return null 
+      return null;
+    }
+
+
+    function parseFilters( req ){
+
+      var url_parts = url.parse( req.url, false );
+      var q = url_parts.query || '';
+      var tokens, tokenLeft, tokenRight;
+      var result = {};
+      var failedCasts;
+
+      options = typeof( options) === 'object' ? options : {};
+      options.partial = typeof(options.partial) === 'object' ? options.partial : {};
+
+      q.split( '&' ).forEach( function( item ) {
+
+        tokens = item.split('=');
+        tokenLeft  = tokens[0];
+        tokenRight = tokens[1];
+
+        // Only add it to the filter if it's in the schema AND if it's searchable
+        // if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].searchable ) {
+        if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] ) {
+          result[ tokenLeft ] = tokenRight;
+        }
+      })
+
+      // Cast result values according to schema
+      //failedCasts = self.schema._castObjectValues( result );
+
+      // Failed casts are taken out of the result
+      //for( var k in failedCasts ) delete result[ k ];
+
+      return result;
+    }
+
+  },
+
+
+
+  // ****************************************************
+  // *** INTERNAL FUNCTIONS - THE REAL DANCE
+  // ****************************************************
+
 
   _makePost: function( params, body, options, next ){
 
@@ -400,7 +497,7 @@ var Store = declare( null,  {
  
     // Do schema cast and check
     //if( self.schema !== null ){
-    self.schema.castAndCheck(  body, errors, { notRequired: [ self.idProperty ], skipCast: [ self.idProperty ]  } );
+    self.schema.castAndParams(  body, errors, { notRequired: [ self.idProperty ], skipCast: [ self.idProperty ]  } );
     //}
 
     //var validateFunction = function( body, errors, cb ) { cb( null ) }
@@ -509,7 +606,7 @@ var Store = declare( null,  {
 
     //// Do schema cast and check
     //if( self.schema !== null ){
-    self.schema.castAndCheck(  body, errors );
+    self.schema.castAndParams(  body, errors );
     //}
  
     //var validateFunction = function( body, errors, cb ) { cb( null ) }
@@ -625,7 +722,7 @@ var Store = declare( null,  {
 
     // Do schema cast and check
     //if( self.schema !== null ){
-    self.schema.castAndCheck(  body, errors );
+    self.schema.castAndParams(  body, errors );
     //}
 
     //var validateFunction = function( body, errors, cb ) { cb( null ) }
@@ -841,14 +938,14 @@ var Store = declare( null,  {
     //if( ! self.remote ){
     var fc = self.searchSchema._cast( filters, { onlyObjectValues: true } );
 
-    // This replicates what schema.castAndCheck() would do, but deleting
+    // This replicates what schema.castAndParams() would do, but deleting
     // non-castable search fields rather than giving out errors
     var originalFilters = self._clone( filters );
     var failedCasts = self.searchSchema._cast( filters, { onlyObjectValues: true }  );
     Object.keys( failedCasts ).forEach( function( fieldName ){
       delete( filters[ fieldName ] ); 
     });
-    self.searchSchema._check( filters, originalFilters, errors, { onlyObjectValues: true }, failedCasts );
+    self.searchSchema._params( filters, originalFilters, errors, { onlyObjectValues: true }, failedCasts );
 
     // Errors in casting: give up, run away
     if( errors.length ){
@@ -1038,169 +1135,28 @@ var Store = declare( null,  {
 
   },
 
-  // Permission stock functions
-  checkPermissionsPost: function( params, body, options, cb ){
-    cb( null, true );
-  },
-  checkPermissionsPostAppend: function( params, body, options, doc, fullDoc, cb ){
-    cb( null, true );
-  },
-  checkPermissionsPutNew: function( params, body, options, cb ){
-    cb( null, true );
-  },
-  checkPermissionsPutExisting: function( params, body, options, doc, fullDoc, cb ){
-    cb( null, true );
-  },
-  checkPermissionsGet: function( params, body, options, doc, fullDoc, cb ){
-    cb( null, true );
-  },
-  checkPermissionsDelete: function( params, body, options, doc, fullDoc, cb ){
-    cb( null, true );
-  },
-
-
-
-  initOptionsFromReq: function( mn, req ){
-
-    var self = this;
-
-    var options = {};
-  
-
-    // Set the 'overwrite' option if the right header
-    // is there
-    if( mn == 'Put' ){
-      if( req.headers[ 'if-match' ] === '*' )
-        options.overwrite = true;
-      if( req.headers[ 'if-none-match' ] === '*' )
-        options.overwrite = false;
-    }
-
-
-    // Set the 'SortBy', 'ranges' and 'filters' in
-    // the options, based on the passed headers
-
-    if( mn == 'GetQuery' ){
-      options.sortBy = parseSortBy( req );
-      options.ranges = parseRangeHeaders( req );
-      options.filters = parseFilters( req );
-    }
-
-    return options;
-
-
-    function parseSortBy( req ){
-
-      var url_parts = url.parse( req.url, false );
-      var q = url_parts.query || '';
-      var sortBy;
-      var tokens, subTokens, subToken, subTokenClean, i;
-      var sortObject = {};
-
-      tokens = q.split( '&' ).forEach( function( item ) {
-
-        var tokens = item.split('=');
-        var tokenLeft = tokens[0];
-        var tokenRight = tokens[1];
-
-        if(tokenLeft === 'sortBy'){
-          subTokens = tokenRight.split(',');
-          for( i = 0; i < subTokens.length; i++ ){
-
-            subToken = subTokens[ i ];
-            subTokenClean = subToken.replace( '+', '' ).replace( '-', '' );
-
-            if( self.searchSchema.structure[ subTokenClean ] && self.searchSchema.structure[ subTokenClean ].sortable ){
-              var sortDirection = subTokens[i][0] == '+' ? 1 : -1;
-              sortBy = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
-              sortObject[ sortBy ] = sortDirection;
-            }
-          }
-        }
-      });
-      return sortObject;
-    }
-
-    function parseRangeHeaders( req ){
-
-      var tokens;
-      var rangeFrom, rangeTo, limit;
-      var hr;
-
-      
-
-      // If there was a range request, then set the range to the
-      // query and return the count
-      if( (hr = req.headers['range']) && ( tokens = hr.match(/items=([0-9]+)\-([0-9]+)$/))  ){
-        rangeFrom = tokens[1] - 0;
-        rangeTo = tokens[2] - 0;
-        limit =  rangeTo - rangeFrom + 1;
-
-        return( {
-          rangeFrom: rangeFrom,
-          rangeTo: rangeTo,
-          limit:  limit,
-        });
-      } 
-
-      // Range headers not found or not valid, return null 
-      return null;
-    }
-
-
-    function parseFilters( req ){
-
-      var url_parts = url.parse( req.url, false );
-      var q = url_parts.query || '';
-      var tokens, tokenLeft, tokenRight;
-      var result = {};
-      var failedCasts;
-
-      options = typeof( options) === 'object' ? options : {};
-      options.partial = typeof(options.partial) === 'object' ? options.partial : {};
-
-      q.split( '&' ).forEach( function( item ) {
-
-        tokens = item.split('=');
-        tokenLeft  = tokens[0];
-        tokenRight = tokens[1];
-
-        // Only add it to the filter if it's in the schema AND if it's searchable
-        // if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].searchable ) {
-        if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] ) {
-          result[ tokenLeft ] = tokenRight;
-        }
-      })
-
-      // Cast result values according to schema
-      //failedCasts = self.schema._castObjectValues( result );
-
-      // Failed casts are taken out of the result
-      //for( var k in failedCasts ) delete result[ k ];
-
-      return result;
-    }
-
-  },
-
-
 });
+
+
+// ****************************************************
+// *** ONLINE USE OF FUNCTIONS
+// ****************************************************
 
 
 // Make up the class method "online.XXX"
 Store.online = {};
 
-// Make Store.makeGet, Store.makeGetQuery, etc.
+// Make Store.makeGet(Class), Store.makeGetQuery(Class), etc.
 [ 'Get', 'GetQuery', 'Put', 'Post', 'PostAppend', 'Delete' ].forEach( function(mn){
   Store.online[mn] = function( Class ){
     return function( req, res, next ){
 
-      debugger;
-  
       var request = new Class();
    
+      // It's definitely remote
       request.remote = true;
 
+      // Sets the request's _req and _res variables
       request._req = req;
       request._res = res;
 
@@ -1209,7 +1165,8 @@ Store.online = {};
       var body = {}; for( var k in req.body) body[ k ] = req.body[ k ];
 
       // Since it's an online request, options are set by "req"
-      var options = request.initOptionsFromReq( mn, req );
+      // This will set things like ranges, sort options, etc.
+      var options = request._initOptionsFromReq( mn, req );
 
       // Actually run the request
       request['_make' + mn ]( params, body, options, next );
@@ -1221,23 +1178,27 @@ Store.online = {};
 });
 
 
-function fixRequestForApi( request ){
+Store.onlineAll = function( app, url, idName, Class ){
 
-    // Strip all of the paramIds dictated by the original
-    // definition, just leaves the last one
-    request.paramIds = Array( request._lastParamId() );
+  // If the last parameter wasn't passed, it will default
+  // to `this` (which will be the constructor itself)
+  if( typeof( Class ) === 'undefined' ) var Class = this;
 
-    // Makes sure it handles all types of requests
-    request.handlePut = true;
-    request.handlePost = true;
-    request.handlePostAppend = true;
-    request.handleGet = true;
-    request.handleGetQuery = true;
-    request.handleDelete = true;
-
-    // It's not a remote request
-    request.remote = false;   
+  // Make entries in "app", so that the application
+  // will give the right responses
+  app.get(      url + idName, Store.online.Get( Class ) );
+  app.get(      url,          Store.online.GetQuery( Class ) );
+  app.put(      url + idName, Store.online.Put( Class ) );
+  app.post(     url,          Store.online.Post( Class ) );
+  app.post(     url + idName, Store.online.PostAppend( Class ) );
+  app.delete(   url + idName, Store.online.Delete( Class ) );
 }
+
+
+
+// ****************************************************
+// *** API FUNCTIONS AS CLASS METHODS
+// ****************************************************
 
 
 Store.Get = function( id, options, next ){
@@ -1361,58 +1322,25 @@ Store.Delete = function( id, options, next ){
   request._makeGet( params, {}, options, next );
 }
 
+function fixRequestForApi( request ){
 
+    // Strip all of the paramIds dictated by the original
+    // definition, just leaves the last one
+    request.paramIds = Array( request._lastParamId() );
 
-/*
+    // Makes sure it handles all types of requests
+    request.handlePut = true;
+    request.handlePost = true;
+    request.handlePostAppend = true;
+    request.handleGet = true;
+    request.handleGetQuery = true;
+    request.handleDelete = true;
 
-
-[ 'Get', 'GetQuery', 'Put', 'Post', 'PostAppend', 'Delete' ].forEach( function(mn){
-  Store[mn] = function( params, body, options, Class, next ){
-
-    // Make arguments optional
-    var len =  arguments.length;
-    if( len == 1 ){
-      next = params; body = {}; options = {}; Class = this;
-    } else if( len == 2 ){
-      next = body; body = {}; options = {}; Class = this;
-    } else if( len == 3 ) {
-      next = options; options = {}; Class = this;
-    } else if( len == 4 ){
-      next = Class;
-      Class = this;
-    } 
-
-    var request = new Class();
-    request.remote = false;
-    request['_make' + mn ]( params, body, options, next );
-  }
-})
-
-*/
-
-
-
-
-// var get = Store.Get( Users, { ... params ...}, { doc } );
-// ..OR...
-// var get = Users.Get( { ... params ...}, { doc }, { options } );
-
-Store.onlineAll = function( app, url, idName, Class ){
-
-
-  // If the last parameter wasn't passed, it will default
-  // to `this` (which will be the constructor itself)
-  if( typeof( Class ) === 'undefined' ) var Class = this;
-
-  // Make entries in "app", so that the application
-  // will give the right responses
-  app.get(      url + idName, Store.online.Get( Class ) );
-  app.get(      url,          Store.online.GetQuery( Class ) );
-  app.put(      url + idName, Store.online.Put( Class ) );
-  app.post(     url,          Store.online.Post( Class ) );
-  app.post(     url + idName, Store.online.PostAppend( Class ) );
-  app.delete(   url + idName, Store.online.Delete( Class ) );
+    // It's not a remote request
+    request.remote = false;   
 }
+
+
 
 exports = module.exports = Store;
 
