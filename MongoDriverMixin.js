@@ -82,10 +82,8 @@ var MongoDriverMixin = declare( null, {
     var record = {};
 
     // Make up the `record` variable, based on the passed `body`
-    // honouring the self.ignoreId 
     for( var k in body ) record[ k ] = body[ k ];
     self.paramIds.forEach( function( paramId ){
-      // if( !self._ignoredId( paramId ) && typeof( params[ paramId ] ) !== 'undefined' ){
       if( typeof( params[ paramId ] ) !== 'undefined' ){
         record[ paramId ] = params[ paramId ];
       }
@@ -142,10 +140,8 @@ var MongoDriverMixin = declare( null, {
     var record = {};
 
     // Make up the `record` variable, based on the passed `body`
-    // honouring the self.ignoreId 
     for( var k in body ) record[ k ] = body[ k ];
     self.paramIds.forEach( function( paramId ){
-      // if( !self._ignoredId( paramId ) && typeof( params[ paramId ] ) !== 'undefined' ){
       if( typeof( params[ paramId ] ) !== 'undefined' ){
         record[ paramId ] = params[ paramId ];
       }
