@@ -248,7 +248,11 @@ Finally, note that the derived stores `WorkspaceUsers` and `UserWorkspaces` only
 
 ## Permissions
 
-In permission functions, `cb()` will be called with `cb( null, true )` if granted, `cb( null, false )` for not granted.
+iBy default, everything is allowed: stores allow pretty much anything and anything; anybody can DELETE, PUT, POST, etc. Furtunately, JsonRestStores allows you to decide exactly what is allowed and what isn't, by overriding specific methods.
+
+Each permission function needs to call the callback: if everything went fine, `cb()` will be called with `cb( null, true )`; to fail, `cb( null, false )`.
+
+Here are the functions:
 
  * `checkPermissionsPost( params, body, options, cb )` 
  * `checkPermissionsPostAppend( params, body, options, doc, fullDoc, cb )`
@@ -257,21 +261,67 @@ In permission functions, `cb()` will be called with `cb( null, true )` if grante
  * `checkPermissionsGet( params, body, options, doc, fullDoc, cb )`
  * `checkPermissionsDelete( params, body, options, doc, fullDoc, cb )`
 
-TODO: finish explanation
+Here is an example of a store only allowing deletion only to specific admin users:
+
+    // The basic schema for the WorkspaceUsers table
+    var WorkspaceUsers = declare( MongoStore, {
+
+      schema: new MongoSchema({
+        workspaceId: { type: 'id' },
+        _id:         { type: 'id' },
+        email     :  { type: 'string', trim: 128, searchable: true, sortable: true  },
+        name      :  { type: 'string', trim: 60, searchable: true, sortable: true  },
+      }),
+
+      storeName:  'workspaceUsers',
+      db: db,
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+
+      paramIds: [ 'workspaceId', '_id' ],
+
+      
+      checkPermissionsDelete: function( params, body, options, doc, fullDoc, cb ){
+
+        // User is logged in: all good
+        if( req.session.user != 0 ){
+          cb( null, true );
+
+        // User is not logged in: fail!
+        } else {
+          cb( null, false );
+        }
+
+      },
+
+    });
+
+    WorkspaceUsers.onlineAll( app, '/workspace/:workspaceId/users', ':_id' );
+
+Permission checking can be as simple, or as complex, as you need it to be.
 
 ## "After" hooks
 
-These hooks are run **after** data has been written to the database, but **before** a response is provided to the user.
+These functions are handy where, in your own applications, you want "something" to happen after one of those operations is complete.
+
 You can redefine them as you wish.
 
  * `afterPutNew( params, body, options, doc, fullDoc, overwrite, cb )` (Called after a new record is PUT)
  * `afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb )` (After a record is overwritten with PUT)
  * `afterPost( params, body, options, doc, fullDoc, cb )` (After a new record is POSTed)
- * `afterPostAppend( params, body, options, doc, fullDoc, docAfter, fullDocAfter, cb )` (After an existing record is POSTed)
+ * `afterPostAppend( params, body, options, doc, fullDoc, docAfter, fullDocAfter, cb )` (After an existing record is POST-appended to)
  * `afterDelete( params, body, options, doc, fullDoc, cb )` (After a record is deleted)
  * `afterGet( params, body, options, doc, fullDoc, cb  )` (After a record is retrieved)
 
-TODO: finish explanation
+Note that these hooks are run **after** data has been written to the database, but **before** a response is provided to the user.
+
+# Searching in queries
+
+TODO
 
 # Errors returned and error management
 
@@ -315,11 +365,9 @@ All normal hooks are called when using these functions. However:
 
 The last item is especially important: when developing your own permission model, you will probably want to make sure you have different permissions for local requests and remote ones (or, more often, have no restrictions for local ones since you are the one initiating them).
 
-TODO: explain `options` in detail, and in fact check that it makes sense to have it every single time
+TODO: explain `options` in detail, and in fact check that it makes sense to have it every single time. ADD EXAMPLE!
 
 # Developing a driver layer
-
-TODO: Change the DB layer so that only necessary parameters are passed, because this is just plain silly
 
 The Store class itself is database-agnostic: it uses a set of functions to perform operations that require access to the database.
 Such functions all start with the name `driver` and are:
@@ -336,7 +384,7 @@ Writing a database layer is a matter of implementing these functions. Doing so i
 
 Notes:
 
-* You can see that all functions always have `params, body, options` as first parameters, even though they don't always make sense (in a `DELETE` operation, there is no "body" posted). This is only to keep the codebase sane: `driverDeleteDbDo()` will safely ignore `body` (always passed empty) and `options` (which only apply to search fiters).
+* You can see that all functions always have `params, body, options` as first parameters, even though `body` is in some cases always empty (for example in GET and DELETE operations). This is only to keep the codebase sane and consistent.
 
 * The functions `driverPutDbUpdate()` and `driverPostDbAppend()` both work on existing records; they have as parameters `doc` and `fullDoc`, which represent the record _before_ the change; `doc` is basically `fullDoc` after `extrapolateDoc()` is run. 
 
@@ -412,26 +460,29 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 
 This is what happens in `_makePut()`. Once you understand this, it's actually quite trivial to see the code of the module to figure out what the others do too:
 
-TODO: NOTE, THE FOLLOWING IS ACTUALLY WHAT HAPPENS IN makeGet(). I NEED TO UPDATE IT, ALTHOUGH THEY ARE VERY SIMILAR
-
-
-* **Checks that `self.handleGet` is true** If not, the method is not actually allowed.
+* **Checks that `self.handlePut` is true** If not, the method is not actually allowed.
 
 * **Runs `self._checkParamIds( params, body, errors )`**. This will cast `params` so that each field listed in the `paramIds` array is cast and checked fully. Since elements in `paramIds` are the ones in the URL, it's important that this check is done beforehand.
 
 * **Runs `self.driverAllDbFetch()**. The record is fetched. It's important that the _whole_ record is fetched by this function.
 
+* **Checks the `options.overwrite` parameter**. The PUT will fail if the record already exists and `options.overwrite` is false.
+
+* **Checks if record exists or not**. The calls made will differ depending whether the record is already there or not. Note that in the actual module's code, the code at this point actually splits.
+
+* **Runs `self.checkPermissionsPutNew()/self.checkPermissionsPutExisting()`** This is obviously the function that will check permissions
+
+* **Cleans up the schema**. All fields with parameter `doNotSave` in the schema are deleted from the object about to be saved
+
+* **Runs `self.driverPutDbInsert()/self.driverPutDbUpdate()`**. The field is actually written to the database.
+
 * **Runs `self.extrapolateDoc()`**. This is important as in some cases you only want a sub-section of the fetched record (for example, only a bunch of fields or the result of `JSON.parse()` of a specific field, etc. Basically, this turns whatever was fetched from the DB into whatever you want returned.
 
-* **Runs `self.checkPermissionsGet()`** This is obviously the function that will check permissions
-
-* **Runs `self.afterGet()`**. This is a hook called "after" everything is done in terms of send. However, it's called *before* sending the response to the client. So, it can still make things fail if needed.
+* **Runs `self.afterPutNew()/self.afterPutExisting()`**. This is a hook called "after" everything is done in terms of sending. However, it's called *before* sending the response to the client. So, it can still make things fail if needed.
 
 * **Runs `self.prepareBeforeSend()`**. This is a "preparation" function: a function that can manipulate the item just before sending it
 
-* **SEND item to client**
-
-
+* **SEND item to client** This will only happen if `self.echoAfterPutNew()` is `true`, and it's actually a remote call.
 
 
 ## Analysis of a inner function: `_makeGet()`
@@ -448,7 +499,7 @@ This is what happens in `_makeGet()`. Once you understand this, it's actually qu
 
 * **Runs `self.checkPermissionsGet()`** This is obviously the function that will check permissions
 
-* **Runs `self.afterGet()`**. This is a hook called "after" everything is done in terms of send. However, it's called *before* sending the response to the client. So, it can still make things fail if needed.
+* **Runs `self.afterGet()`**. This is a hook called "after" everything is done in terms of sending. However, it's called *before* sending the response to the client. So, it can still make things fail if needed.
 
 * **Runs `self.prepareBeforeSend()`**. This is a "preparation" function: a function that can manipulate the item just before sending it
 
@@ -484,7 +535,7 @@ Point list:
 
 
 
-# NOTES
+# TODO
 
 * In documentation about the MongoMixin, describe `collectionName` and how the unique ID doesn't need to be `_id` (the driver will create an `_id` record on its own)
 
@@ -493,5 +544,5 @@ Point list:
 * Describe `extrapolateDoc( params, body, options, fullDoc, cb )`(from the fetched document, extrapolate the data you actually want)
 * Describe `prepareBeforeSend( doc, cb )`(manipulate a record jut before sending it back to the client)
 
-
+* Document how to use this.inheritedSync(arguments, cb) after testing and checking
 
