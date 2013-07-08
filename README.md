@@ -72,17 +72,17 @@ That's it: this is enough to make a full store which will handly properly all of
 .
 
     // get (specific ID)
-    app.get(      url + idName,  function( req, res, next ){ /* ... */ } );
+    app.get(    url + idName,  function( req, res, next ){ /* ... */ } );
     // getQuery (array of objects)
-    app.get(      url,          function( req, res, next ){ /* ... */ } );
+    app.get(    url,          function( req, res, next ){ /* ... */ } );
     // put (specific ID)
-    app.put(      url + idName, function( req, res, next ){ /* ... */ } );
+    app.put(    url + idName, function( req, res, next ){ /* ... */ } );
     // post (new record)
-    app.post(     url,          function( req, res, next ){ /* ... */ } );
+    app.post(   url,          function( req, res, next ){ /* ... */ } );
     // postAppend (append to existing record)
-    app.post(     url + idName, function( req, res, next ){ /* ... */ } );
+    app.post(   url + idName, function( req, res, next ){ /* ... */ } );
     // delete (specific ID)
-    app.delete(   url + idName, function( req, res, next ){ /* ... */ } );
+    app.delete( url + idName, function( req, res, next ){ /* ... */ } );
 
 Note that this store is not actually hooked to any database server. So, it will actually send out dummy data.
 
@@ -246,7 +246,31 @@ The beauty of it is that you only had to define the schema once; the two differe
 
 Finally, note that the derived stores `WorkspaceUsers` and `UserWorkspaces` only allow `Post` (adding new entries), `GetQuery` and `Delete`.
 
-# Important hooks: permissions and "after" hooks
+# Important methods you can override
+
+The basic `Store` class uses a rather long list of stock methods to complete requests. Some of them are there so that you can override them.
+
+## Data manipulation
+
+### `extrapolateDoc()`
+
+In the documentation and the code, you will often see that two versions of the object are passed: `doc` and `fullDoc`. This is because JsonRestStores allows you to define a method, `extrapolateDoc()`, which will extrapolate the information you actually want to read. Basically, `extrapolateDoc()` is run every time a record is fetched from the database.
+
+You can use this method if you want a store to only fetch a partial amount of information.
+
+Note that permission functions have both `doc` and `fullDoc` so that they can easily make an "informed" decision on granting or denying access.
+
+The method's signature is:
+
+    extrapolateDoc( params, body, options, fullDoc, cb )`
+
+### `prepareBeforeSend( doc, cb )`(
+
+The method `prepareBeforeSend()` does exactly what it says: it will manipulate `doc` just before it's sent over to the client who requested it. This is especialy useful if you want to apply last minute changes to the data you send. _The changes only apply to data that is sent over the network!_ If you use a store via its API, this function will not be run.
+
+The method's signature is:
+
+    prepareBeforeSend( doc, cb )
 
 ## Permissions
 
@@ -306,6 +330,29 @@ Here is an example of a store only allowing deletion only to specific admin user
 
 Permission checking can be as simple, or as complex, as you need it to be.
 
+Note that if your store is derived from another one, and you want to preserve your master store's permission model, you can run `this.inheritedAsync(arguments)` like so:
+
+      checkPermissionsDelete: function( params, body, options, doc, fullDoc, cb ){
+
+        this.inheritedAsync( arguments, function( err, granted ) {
+
+          // In case of error of permission problems, that's it
+          if( err ) return cb( err, false );
+          if( ! granted) return cb( null, false );
+
+          // User is logged in: all good
+          if( req.session.user != 0 ){
+            cb( null, true );
+
+          // User is not logged in: fail!
+          } else {
+            cb( null, false );
+          }
+       }
+     },
+ 
+This will ensure that the inherited `checkPermissionsDelete()` method is called, and 
+
 ## "After" hooks
 
 These functions are handy where, in your own applications, you want "something" to happen after one of those operations is complete.
@@ -323,7 +370,7 @@ Note that these hooks are run **after** data has been written to the database, b
 
 # Searching in queries
 
-TODO
+TODO (and describe queryFilterType)
 
 # Errors returned and error management
 
@@ -367,7 +414,21 @@ All normal hooks are called when using these functions. However:
 
 The last item is especially important: when developing your own permission model, you will probably want to make sure you have different permissions for local requests and remote ones (or, more often, have no restrictions for local ones since you are the one initiating them).
 
-TODO: explain `options` in detail, and in fact check that it makes sense to have it every single time. ADD EXAMPLE!
+TODO: explain `options` in detail (maybe it has already happened above?), and in fact check that it makes sense to have it every single time. ADD EXAMPLE!
+
+
+# Database layers
+
+## MongoMixin
+
+
+
+TODO: Describe `collectionName` and how the unique ID doesn't need to be `_id` (the driver will create an `_id` record on its own). 
+
+
+## ...More to come
+
+For now, there is only MongoDB integration available. However, the next section of the documentation explains exactly how to write a DB driver.
 
 # Developing a driver layer
 
@@ -537,14 +598,5 @@ Point list:
 
 
 
-# TODO
 
-* In documentation about the MongoMixin, describe `collectionName` and how the unique ID doesn't need to be `_id` (the driver will create an `_id` record on its own)
-
-* Describe queryFilterType
-
-* Describe `extrapolateDoc( params, body, options, fullDoc, cb )`(from the fetched document, extrapolate the data you actually want)
-* Describe `prepareBeforeSend( doc, cb )`(manipulate a record jut before sending it back to the client)
-
-* Document how to use this.inheritedSync(arguments, cb) after testing and checking
 
