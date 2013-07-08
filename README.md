@@ -117,6 +117,7 @@ Here is how you define a store that uses MongoDB as a backend.
         schema: new MongoSchema({
           _id:           { type: 'id' },
           workspaceName: { type: 'string', notEmpty: true, trim: 20, searchable: true, sortable: true  },
+          workgroup    : { type: 'string', notEmpty: true, trim: 20, searchable: true, sortable: true  },
         }),
 
         storeName: 'workspaces',
@@ -370,7 +371,74 @@ Note that these hooks are run **after** data has been written to the database, b
 
 # Searching in queries
 
-TODO (and describe queryFilterType)
+The only method that allows searches, and that returns an array of objects, is `GetQuery`. `GetQuery` is called whenever the route is called without specifying the object ID in the URL. So, if `GET /users/1` will return the JSON representation of the user with `_id` `1`, `GET /users` will return an array of all users that satisfy the filter specified in the `GET` request (in this case, there is no filter).
+
+## Filter types
+
+In GetQuery, When querying a store you are able to specify a list of field/value pairs via URL. You are not able to decide on complex queries like `(a == b AND ( c == d OR e == f )`. However, you are able to decide the filter type, which can be `and` (all fields must match) or `or` (any one field matching will be satisfactory).
+
+A typical URL would be:
+
+    GET /users?workspaceName=something&workgroup=owners
+
+If your store specifies `queryFilterType` as `and`, all conditions must be met.
+
+For example this store will have `and` set:
+
+      var Workspaces = declare( MongoStore, {
+
+        schema: new MongoSchema({
+          _id:           { type: 'id' },
+          workspaceName: { type: 'string', notEmpty: true, trim: 20, searchable: true, sortable: true  },
+          workgroup    : { type: 'string', notEmpty: true, trim: 20, searchable: true, sortable: true  },
+        }),
+
+        storeName: 'workspaces',
+
+        db: db,
+
+        handlePut: true,
+        handlePost: true,
+        handleGet: true,
+        handleGetQuery: true,
+        handleDelete: true,
+
+        paramIds: [ '_id' ],
+
+        queryFilterType: 'and',
+
+      });
+
+      // Create the right hooks to access the store
+      Workspaces.onlineAll( app, '/workspaces/', ':_id' );
+
+
+## Partial searches
+
+Some fields will need to be searched incrementally by the users. This means that if the user asks for `GET /users?workspaceName=some`, the query will have to return workspaces with names matching `some`, `something`, `somewhat`, and anything starting with `same`.
+
+This is achieved by the attribute `searchPartial` in your schema.
+
+So, to achieve this you would have a schema like this:
+
+    // ...
+
+    schema: new MongoSchema({
+      _id:           { type: 'id' },
+      workspaceName: { type: 'string', searchPartial: true, notEmpty: true, trim: 20, searchable: true, sortable: true  },
+      workgroup    : { type: 'string', notEmpty: true, trim: 20, searchable: true, sortable: true  },
+    }),
+
+    // ...
+
+
+## Schema attribute `searchable`
+
+TODO
+
+## Schema attribute `sortable`
+
+TODO
 
 # Errors returned and error management
 
@@ -414,13 +482,16 @@ All normal hooks are called when using these functions. However:
 
 The last item is especially important: when developing your own permission model, you will probably want to make sure you have different permissions for local requests and remote ones (or, more often, have no restrictions for local ones since you are the one initiating them).
 
-TODO: explain `options` in detail (maybe it has already happened above?), and in fact check that it makes sense to have it every single time. ADD EXAMPLE!
+TODO: explain `options` in detail, and in fact check that it makes sense to have it every single time. ADD EXAMPLE!
 
+TODO: make sure that:
+ * queryFilterType, searchPartial are actually in `options`
+ * searchable, sortable are ignored for local API requests
+Make those change with extreme care now, test on live system. When this is half stable, write tests
 
 # Database layers
 
 ## MongoMixin
-
 
 
 TODO: Describe `collectionName` and how the unique ID doesn't need to be `_id` (the driver will create an `_id` record on its own). 
