@@ -448,8 +448,8 @@ var Store = declare( null,  {
         tokenRight = tokens[1];
 
         // Only add it to the filter if it's in the schema AND if it's searchable
-        // if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].searchable ) {
-        if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] ) {
+        if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].searchable ) {
+        // if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] ) {
           result[ tokenLeft ] = tokenRight;
         }
       })

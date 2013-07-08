@@ -38,7 +38,6 @@ var MongoDriverMixin = declare( null, {
 
     var filter = {};
     self.paramIds.forEach( function( paramId ){
-      // if( ! self._ignoredId( paramId ) && typeof( params[ paramId ]) !== 'undefined' ){
       if( typeof( params[ paramId ]) !== 'undefined' ){
         filter[ paramId ] = params[ paramId ];
       }
