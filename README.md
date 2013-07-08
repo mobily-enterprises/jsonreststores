@@ -69,7 +69,7 @@ That's it: this is enough to make a full store which will handly properly all of
 * `paramIds` is an array of IDs, ***where the last one is the most important one***: the last item in `paramIds` (in this case it's also the only one: `_id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT, a GET and an "incremental" POST (all operations that require a specific ID to function).
 * `Workspaces.onlineAll()` creates the right Express routes to actually activate your stores. Specifically:
 
-  
+.
 
     // get (specific ID)
     app.get(      url + idName,  function( req, res, next ){ /* ... */ } );
