@@ -379,7 +379,7 @@ In GetQuery, When querying a store you are able to specify a list of field/value
 
 A typical URL would be:
 
-    GET /users?workspaceName=something&workgroup=owners
+    GET /workspaces?workspaceName=something&workgroup=owners
 
 If your store specifies `queryFilterType` as `and`, all conditions must be met.
 
@@ -574,15 +574,26 @@ All normal hooks are called when using these functions. However:
 * The `paramIds` array is shortened so that it only has its last element. This means that you are free to query a store without any pre-set limitations imposed by `paramIds`
 * All `request.handleXXX` are set to `true`
 * The `request.remote` variable is set to false
+* You can search and sort by any fields (`searchable` and `sortable` are no longer necessary)
 
 The last item is especially important: when developing your own permission model, you will probably want to make sure you have different permissions for local requests and remote ones (or, more often, have no restrictions for local ones since you are the one initiating them).
 
+When using the API, the `options` object is especially important, as it defines how the API will work.
+
+When a request comes from a remote operation, the `options` object is populated depending on the parameters passed. When using the API, you need to popuate `options` manually in order to obtain what you desire. `options` is especially important while querying, as that's where you define what you filter and order the results by (if you are curious, when a remote connection is established the function `_initOptionsFromReq()` is the one responsible of getting headers and URL, and populating `options` before running the appropriate function).
+
+* `overwrite`
+* `sortBy`
+* `ranges`
+* `filters` (TODO: probably includes `searchPartial`)
+* `queryFilterType` (TO BE ADDED)
+
 TODO: CHANGE LIBRARY. Make sure that:
- * searchable, sortable are ignored for local API requests
  * queryFilterType, searchPartial are actually in `options`
 
-TODO: explain `options` in detail, explain that it's created automatically when a request comes from a remote host, but needs to be made by hand for API use
 
+TODO: explain `options` in detail, explain that it's created automatically when a request comes from a remote host, but needs to be made by hand for API use
+* queryFilterType, searchPartial are actually in `options`
 
 # Database layers
 
