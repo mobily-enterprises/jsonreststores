@@ -392,7 +392,7 @@ var Store = declare( null,  {
             subToken = subTokens[ i ];
             subTokenClean = subToken.replace( '+', '' ).replace( '-', '' );
 
-            if( self.searchSchema.structure[ subTokenClean ] && self.searchSchema.structure[ subTokenClean ].sortable ){
+            if( ! self.remote || ( self.searchSchema.structure[ subTokenClean ] && self.searchSchema.structure[ subTokenClean ].sortable ) ){
               var sortDirection = subTokens[i][0] == '+' ? 1 : -1;
               sortBy = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
               sortObject[ sortBy ] = sortDirection;
@@ -448,7 +448,7 @@ var Store = declare( null,  {
         tokenRight = tokens[1];
 
         // Only add it to the filter if it's in the schema AND if it's searchable
-        if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].searchable ) {
+        if( tokenLeft != 'sortBy' && ( ! self.remote || ( self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].searchable )) ) {
         // if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] ) {
           result[ tokenLeft ] = tokenRight;
         }
