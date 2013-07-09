@@ -513,7 +513,7 @@ The error objects are all pretty standard. However:
 
 .
 
-  [
+    [
       { field: 'nameOfFieldsWithProblems', message: 'Message to the user for this field', mustChange: true },
       { field: 'nameOfAnotherField', message: 'Message to the user for this other field', mustChange: false },
     ]
@@ -522,23 +522,26 @@ The error objects are all pretty standard. However:
 JsonRestStores only ever throws (generic) Javascript errors if the class constructor was called incorrectly, or if an element in `paramIds` is not found within the schema. So, it will only ever happen if you use the module incorrectly. Any other case is chained through.
 
 
-## Error chaining
+## Error management
 
 At some point in your program, one of your callbacks might have the dreaded `err` first parameter set to an error rather than null. This might happen  with your database driver (for example your MongoDB process dies), or within your own module (validation after a `PUT` fails).
 
+
+### `chainErrors`
+
 You can control what happens when an error occurs with the `chainErrors` attribute. There are three options:
 
-### `all`
+#### `all`
 
 If you have `chainErrors: all` in your class definition: JsonRestStores will simply call `next( error )` where `error` is the error object. This means that it will be up to another Express middleware to deal with the problem.
 
-### `none`
+#### `none`
 
 If you have `chainErrors: none` in your class definition: if there is a problem, JsonRestStores will _not_ call the `next()` callback at all: it will respond to the client directly, after formatting it with the object's `self.formatErrorResponse()` method.
 
 Do this if you basically want to make absolute sure that every single request will end right there, whether it went well or not. If you do this, you will need to define your own `self.formatErrorResponse()` method for your store classes, so that output is what you want.
 
-### `nonhttp`
+#### `nonhttp`
 
 If you have `chainErrors: nonhttp` in your class definition: JsonRestStores will only call `next( err ) ` if one of the errors above happen -- any other problem (like your MongoDB server going down) will be handled by the next Express error management middleware. Use this if you want the server to respond directly in case of an HTTP problem (again using `self.formatErrorResponse()` to send a response to the client), but then you want to manage other problems (for example a MongoDB problem) with Express.
 
