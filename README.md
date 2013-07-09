@@ -413,7 +413,7 @@ For example this store will have `and` set:
       Workspaces.onlineAll( app, '/workspaces/', ':_id' );
 
 
-## Partial searches
+## Schema attribute `searchPartial`
 
 Some fields will need to be searched incrementally by the users. This means that if the user asks for `GET /users?workspaceName=some`, the query will have to return workspaces with names matching `some`, `something`, `somewhat`, and anything starting with `same`.
 
@@ -422,44 +422,136 @@ This is achieved by the attribute `searchPartial` in your schema.
 So, to achieve this you would have a schema like this:
 
     // ...
-
     schema: new MongoSchema({
       _id:           { type: 'id' },
       workspaceName: { type: 'string', searchPartial: true, notEmpty: true, trim: 20, searchable: true, sortable: true  },
       workgroup    : { type: 'string', notEmpty: true, trim: 20, searchable: true, sortable: true  },
     }),
-
     // ...
 
 
 ## Schema attribute `searchable`
 
-TODO
+If you want a field to be searchable, you need to define the `searchable` attribute for it in your schema.
+
+If you have:
+
+    // ...
+    schema: new MongoSchema({
+      _id:           { type: 'id' },
+      workspaceName: { type: 'string', searchPartial: true, notEmpty: true, trim: 20, searchable: true, sortable: true  },
+      workgroup    : { type: 'string', notEmpty: true, trim: 20, searchable: true, sortable: true  },
+    }),
+    // ...
+
+
+As you can see, `workspaceName` has `searchable`, whereas `workgroup` doesn't. This means that if you have an URL like this:
+
+    GET /users?workspaceName=something&workgroup=owners
+
+The parameter `workgroup` will be completely ignored: the filter will only apply to `workspaceName`.
 
 ## Schema attribute `sortable`
 
-TODO
+If a field is marked as `searchable`, then it may or may not be sortable too. This is what a URL will look like:
+
+    /workspaces/?workspaceName=something&sortBy=+workspaceName,-workGroup
+
+The field `sorBy` is interpreted by the GetQuery function: it's a list of comma-separated fields, each one starting with a `+` or with a `-`. If those fields are marked as `sortable` in the schema, then they will be sorted accordingly.
+
+***NOTE TO DOJO USERS***: while using these stores with Dojo, you will _need_ to define them like so: `var store = new JsonRest( { target: "/workspaces/", sortParam: "sortBy" });`. The `sortParam` element is mandatory, as it needs to be `sortBy`. At this stage, JsonRestStores is _not_ able to interpret correctly URLs such as `/workspaces/?workspaceName=something&sort(+workspaceName,-workgroup)` (which is what Dojo will request if you do not specify `sortParam`).
+
+## Search schema
+
+Sometimes, you might decide to use a different schema for searches. For example, you might decide to only allow a search when a field is at least 4 characters long.
+
+In this case, you can define a "search schema": a schema that will be applied to the fields before searching.
+
+Here is an example:
+
+    // ...
+    schema: new MongoSchema({
+      _id:           { type: 'id' },
+      workspaceName: { type: 'string', notEmpty: true, trim: 20 },
+      workgroup    : { type: 'string', notEmpty: true, trim: 20 },
+    }),
+
+    searchSchema: new MongoSchema({
+      _id:           { type: 'id' },
+      workspaceName: { type: 'string', searchPartial: true, min: 4, searchable: true, sortable: true  },
+      workgroup    : { type: 'string', min: 2, searchable: true, sortable: true  },
+    }),
+    // ...
+
+
+Another bonus point of using search schemas is that you can keep the search-specific parameters (`searchable`, `sortable` and `searchPartial`) out of the "main" schema.
 
 # Errors returned and error management
 
-This is the comprehensive list of errors the class can throw:
+JsonRestStores has very careful error management.
 
-  * `BadRequestError`
+## The error objects
+
+This is the comprehensive list of errors the class can create:
+
+  * `BadRequestError` Like this: `new BadRequestError( { errors: errors } )`
   * `UnauthorizedError`
   * `ForbiddenError`
   * `NotFoundError`
   * `PreconditionFailedError`
-  * `UnprocessableEntityError`
+  * `UnprocessableEntityError` Like this: `UnprocessableEntityError( { errors: errors } )`
   * `NotImplementedError`
-  * `ServiceUnavailableError`
+  * `ServiceUnavailableError`. Like this: `ServiceUnavailableError( { originalErr: error } )`
+
+These error constructors are borrowed from the [Allhttperrors](https://npmjs.org/package/allhttperrors) module -- you should its short and concise documentation. The short version is that `errorObject.httpError` will be set, and the constructor can have either a string or an object as parameters.
+
+The error objects are all pretty standard. However:
+
+* `ServiceUnavailableError` errors will be created with an `originalErr` parameter containing the original error object. For example if the database server goes down, the module will return a `ServiceUnavailableError` error object which will include the original MongoDB error in its `originalErr` parameter.
+
+* `UnprocessableEntityError` and `BadRequestError` are both created when field validation fails. They error objects will always have an `errors` attribute, which will represent an array of errors as they were returned by SimpleSchema. For example:
+
+.
+
+  [
+      { field: 'nameOfFieldsWithProblems', message: 'Message to the user for this field', mustChange: true },
+      { field: 'nameOfAnotherField', message: 'Message to the user for this other field', mustChange: false },
+    ]
 
 
-TODO: describe what errors can actually contain, the whole "chaining" thing, etc. as well as error formatting functions and logger
-From OLD doc:
+JsonRestStores only ever throws (generic) Javascript errors if the class constructor was called incorrectly, or if an element in `paramIds` is not found within the schema. So, it will only ever happen if you use the module incorrectly. Any other case is chained through.
 
- * `formatErrorResponse( error )` (Function to format the response in case of errors)
- * `logError( error )` (Function called every time an error occurs)
- *  chainErrors ('none': never call `next(err)`, 'nonhttp': only call `next(err)` for non-http errors, 'all': always call `next(err)`
+
+## Error chaining
+
+At some point in your program, one of your callbacks might have the dreaded `err` first parameter set to an error rather than null. This might happen  with your database driver (for example your MongoDB process dies), or within your own module (validation after a `PUT` fails).
+
+You can control what happens when an error occurs with the `chainErrors` attribute. There are three options:
+
+### `all`
+
+If you have `chainErrors: all` in your class definition: JsonRestStores will simply call `next( error )` where `error` is the error object. This means that it will be up to another Express middleware to deal with the problem.
+
+### `none`
+
+If you have `chainErrors: none` in your class definition: if there is a problem, JsonRestStores will _not_ call the `next()` callback at all: it will respond to the client directly, after formatting it with the object's `self.formatErrorResponse()` method.
+
+Do this if you basically want to make absolute sure that every single request will end right there, whether it went well or not. If you do this, you will need to define your own `self.formatErrorResponse()` method for your store classes, so that output is what you want.
+
+### `nonhttp`
+
+If you have `chainErrors: nonhttp` in your class definition: JsonRestStores will only call `next( err ) ` if one of the errors above happen -- any other problem (like your MongoDB server going down) will be handled by the next Express error management middleware. Use this if you want the server to respond directly in case of an HTTP problem (again using `self.formatErrorResponse()` to send a response to the client), but then you want to manage other problems (for example a MongoDB problem) with Express.
+
+### `self.formatErrorResponse()`
+
+In those cases where you decide to send a response to the client directly (with `chainErrors` being `none` or `nonhttp`), the server will send a response to the client directly. The body of the response will depend on what you want to send back.
+
+The stock `self.formatErrorResponse()` method will simply return a Json representation of the error message and, if present, the `errors` array within the error.
+
+
+### `self.logError()`
+
+Whenever an error happens, JsonRestStore will run `self.logError()`. This happens regardless of what `self.chainErrors` contains (that is, whether the error is chained up to Express or it's managed internally). Note that there is no `callback` parameter to this method: since it's only a logging method, if it fails, it fails.
 
 
 # Store APIs
@@ -482,12 +574,12 @@ All normal hooks are called when using these functions. However:
 
 The last item is especially important: when developing your own permission model, you will probably want to make sure you have different permissions for local requests and remote ones (or, more often, have no restrictions for local ones since you are the one initiating them).
 
-TODO: explain `options` in detail, and in fact check that it makes sense to have it every single time. ADD EXAMPLE!
-
-TODO: make sure that:
- * queryFilterType, searchPartial are actually in `options`
+TODO: CHANGE LIBRARY. Make sure that:
  * searchable, sortable are ignored for local API requests
-Make those change with extreme care now, test on live system. When this is half stable, write tests
+ * queryFilterType, searchPartial are actually in `options`
+
+TODO: explain `options` in detail, explain that it's created automatically when a request comes from a remote host, but needs to be made by hand for API use
+
 
 # Database layers
 
