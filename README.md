@@ -84,6 +84,15 @@ That's it: this is enough to make a full store which will handly properly all of
     // delete (specific ID)
     app.delete( url + idName, function( req, res, next ){ /* ... */ } );
 
+So, the following routes will be defined:
+
+    GET /workspaces/:id (returns a specific workspace)
+    GET /workspaces (returns a collection of elements)
+    PUT /workspaces/:id (writes over an existing workspace object)
+    POST /workspaces/ (creates a new workspace object)
+    POST /workspaces/:id  (appends to an existing workspace object)
+    DELETE /worksapces/:id (deletes a workspace)
+
 Note that this store is not actually hooked to any database server. So, it will actually send out dummy data.
 
 
