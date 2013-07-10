@@ -580,20 +580,56 @@ The last item is especially important: when developing your own permission model
 
 When using the API, the `options` object is especially important, as it defines how the API will work.
 
-When a request comes from a remote operation, the `options` object is populated depending on the parameters passed. When using the API, you need to popuate `options` manually in order to obtain what you desire. `options` is especially important while querying, as that's where you define what you filter and order the results by (if you are curious, when a remote connection is established the function `_initOptionsFromReq()` is the one responsible of getting headers and URL, and populating `options` before running the appropriate function).
+When a request comes from a remote operation, the `options` object is populated depending on the parameters passed (`overwrite`, `sortBy`, `ranges`, `filters`) or the class' defaults (`searchPartial`, `queryFilterType`). When using the API, you need to popuate `options` manually in order to obtain what you desire. `options` is especially important while querying, as that's where you define what you filter and order the results by.
 
-* `overwrite`
-* `sortBy`
-* `ranges`
-* `filters` (TODO: probably includes `searchPartial`)
-* `queryFilterType` (TO BE ADDED)
+(If you are curious, when a remote connection is established the function `_initOptionsFromReq()` is the one responsible of getting headers and URL, and populating `options` before running the appropriate function).
 
-TODO: CHANGE LIBRARY. Make sure that:
- * queryFilterType, searchPartial are actually in `options`
+* `overwrite` for `Put` requests; (if used as remote store, taken from URL)
+* `sortBy` for `GetQuery` requests (if used as remote store, taken from URL)
+* `ranges` for `GetQuery` requests; (if used as remote store, taken from URL)
+* `filters` for `GetQuery` requests; (if used as remote store, taken from URL)
+* `searchPartial` for `GetQuery` requests; (if used as remote store, taken from Schema definition)
+* `queryFilterType` for `GetQuery` requests; (if used as remote store, taken from Class)
 
+When querying from the API, can pass `overwrite`, `sortBy`, `ranges`, `filters` (as there is no HTTP request to take this information from) and _can_, if you want, override `searchPartial` (by default, set by the schema definition) and `queryFilterType` (by default, set in the Class definition).
 
-TODO: explain `options` in detail, explain that it's created automatically when a request comes from a remote host, but needs to be made by hand for API use
-* queryFilterType, searchPartial are actually in `options`
+Here is a detailed explanation of these options:
+
+## overwrite
+
+This option is only valid in a PUT context:
+
+* if `options.overwrite` is not set, the `Put` request will happily overwrite an existing record, or create a new one.
+* if `options.overwrite` is set:
+ * If it's set to `false`, then the module will only allow the creation of new records on the database
+ * If it's set to `true`, then the module will only allow overwriting existing records on the database
+
+Example:
+
+    // Will never overwrite an existing workspace
+    Workspaces.Put( someId, { workspaceName: "Some workspace name" }, { overwrite: false }, function( res, err ){
+
+For non-API call, this option is set by the headers 'if-match' and 'if-none-match'.
+
+## sortBy
+
+TODO
+
+## ranges
+
+TODO
+
+## filters
+
+TODO
+
+## searchPartial
+
+TODO
+
+## queryFilterType
+
+TODO
 
 # Database layers
 
