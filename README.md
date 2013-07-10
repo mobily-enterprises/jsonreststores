@@ -8,6 +8,7 @@ Database access is abstracted. At the moment, it supports the following database
 * MongoDb
 * ... (more to come)
 
+**NOTE: I just finished writing up full documentation for this module. While doing so, I also did some (untested) changs to the module. Testing will happen in the next few days. If you try this module out, and encounter a problem, please open up an issue!.**
 
 # Requirements
 
