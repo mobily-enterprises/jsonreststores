@@ -256,7 +256,7 @@ The beauty of it is that you only had to define the schema once; the two differe
 
 Finally, note that the derived stores `WorkspaceUsers` and `UserWorkspaces` only allow `Post` (adding new entries), `GetQuery` and `Delete`.
 
-# Important methods you can override
+# Important methods and attributes you can override
 
 The basic `Store` class uses a rather long list of stock methods to complete requests. Some of them are there so that you can override them.
 
@@ -281,6 +281,12 @@ The method `prepareBeforeSend()` does exactly what it says: it will manipulate `
 The method's signature is:
 
     prepareBeforeSend( doc, cb )
+
+## Queries
+
+### `hardLimitOnQueries`
+
+This is the limit of the number of elements that can be returned by a query. The default is 50.
 
 ## Permissions
 
@@ -618,39 +624,101 @@ Example:
     // Will never overwrite an existing workspace
     Workspaces.Put( someId, { workspaceName: "Some workspace name" }, { overwrite: false }, function( res, err ){
 
-For non-API call, this option is set by the headers 'if-match' and 'if-none-match'.
+For non-API calls, this option is set by the headers 'if-match' and 'if-none-match'.
 
-## sortBy
+# filters
 
-TODO
+This option applies to GetQuery calls: it's a simple object, where the keys are the field names, and their respective values are the filters. For example:
 
-## ranges
+    { workspaceName: "Booker" }
 
-TODO
+A typical example could be:
 
-## filters
+    Workspaces.GetQuery( { filters: { workspaceName: 'Booker'} }, function( err, doc ) {
+    })
 
-TODO
+For non-API calls, this option is set by the query string in the URL.
 
 ## searchPartial
 
-TODO
+This option is an associative array where each key is the field that must allow partial results. This means that filtering by `Boo` should return `Book`, `Booker`, and anything starting with `Boo`. For example:
+
+    // Will return records with workspaceName starting with "Boo" and workGroup equals to "Full match"
+    Workspaces.GetQuery( { 
+      filters: { workspaceName: 'Boo', workGroup: 'Full match' },
+      searchPartial: { workspaceName: true } 
+    } , function( err, doc ) {
+      // ...
+    });
+
+If `searchPartial` is not specified, then the `searchPartial` attribute of each record in the schema will be used instead.
+
+For non-API calls, this option is set by the schema's value.
 
 ## queryFilterType
 
-TODO
+The option `queryFilterType` can be either `and` (all elements in filters need to match) or `or` (one of them matching is enough). 
+
+If it's not specified, then the class' own `queryFilterType` attribute is used.
+
+For non-API calls, this option is set by the schema's value.
+
+## sortBy
+
+This option is an object where each key is the key you want to sort by, and that key's value is either `1` (ascending order) or `-1` (descending order).
+
+For example:
+
+    // Will return records with workspaceName starting with "Boo" and workGroup equals to "Full match"
+    Workspaces.GetQuery( {
+      filters: { workspaceName: 'Boo' },
+      sortBy: { workspaceName: 1, score: -1 },
+    } , function( err, doc ) {
+      // ...
+    });
+
+For non-API calls, this option is set by the query string in the URL. E.g. `/workspaces/?workspaceName=something&sortBy=+workspaceName,-workGroup`.
+
+## ranges
+
+Ranges are important as they allow you to define a limit on the number of records returned.
+
+It represents an objects with the keys `rangeFrom`, `rangeTo`, `limit`. E.g.:
+
+    // Will return records with workspaceName starting with "Boo" 
+    Workspaces.GetQuery( { 
+      filters: { workspaceName: 'Boo' }, searchPartial: { workspaceName: true } 
+      ranges: { rangeFrom: 0, rangeTo: 24 }
+    } , function( err, doc ) {
+      // ...
+    });
+
+For non-API calls, ranges are set by the 'range' headers. For example `Range: items=0-24`. Note that the server will also return, after a range query, a header that will detail the range returned. For example `Content-Range: items 0-24/66`
 
 # Database layers
 
 ## MongoMixin
 
+The `MongoMixin` mixin class is the one responsible of making the Store actually write information onto a MongoDB collection. The following extra attributes are specified:
 
-TODO: Describe `collectionName` and how the unique ID doesn't need to be `_id` (the driver will create an `_id` record on its own). 
+ * `collectionName` It's the MongoDB collection name. If it's not specified, `collectionName` will be the same as `storeName`
+ * `db` It's the Mongo DB object, resulting from `connect()`
+ * `handleXXX` properties are set by `false` by default (unlike the basic `Store` class, where they are set to `true` by default)
 
+Normally, in MongoDB each record has an ID called `_id`. This is a very important field in MongoDB: even if you don't define one in your collection, mongoDB will automatically add one.
+
+The last element in `paramIds` will tend to be `_id` if you use MongoDB as your database server. However, this is not a prerequisite: if the last paramIds is different to `_id`, things will still work fine. However, you will have an unused `_db` field in your collection.
 
 ## ...More to come
 
 For now, there is only MongoDB integration available. However, the next section of the documentation explains exactly how to write a DB driver.
+
+# TODO
+
+The following items are much needed for this module:
+
+* Ability to do forEach on queries for API. This means that, using the API, you can actually iterate amongst a big set of data without having to create an array. This would also bypass `hardLimitOnQueries`
+* Good automatic tests (it would be about time).
 
 # Developing a driver layer
 
