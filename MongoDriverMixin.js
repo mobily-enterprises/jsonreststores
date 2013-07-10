@@ -11,7 +11,6 @@ var
 var MongoDriverMixin = declare( null, {
 
   constructor: function(){
-    // console.log("********************************************* CONSTRUCTOR: MongoDriverMixin");
 
     // This.collectionName will default to the store's name if not set
     this.collectionName = this.collectionName ? this.collectionName : this.storeName;
@@ -19,9 +18,7 @@ var MongoDriverMixin = declare( null, {
 
   },
 
-
   collectionName: null,
-  idProperty: null,
   db: null,
 
   handlePut: false,
@@ -30,8 +27,6 @@ var MongoDriverMixin = declare( null, {
   handleGet: false,
   handleGetQuery: false,
   handleDelete: false,
-
-
 
   _makeMongoFilter: function( params ){
     var self = this;
@@ -174,12 +169,31 @@ var MongoDriverMixin = declare( null, {
     var cursor;
     var selector = {};
    
-    this._queryEnrichFilters( options.filters ); 
+    // TODO: This function has the ugly side effect of actually changing `options.filters`,
+    // change it so that it doesn't. Make sure a `mongoFilter` object is created and then
+    // used for queryMakeSelector() without side effects
+    this._queryEnrichFilters( options.filters, options.searchPartial ); 
 
     // Select according to selector
-    selector = self._queryMakeSelector( options.filters, params );
+    selector = self._queryMakeSelector( options.queryFilterType, options.filters, params );
     cursor = self.collection.find( selector, self.schema.fieldsHash );
 
+    // If `rangeFrom` and `rangeTo` are set, and limit isn't, then `limit`
+    // needs to be set
+    if( rangeFrom != 0 && rangeTo != 0 && typeof( limit ) === 'undefined' ){
+       limit =  rangeTo - rangeFrom + 1;
+    }
+
+    // If `limit` makes it go over `rangeTo`, then resize `limit`
+    if( rangeFrom + limit > rangeTo ){
+      limit =  rangeTo - rangeFrom + 1;
+    }
+  
+    // Respect hard limit on number of returned records
+    if( limit > self.hardLimitOnQueries ){
+      limit = self.hardLimitOnQueries;
+    }
+ 
     // Skipping/limiting according to ranges/limits
     if( typeof( options.ranges) == 'object' && options.ranges != null ){
       if( options.ranges.rangeFrom != 0 )
@@ -204,9 +218,24 @@ var MongoDriverMixin = declare( null, {
 
   },
 
+  _queryEnrichFilters: function( filters, searchPartial ){
+
+    var self = this;    
+
+    for( var k in filters ){
+
+      // They are marked as searchPartial: turn the string into a regexp
+      if( searchPartial[ k ] ){
+        filters[ k ] = { $regex: new RegExp('^' + filters[ k ] + '.*' ) };
+      }
+
+      // ... anything else?
+
+    }
+  },
 
   // Make up the query selector
-  _queryMakeSelector: function( filters, params ){
+  _queryMakeSelector: function( queryFilterType, filters, params ){
     var selector, s;
     var item;
     var foundOne;
@@ -217,11 +246,11 @@ var MongoDriverMixin = declare( null, {
     // { $or: [ name: 'a'], [ surname: 'b'] }
     foundOne = false;
     selector = {};
-    selector[ '$' + this.queryFilterType ] =  [];
+    selector[ '$' + queryFilterType ] =  [];
     for( var k in filters ){
       item = {};
       item[ k ] = filters[ k ];
-      selector[ '$' + this.queryFilterType ].push( item );
+      selector[ '$' + queryFilterType ].push( item );
       foundOne = true;
     }
 
@@ -235,7 +264,7 @@ var MongoDriverMixin = declare( null, {
     }
 
     // Add the criteria to the $and side of the selector
-    if( this.queryFilterType !== 'and' ) selector[ '$and' ] = [];
+    if( queryFilterType !== 'and' ) selector[ '$and' ] = [];
     for( k in urlFilter ){
       item = {};
       item[ k ] = urlFilter[ k ];
@@ -246,30 +275,17 @@ var MongoDriverMixin = declare( null, {
     
   },
 
-  _queryEnrichFilters: function( filters ){
-
-    var self = this;    
-
-    for( var k in filters ){
-
-      // They are marked as searchPartial: turn the string into a regexp
-      if( self.schema.structure[ k ].searchPartial ){
-        filters[ k ] = { $regex: new RegExp('^' + filters[ k ] + '.*' ) };
-      }
-
-      // ... anything else?
-
-    }
-  },
-
-
   _queryMakeMongoSortArray: function( sortBy ){
+    return sortBy;
+
+    /*
     var sortArray = [];  
 
     for( var k in sortBy )
       sortArray.push( [ k , sortBy [ k ] ] );
 
     return sortArray;
+    */
 
   },
 

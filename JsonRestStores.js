@@ -45,6 +45,8 @@ var Store = declare( null,  {
 
   chainErrors: 'none', 
 
+  hardLimitOnQueries: 50,
+
   constructor: function(){
 
     var self = this;
@@ -343,6 +345,7 @@ var Store = declare( null,  {
   },
 
 
+
   _initOptionsFromReq: function( mn, req ){
 
     var self = this;
@@ -409,8 +412,6 @@ var Store = declare( null,  {
       var rangeFrom, rangeTo, limit;
       var hr;
 
-      
-
       // If there was a range request, then set the range to the
       // query and return the count
       if( (hr = req.headers['range']) && ( tokens = hr.match(/items=([0-9]+)\-([0-9]+)$/))  ){
@@ -438,9 +439,6 @@ var Store = declare( null,  {
       var result = {};
       var failedCasts;
 
-      options = typeof( options) === 'object' ? options : {};
-      options.partial = typeof(options.partial) === 'object' ? options.partial : {};
-
       q.split( '&' ).forEach( function( item ) {
 
         tokens = item.split('=');
@@ -465,6 +463,30 @@ var Store = declare( null,  {
 
   },
 
+  _enrichOptionsFromClassDefaults: function( options ){
+
+    var self = this;
+
+    // Make up  `options.searchPartial` if not already in `options`
+    if( typeof( options.searchPartial) === 'undefined' ){
+      options.searchPartial = {};
+      Object.keys( self.searchSchema.structure).forEach( function( k ) {
+        if( self.searchSchema.structure[ k ].searchPartial ){
+          options.searchPartial[ k ] = true;
+        }
+      });
+    }
+
+    // make up options.queryFilterType if not already in `options`
+    if( typeof( options.queryFilterType ) === 'undefined' ){
+      if( typeof( self.queryFilterType ) === 'undefined' ){
+        options.queryFilterType = 'and';
+      } else {
+        options.queryFilterType = self.queryFilterType;
+      }
+    }
+
+  },
 
 
   // ****************************************************
@@ -1166,6 +1188,7 @@ Store.online = {};
       // Since it's an online request, options are set by "req"
       // This will set things like ranges, sort options, etc.
       var options = request._initOptionsFromReq( mn, req );
+      request._enrichOptionsFromClassDefaults( options );
 
       // Actually run the request
       request['_make' + mn ]( params, body, options, next );
@@ -1218,6 +1241,9 @@ Store.Get = function( id, options, next ){
   var params = {};
   params[ request._lastParamId() ] = id;
 
+  // Enrich `options` with `queryFilterType` and `searchPartial`
+  request._enrichOptionsFromClassDefaults( options );
+
   // Actually run the request
   request._makeGet( params, {}, options, next );
 }
@@ -1232,6 +1258,9 @@ Store.GetQuery = function( options, next ){
 
   // Fix it for the API
   fixRequestForApi( request );
+
+  // Enrich `options` with `queryFilterType` and `searchPartial`
+  request._enrichOptionsFromClassDefaults( options );
 
   // Actually run the request
   request._makeGetQuery( {}, {}, options, next );
@@ -1255,6 +1284,9 @@ Store.Put = function( id, body, options, next ){
   var params = {};
   params[ request._lastParamId() ] = id;
 
+  // Enrich `options` with `queryFilterType` and `searchPartial`
+  request._enrichOptionsFromClassDefaults( options );
+
   // Actually run the request
   request._makePut( params, body, options, next );
 }
@@ -1272,6 +1304,9 @@ Store.Post = function( body, options, next ){
 
   // Fix it for the API
   fixRequestForApi( request );
+
+  // Enrich `options` with `queryFilterType` and `searchPartial`
+  request._enrichOptionsFromClassDefaults( options );
 
   // Actually run the request
   request._makePost( {}, body, options, next );
@@ -1295,6 +1330,9 @@ Store.PostAppend = function( id, body, options, next ){
   var params = {};
   params[ request._lastParamId() ] = id;
 
+  // Enrich `options` with `queryFilterType` and `searchPartial`
+  request._enrichOptionsFromClassDefaults( options );
+
   // Actually run the request
   request._makePostAppend( params, body, options, next );
 }
@@ -1316,6 +1354,9 @@ Store.Delete = function( id, options, next ){
   // Make up "params" to be passed to the _makeGet function
   var params = {};
   params[ request._lastParamId() ] = id;
+
+  // Enrich `options` with `queryFilterType` and `searchPartial`
+  request._enrichOptionsFromClassDefaults( options );
 
   // Actually run the request
   request._makeDelete( params, {}, options, next );
