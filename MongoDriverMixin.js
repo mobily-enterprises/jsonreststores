@@ -47,6 +47,17 @@ var MongoDriverMixin = declare( null, {
 
     // Make up the filter, based on the store's IDs (used as filters).
     var filter = self._makeMongoFilter( params );
+
+    console.log("PARAMS are:");
+    console.log( params );
+    console.log("OPTIONS are:");
+    console.log( options );
+    console.log("Filter is: ");
+    console.log( filter );
+    console.log(" Collection name:");
+    console.log( self.collectionName);
+
+
     this.collection.findOne( filter, self.schema.fieldsHash, cb );
   }, 
 
@@ -178,24 +189,27 @@ var MongoDriverMixin = declare( null, {
     selector = self._queryMakeSelector( options.queryFilterType, options.filters, params );
     cursor = self.collection.find( selector, self.schema.fieldsHash );
 
-    // If `rangeFrom` and `rangeTo` are set, and limit isn't, then `limit`
-    // needs to be set
-    if( rangeFrom != 0 && rangeTo != 0 && typeof( limit ) === 'undefined' ){
-       limit =  rangeTo - rangeFrom + 1;
-    }
 
-    // If `limit` makes it go over `rangeTo`, then resize `limit`
-    if( rangeFrom + limit > rangeTo ){
-      limit =  rangeTo - rangeFrom + 1;
-    }
+    if( typeof( options.ranges) == 'object' && typeof( options.ranges) === 'object' && options.ranges !== null ){
+
+      // If `rangeFrom` and `rangeTo` are set, and limit isn't, then `limit`
+      // needs to be set
+      if( options.ranges.rangeFrom != 0 && options.ranges.rangeTo != 0 && typeof( options.ranges.limit ) === 'undefined' ){
+         options.ranges.limit =  options.ranges.rangeTo - options.ranges.rangeFrom + 1;
+      }
+
+      // If `limit` makes it go over `rangeTo`, then resize `limit`
+      if( options.ranges.rangeFrom + options.ranges.limit > options.ranges.rangeTo ){
+        options.ranges.limit =  options.ranges.rangeTo - options.ranges.rangeFrom + 1;
+      }
   
-    // Respect hard limit on number of returned records
-    if( limit > self.hardLimitOnQueries ){
-      limit = self.hardLimitOnQueries;
-    }
+      // Respect hard limit on number of returned records
+      if( options.ranges.limit > self.hardLimitOnQueries ){
+        options.ranges.limit = self.hardLimitOnQueries;
+      }
+   
  
-    // Skipping/limiting according to ranges/limits
-    if( typeof( options.ranges) == 'object' && options.ranges != null ){
+      // Skipping/limiting according to ranges/limits
       if( options.ranges.rangeFrom != 0 )
         cursor.skip( options.ranges.rangeFrom );
       if( options.ranges.limit != 0 )
