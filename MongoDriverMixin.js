@@ -48,16 +48,6 @@ var MongoDriverMixin = declare( null, {
     // Make up the filter, based on the store's IDs (used as filters).
     var filter = self._makeMongoFilter( params );
 
-    console.log("PARAMS are:");
-    console.log( params );
-    console.log("OPTIONS are:");
-    console.log( options );
-    console.log("Filter is: ");
-    console.log( filter );
-    console.log(" Collection name:");
-    console.log( self.collectionName);
-
-
     this.collection.findOne( filter, self.schema.fieldsHash, cb );
   }, 
 
