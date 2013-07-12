@@ -92,7 +92,7 @@ So, the following routes will be defined:
     PUT /workspaces/:id (writes over an existing workspace object)
     POST /workspaces/ (creates a new workspace object)
     POST /workspaces/:id  (appends to an existing workspace object)
-    DELETE /worksapces/:id (deletes a workspace)
+    DELETE /workspaces/:id (deletes a workspace)
 
 Note that this store is not actually hooked to any database server. So, it will actually send out dummy data.
 
@@ -180,7 +180,7 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
       paramIds: [ 'workspaceId', '_id' ],
     });
 
-    WorkspaceUsers.onlineAll( app, '/workspace/:workspaceId/users', ':_id' );
+    WorkspaceUsers.onlineAll( app, '/workspaces/:workspaceId/users', ':_id' );
 
 This is enough to create a store that will respond to `GET /workspace/2222/users/3333` (to fetch user 3333 from workspace 2222), `GET /workspace/2222/users` (to get all users of workspace 2222), and so on.
 
@@ -189,6 +189,30 @@ This is enough to create a store that will respond to `GET /workspace/2222/users
 * The second parameter of `onlineAll()` needs to include all `paramIds` except the last one
 * The third parameter of `onlineAll()` needs to include the field that will be used as unique ID
 * The third parameter actually needs to identify unique records in the table
+
+### On naming conventions
+
+It's important to be consistent in naming conventions while creating stores. In this case, code is cleared than a thousand bullet points:
+
+#### Simple stores
+
+    var Workspaces = declare( Store, { 
+      // ...
+      storeName: `workspaces`
+      collectionName: `workspaces`
+      // ...
+    }
+    Workspaces.onlineAll( app, '/workspaces/', ':_id' );
+
+#### Nested stores        
+
+    var WorkspaceUsers = declare( Store, { 
+      // ...
+      storeName: `workspaceUsers`
+      collectionName: `workspaceUsers`
+      // ...
+    }
+    WorkspaceUsers.onlineAll( app, '/workspaces/:workspaceId/users', ':_id' );
 
 ## A store derived/inherited from another store
 
@@ -227,10 +251,10 @@ You can do that by creating two stores derived from this base one:
       handleGetQuery: true,
       handleDelete: true,
 
-      storeName:  'WorkspaceUsers',
+      storeName:  'workspaceUsers',
       paramIds: [ 'workspaceId', '_id' ],
     });
-    WorkspaceUsers.onlineAll( app, '/workspace/:workspaceId/users/', ':_id' );
+    WorkspaceUsers.onlineAll( app, '/workspaces/:workspaceId/users/', ':_id' );
 
     var UserWorkspaces = declare( WorkspacesUsersBase, {
 
@@ -240,10 +264,10 @@ You can do that by creating two stores derived from this base one:
       handleGetQuery: true,
       handleDelete: true,
 
-      storeName:  'UserWorkspaces',
+      storeName:  'userWorkspaces',
       paramIds: [ 'userId', '_id' ],
     });
-    UserWorkspaces.onlineAll( app, '/user/:userId/workspaces/', '_id' );
+    UserWorkspaces.onlineAll( app, '/users/:userId/workspaces/', '_id' );
 
 That's it! You didn't have to re-define the schema again. Both stores inherit from `WorkspacesUsersBase`, but mark some differences:
 
@@ -343,7 +367,7 @@ Here is an example of a store only allowing deletion only to specific admin user
 
     });
 
-    WorkspaceUsers.onlineAll( app, '/workspace/:workspaceId/users', ':_id' );
+    WorkspaceUsers.onlineAll( app, '/workspaces/:workspaceId/users', ':_id' );
 
 Permission checking can be as simple, or as complex, as you need it to be.
 
