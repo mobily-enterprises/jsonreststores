@@ -602,19 +602,21 @@ Whenever an error happens, JsonRestStore will run `self.logError()`. This happen
 JsonRestStores allows you to run methods from within your programs, rather than accessing them via URL. This is very helpful if you need to query a store within your own programs.
 This is achieved with the following class functions:
 
-* `Store.Get( id, options, next )`
-* `Store.GetQuery( options, next )`
-* `Store.Put( id, body, options, next )`
-* `Store.Post( body, options, next )`
-* `Store.PostAppend( id, body, options, next )`
-* `Store.Delete( id, options, next )`
+* `Store.Get( id, options, next( err, doc, idProperty ) {})`
+* `Store.GetQuery( options, next( err, queryDocs, idProperty){} )`
+* `Store.Put( id, body, options, next( err, doc, idProperty){} )`
+* `Store.Post( body, options, next( err, doc, idProperty ){} )`
+* `Store.PostAppend( id, body, options, next( err, docAfter, idProperty){}  )`
+* `Store.Delete( id, options, next( err, doc, idProperty ){} )`
+
+Note: the `next()` call is the callback called at the end. Note that `idProperty` is also passed, although it will likely be redundant as you are supposed to know in advance the fields in the table you are querying.
 
 All normal hooks are called when using these functions. However:
 
-* The `paramIds` array is shortened so that it only has its last element. This means that you are free to query a store without any pre-set limitations imposed by `paramIds`
+* The `paramIds` array is shortened so that it only has its last element. This means that you are free to query a store without any pre-set automatic filtering imposed by `paramIds`
 * All `request.handleXXX` are set to `true`
-* The `request.remote` variable is set to false
 * You can search and sort by any fields (`searchable` and `sortable` are no longer necessary)
+* The `request.remote` variable is set to false
 
 The last item is especially important: when developing your own permission model, you will probably want to make sure you have different permissions for local requests and remote ones (or, more often, have no restrictions for local ones since you are the one initiating them).
 
