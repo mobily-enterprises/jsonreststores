@@ -527,7 +527,6 @@ var Store = declare( null,  {
 
     //validateFunction.call( self.schema, body,  errors, function( err ){
     self.schema.validate( body,  errors, function( err ){
-    
       self._sendErrorOnErr( err, next, function(){
 
         if( errors.length ){
@@ -566,8 +565,12 @@ var Store = declare( null,  {
                                   // Set the Location header if it was a remote request
                                   self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
                                   if( self.echoAfterPost ){
+
                                     self.prepareBeforeSend( doc, function( err, doc ){
-                                      self._res.json( 201, doc );
+                                      self._sendErrorOnErr( err, next, function(){
+
+                                        self._res.json( 201, doc );
+                                      })
                                     })
                                   } else {
                                     self._res.send( 201, '' );
@@ -575,7 +578,14 @@ var Store = declare( null,  {
 
                                 // Local request: simply return the doc to the asking function
                                 } else {
-                                  next( null, doc, self.idProperty );
+
+                                  self.prepareBeforeSend( doc, function( err, doc ){
+                                    self._sendErrorOnErr( err, next, function(){
+
+                                      next( null, doc, self.idProperty );
+                                    })
+                                  })
+                    
                                 } 
 
                               }) // err
@@ -677,8 +687,12 @@ var Store = declare( null,  {
                                     // Remote request: set headers, and send the doc back (if echo is on)
                                     if( self.remote ){
                                       if( self.echoAfterPostAppend ){
+
                                          self.prepareBeforeSend( docAfter, function( err, docAfter ){
-                                           self._res.json( 200, docAfter );
+                                           self._sendErrorOnErr( err, next, function(){
+
+                                             self._res.json( 200, docAfter );
+                                           })
                                          })
                                       } else { 
                                         self._res.send( 204, '' );
@@ -686,7 +700,13 @@ var Store = declare( null,  {
 
                                     // Local request: simply return the doc to the asking function
                                     } else {
-                                      next( null, docAfter, self.idProperty );
+
+                                      self.prepareBeforeSend( docAfter, function( err, docAfter ){
+                                        self._sendErrorOnErr( err, next, function(){
+
+                                          next( null, docAfter, self.idProperty );
+                                        })
+                                      })
                                     }
 
                                   }) // err
@@ -815,8 +835,12 @@ var Store = declare( null,  {
                                       // Set the Location header if it was a remote request
                                       self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
                                       if( self.echoAfterPutNew ){
+
                                         self.prepareBeforeSend( doc, function( err, doc ){
-                                          res.json( 201, doc );
+                                          self._sendErrorOnErr( err, next, function(){
+
+                                            res.json( 201, doc );
+                                          })
                                         })
                                       } else {
                                         res.send( 201, '' );
@@ -824,7 +848,12 @@ var Store = declare( null,  {
 
                                     // Local request: simply return the doc to the asking function
                                     } else {
-                                      next( null, doc, self.idProperty );
+                                      self.prepareBeforeSend( doc, function( err, doc ){
+                                        self._sendErrorOnErr( err, next, function(){
+
+                                          next( null, doc, self.idProperty );
+                                        })
+                                      })
                                     }
 
                                   }) // err
@@ -877,8 +906,12 @@ var Store = declare( null,  {
                                         self._sendErrorOnErr( err, next, function(){
 
                                           if( self.echoAfterPutExisting ){
+
                                             self.prepareBeforeSend( docAfter, function( err, docAfter ){
-                                              self._res.json( 200, docAfter );
+                                              self._sendErrorOnErr( err, next, function(){
+
+                                                self._res.json( 200, docAfter );
+                                              })
                                             })
                                           } else {
                                             self._res.send( 200, '' );
@@ -889,7 +922,12 @@ var Store = declare( null,  {
 
                                     // Local request: simply return the doc to the asking function
                                     } else {
-                                      next( null, doc, self.idProperty );
+                                      self.prepareBeforeSend( docAfter, function( err, docAfter ){
+                                        self._sendErrorOnErr( err, next, function(){
+
+                                          next( null, doc, self.idProperty );
+                                        })
+                                      })
                                     }
 
                                   }) // err
