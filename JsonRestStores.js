@@ -468,7 +468,7 @@ var Store = declare( null,  {
     var self = this;
 
     // Make up  `options.searchPartial` if not already in `options`
-    if( typeof( options.searchPartial) === 'undefined' ){
+    if( typeof( options ) === 'object' && typeof( options.searchPartial) === 'undefined' ){
       options.searchPartial = {};
       Object.keys( self.searchSchema.structure).forEach( function( k ) {
         if( self.searchSchema.structure[ k ].searchPartial ){
@@ -478,7 +478,7 @@ var Store = declare( null,  {
     }
 
     // make up options.queryFilterType if not already in `options`
-    if( typeof( options.queryFilterType ) === 'undefined' ){
+    if( typeof( options ) === 'object' && typeof( options.queryFilterType ) === 'undefined' ){
       if( typeof( self.queryFilterType ) === 'undefined' ){
         options.queryFilterType = 'and';
       } else {
@@ -500,12 +500,14 @@ var Store = declare( null,  {
     var errors = [];
     var body;
 
+    if( typeof( next ) !== 'function' ) next = function(){};
+
     // Check that the method is implemented
     if( ! self.handlePost ){
       self._sendError( next, new self.NotImplementedError( ) );
       return;
     }
-   
+
     // Check the IDs. If there is a problem, it means an ID is broken:
     // return a BadRequestError
     self._checkParamIds( params, body, errors, true );
@@ -523,7 +525,6 @@ var Store = declare( null,  {
 
     //var validateFunction = function( body, errors, cb ) { cb( null ) }
     //if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
-
 
     //validateFunction.call( self.schema, body,  errors, function( err ){
     self.schema.validate( body,  errors, function( err ){
@@ -618,6 +619,9 @@ var Store = declare( null,  {
     var self = this;
     var errors = [];
     var body;
+
+
+    if( typeof( next ) !== 'function' ) next = function(){};
 
     // Check that the method is implemented
     if( ! self.handlePostAppend ){
@@ -744,6 +748,9 @@ var Store = declare( null,  {
     var errors = [];
     var overwrite;
     var body;
+
+
+    if( typeof( next ) !== 'function' ) next = function(){};
 
     // Check that the method is implemented
     if( ! self.handlePut ){
@@ -963,6 +970,9 @@ var Store = declare( null,  {
     var errors = [];
     var sortBy, range, filters;
 
+
+    if( typeof( next ) !== 'function' ) next = function(){};
+
     // Check that the method is implemented
     if( ! self.handleGetQuery ){
       self._sendError( next, new self.NotImplementedError( ) );
@@ -1038,6 +1048,9 @@ var Store = declare( null,  {
 
     var self = this;
     var errors = [];
+
+
+    if( typeof( next ) !== 'function' ) next = function(){};
 
     // Check that the method is implemented
     if( ! self.handleGet ){
@@ -1119,6 +1132,9 @@ var Store = declare( null,  {
 
     var self = this;
     var errors = [];
+
+
+    if( typeof( next ) !== 'function' ) next = function(){};
 
     // Check that the method is implemented
     if( ! self.handleDelete ){
@@ -1325,8 +1341,11 @@ Store.Put = function( id, body, options, next ){
   // Enrich `options` with `queryFilterType` and `searchPartial`
   request._enrichOptionsFromClassDefaults( options );
 
+  // Clone 'body' as _make calls are destructive
+  var bodyClone = {}; for( var k in body) bodyClone[ k ] = body[ k ];
+
   // Actually run the request
-  request._makePut( params, body, options, next );
+  request._makePut( params, bodyClone, options, next );
 }
 
 Store.Post = function( body, options, next ){
@@ -1346,8 +1365,11 @@ Store.Post = function( body, options, next ){
   // Enrich `options` with `queryFilterType` and `searchPartial`
   request._enrichOptionsFromClassDefaults( options );
 
+  // Clone 'body' as _make calls are destructive
+  var bodyClone = {}; for( var k in body) bodyClone[ k ] = body[ k ];
+
   // Actually run the request
-  request._makePost( {}, body, options, next );
+  request._makePost( {}, bodyClone, options, next );
 }
 
 Store.PostAppend = function( id, body, options, next ){
@@ -1371,8 +1393,11 @@ Store.PostAppend = function( id, body, options, next ){
   // Enrich `options` with `queryFilterType` and `searchPartial`
   request._enrichOptionsFromClassDefaults( options );
 
+  // Clone 'body' as _make calls are destructive
+  var bodyClone = {}; for( var k in body) bodyClone[ k ] = body[ k ];
+
   // Actually run the request
-  request._makePostAppend( params, body, options, next );
+  request._makePostAppend( params, bodyClone, options, next );
 }
 
 Store.Delete = function( id, options, next ){
