@@ -12,6 +12,12 @@ var MongoDriverMixin = declare( null, {
 
   constructor: function(){
 
+    // Just because I went insane figuring this out, and want to save the hassle to
+    // more people in the future
+    if( !this.db ){
+      throw new Error("The 'db' attribute MUST be specified for MongoDriverMixin" );
+    }
+
     // This.collectionName will default to the store's name if not set
     this.collectionName = this.collectionName ? this.collectionName : this.storeName;
     this.collection = this.db.collection( this.collectionName );
