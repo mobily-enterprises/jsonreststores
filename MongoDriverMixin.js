@@ -21,6 +21,8 @@ var MongoDriverMixin = declare( null, {
 
   constructor: function(){
 
+    this.projectionHash = {};
+
     // Just because I went insane figuring this out, and want to save the hassle to
     // more people in the future
     if( !this.db ){
@@ -30,6 +32,13 @@ var MongoDriverMixin = declare( null, {
     // This.collectionName will default to the store's name if not set
     this.collectionName = this.collectionName ? this.collectionName : this.storeName;
     this.collection = this.db.collection( this.collectionName );
+
+    // Make sure that I have `_id: false` in the projection hash (used in all finds)
+    // if `_id` is not explicitely defined in the schema.
+    // in "inclusive projections" in mongoDb, _id is added automatically and it needs to be
+    // explicitely excluded (it is, in fact, the ONLY field that can be excluded in an inclusive projection)
+    for( var k in this.schema.fieldsHash ) this.projectionHash[ k ] = this.schema.fieldsHash[ k ];
+    if( typeof( this.schema.fieldsHash._id ) === 'undefined' ) this.projectionHash._id =false ;
 
   },
 
@@ -63,7 +72,7 @@ var MongoDriverMixin = declare( null, {
     // Make up the filter, based on the store's IDs (used as filters).
     var filter = self._makeMongoFilter( params );
 
-    this.collection.findOne( filter, self.schema.fieldsHash, cb );
+    this.collection.findOne( filter, self.projectionHash, cb );
   }, 
 
   driverPostDbInsertNoId: function( params, body, options, generatedId, cb ){
@@ -93,7 +102,7 @@ var MongoDriverMixin = declare( null, {
       if( err ) {
         cb( err );
       } else {
-        self.collection.findOne( { _id: record._id }, self.schema.fieldsHash, cb );
+        self.collection.findOne( { _id: record._id }, self.projectionHash, cb );
       }
     });
 
@@ -102,7 +111,7 @@ var MongoDriverMixin = declare( null, {
   driverPutDbUpdate: function( params, body, options, doc, fullDoc, cb ){
 
     var self = this;
-    var updateObject = {};
+    var updateObject = {}, unsetObject = {};
 
     // Make up the filter, based on the store's IDs (used as filters).
     var filter = self._makeMongoFilter( params );
@@ -113,11 +122,18 @@ var MongoDriverMixin = declare( null, {
       if( i != self.idProperty ) updateObject[ i ] = body[ i ];
     }
 
-    self.collection.update( filter, { $set: updateObject }, function( err, doc ){
+    // Unset any value that is not actually set but IS in the schema,
+    // so that partial PUTs will "overwrite" whole objects rather than
+    // just overwriting fields that are _actually_ present in `body`
+    for( var i in self.schema.structure ){
+       if( typeof( body[ i ] ) === 'undefined' ) unsetObject[ i ] = 1;
+    }
+
+    self.collection.update( filter, { $set: updateObject, $unset: unsetObject }, function( err, doc ){
       if( err ){
         cb( err, null );
       } else {
-        self.collection.findOne( filter, self.schema.fieldsHash, cb );
+        self.collection.findOne( filter, self.projectionHash, cb );
       }
 
     });
@@ -147,7 +163,7 @@ var MongoDriverMixin = declare( null, {
       if( err ) {
         cb( err );
       } else {
-        self.collection.findOne( {_id: record._id }, self.schema.fieldsHash, cb );
+        self.collection.findOne( {_id: record._id }, self.schema.projectionHash, cb );
       }
     });
 
@@ -184,15 +200,16 @@ var MongoDriverMixin = declare( null, {
 
     var cursor;
     var selector = {};
-   
-    // TODO: This function has the ugly side effect of actually changing `options.filters`,
+
+
+    // FIXME: This function has the ugly side effect of actually changing `options.filters`,
     // change it so that it doesn't. Make sure a `mongoFilter` object is created and then
     // used for queryMakeSelector() without side effects
     this._queryEnrichFilters( options.filters, options.searchPartial ); 
 
     // Select according to selector
     selector = self._queryMakeSelector( options.queryFilterType, options.filters, params );
-    cursor = self.collection.find( selector, self.schema.fieldsHash );
+    cursor = self.collection.find( selector, self.projectionHash );
 
 
     if( typeof( options.ranges) == 'object' && typeof( options.ranges) === 'object' && options.ranges !== null ){
@@ -226,6 +243,14 @@ var MongoDriverMixin = declare( null, {
         
         cursor.sort( self._queryMakeMongoSortArray( options.sortBy ) );        
         cursor.toArray( function( err, queryDocs ){
+
+          // Remove resultsSet if so required
+          if( options.remove ){
+
+            // Silent failing
+            self.collection.remove( selector, function( err, doc ){ } );
+          }
+
           self._sendErrorOnErr( err, next, function(){
             queryDocs.total = total;
             next( null, queryDocs );

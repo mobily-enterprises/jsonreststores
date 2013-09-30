@@ -326,6 +326,8 @@ Here are the functions:
  * `checkPermissionsPutNew( params, body, options, cb )`
  * `checkPermissionsPutExisting( params, body, options, doc, fullDoc, cb )`
  * `checkPermissionsGet( params, body, options, doc, fullDoc, cb )`
+ * `checkPermissionsGet( params, body, options, doc, fullDoc, cb )`
+ * `checkPermissionsGetQuery( params, body, options, cb )`
  * `checkPermissionsDelete( params, body, options, doc, fullDoc, cb )`
 
 Here is an example of a store only allowing deletion only to specific admin users:

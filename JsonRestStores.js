@@ -192,6 +192,10 @@ var Store = declare( null,  {
   checkPermissionsGet: function( params, body, options, doc, fullDoc, cb ){
     cb( null, true );
   },
+  checkPermissionsGetQuery: function( params, body, options, cb ){
+    cb( null, true );
+  },
+
   checkPermissionsDelete: function( params, body, options, doc, fullDoc, cb ){
     cb( null, true );
   },
@@ -218,7 +222,7 @@ var Store = declare( null,  {
 
       changeFunctions.push( function( callback ){
 
-        self.extrapolateDoc(  params, body, options, fullDoc, function( err, extrapolatedDoc ){
+        self._extrapolateDocAndCast(  params, body, options, fullDoc, function( err, extrapolatedDoc ){
           if( err ){
             callback( err, null );
           } else {
@@ -295,6 +299,39 @@ var Store = declare( null,  {
         body[ k ] = fakeRecord[ k ];
       }
     });
+
+  },
+
+  _castIncomingData: function( object, errors, options ){
+  // MERC
+  },
+
+  _extrapolateDocAndCast: function( params, body, options, doc, next ){
+
+     var errors = [];
+     var self = this;
+
+     // Extrapolate the doc first
+     self.extrapolateDoc( params, body, options, doc, function( err, extrapolatedDoc ){
+       self._sendErrorOnErr( err, next, function(){
+
+         // Cast the values. This is a relaxed check: if a field is missing, it won't
+         // complain. This way, applications won't start failing when adding fields
+         self.schema.castAndParams( extrapolatedDoc, errors, { onlyObjectValues: true } );
+         self.schema.validate( extrapolatedDoc,  errors, function( err ){
+
+           // There was a problem: return the errors
+           if( errors.length ){
+             self._sendError( next, new self.BadRequestError( { errors: errors } ) );
+           } else {
+             next( null, extrapolatedDoc );
+           }
+         
+         });
+
+       });
+       
+     });
 
   },
 
@@ -563,7 +600,7 @@ var Store = declare( null,  {
                     self.driverPostDbInsertNoId( params, body, options, generatedId, function( err, fullDoc ){
                       self._sendErrorOnErr( err, next, function(){
 
-                        self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
+                        self._extrapolateDocAndCast( params, body, options, fullDoc, function( err, doc) {
                           self._sendErrorOnErr( err, next, function(){
 
 
@@ -603,7 +640,7 @@ var Store = declare( null,  {
                             }) // self.afterPost
                        
                           }) // err
-                        }) // self.extrapolateDoc
+                        }) // self._extrapolateDocAndCast
 
                       }) // err
                     }) // driverPostDbInsertNoId
@@ -669,7 +706,7 @@ var Store = declare( null,  {
             self._sendErrorOnErr( err, next, function(){
 
               // Get the extrapolated doc
-              self.extrapolateDoc( params, body, options, fullDoc, function( err, doc ){
+              self._extrapolateDocAndCast( params, body, options, fullDoc, function( err, doc ){
                 self._sendErrorOnErr( err, next, function(){
 
                   // Actually check permissions
@@ -692,7 +729,7 @@ var Store = declare( null,  {
                         self.driverPostDbAppend( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
                           self._sendErrorOnErr( err, next, function(){
   
-                            self.extrapolateDoc( params, body, options, fullDoc, function( err, docAfter ){
+                            self._extrapolateDocAndCast( params, body, options, fullDoc, function( err, docAfter ){
                               self._sendErrorOnErr( err, next, function(){
 
                                 self.afterPostAppend( params, body, options, doc, fullDoc, docAfter, fullDocAfter, function( err ){
@@ -727,7 +764,7 @@ var Store = declare( null,  {
                                 }) // self.afterPostAppend
 
                               }) // err
-                            }); // self.extrapolateDoc
+                            }); // self._extrapolateDocAndCast
 
                           }) // err
                         }) // driverPostDbAppend
@@ -736,7 +773,7 @@ var Store = declare( null,  {
 
 
                     }) // err
-                  }) // extrapolateDoc 
+                  }) // _extrapolateDocAndCast
 
                 }) // err
               }) // driverAllDbFetch
@@ -840,7 +877,7 @@ var Store = declare( null,  {
                           self._sendErrorOnErr( err, next, function(){
 
                             // Update "doc" to be the complete version of the doc from the DB
-                            self.extrapolateDoc( params, body, options, fullDoc, function( err, doc ){
+                            self._extrapolateDocAndCast( params, body, options, fullDoc, function( err, doc ){
                               self._sendErrorOnErr( err, next, function(){
 
                                 self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
@@ -877,7 +914,7 @@ var Store = declare( null,  {
                                 }) // self.afterPutNew
 
                               }) // err
-                            }) // self.extrapolateDoc
+                            }) // self._extrapolateDocAndCast
                         
                           }) // err
                         }) // driverPutDbInsert
@@ -892,7 +929,7 @@ var Store = declare( null,  {
                 // done on inputted data AND existing doc
                 } else {
 
-                  self.extrapolateDoc( params, body, options, fullDoc, function( err, doc ){
+                  self._extrapolateDocAndCast( params, body, options, fullDoc, function( err, doc ){
                     self._sendErrorOnErr( err, next, function(){
 
                       // Actually check permissions
@@ -911,7 +948,7 @@ var Store = declare( null,  {
                               self._sendErrorOnErr( err, next, function(){
 
                                 // Update "doc" to be the complete version of the doc from the DB
-                                self.extrapolateDoc( params, body, options, fullDocAfter, function( err, docAfter ){
+                                self._extrapolateDocAndCast( params, body, options, fullDocAfter, function( err, docAfter ){
                                   self._sendErrorOnErr( err, next, function(){
 
                                     // Remote request: set headers, and send the doc back (if echo is on)
@@ -919,7 +956,7 @@ var Store = declare( null,  {
 
                                       // Set the Location header if it was a remote request
                                       self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
-                                      self.afterPutExisting( params, body, options, doc, docAfter, fullDoc, fullDocAfter, options.overwrite, function( err ) {
+                                      self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite, function( err ) {
                                         self._sendErrorOnErr( err, next, function(){
 
                                           if( self.echoAfterPutExisting ){
@@ -948,7 +985,7 @@ var Store = declare( null,  {
                                     }
 
                                   }) // err
-                                }) // self.extrapolateDoc
+                                }) // self._extrapolateDocAndCast
 
                               }) // err
                             }) // self.driverPutDbUpdate
@@ -959,7 +996,7 @@ var Store = declare( null,  {
                       }) // self.checkPermissionsPutExisting
 
                     }) // err
-                  }) // self.extrapolateDoc
+                  }) // self._extrapolateDocAndCast
                 }
 
               } // function continueAfterFetch()
@@ -1003,54 +1040,69 @@ var Store = declare( null,  {
       self._sendError( next, new self.BadRequestError( { errors: errors } ) );
       return;
     }
- 
-    // Set reasonable (good) defaults
-    sortBy = options.sortBy;
-    ranges = options.ranges;
-    filters = options.filters;
-    if( typeof( ranges ) === 'undefined' || ! ranges ) ranges = {};
-    if( typeof( ranges.rangeFrom ) === 'undefined' ) ranges.rangeFrom = 0;
-    if( typeof( ranges.rangeTo )   === 'undefined' ) ranges.rangeTo   = 0;
-    if( typeof( filters) === 'undefined' ) filters = {};
 
-    // If filters were passed locally, cast them
-    //if( ! self.remote ){
-    var fc = self.searchSchema._cast( filters, { onlyObjectValues: true } );
 
-    // This replicates what schema.castAndParams() would do, but deleting
-    // non-castable search fields rather than giving out errors
-    var originalFilters = self._clone( filters );
-    var failedCasts = self.searchSchema._cast( filters, { onlyObjectValues: true }  );
-    Object.keys( failedCasts ).forEach( function( fieldName ){
-      delete( filters[ fieldName ] ); 
-    });
-    self.searchSchema._params( filters, originalFilters, errors, { onlyObjectValues: true }, failedCasts );
-
-    // Errors in casting: give up, run away
-    if( errors.length ){
-      self._sendError( next, new self.BadRequestError( { errors: errors } ) );
-      return;
-    }
-
-    self.driverGetDbQuery( params, body, options, function( err, queryDocs ){
+    self.checkPermissionsGetQuery( params, body, options, function( err, granted ){
       self._sendErrorOnErr( err, next, function(){
 
-        self._extrapolateAndPrepareAll( params, body, options, queryDocs, function( err ){
-          self._sendErrorOnErr( err, next, function(){
+        if( ! granted ){
+          self._sendError( next, new self.ForbiddenError() );
+        } else {
 
-            // Remote request: set headers, and send the doc back (if echo is on)
-            if( self.remote ){
-              self._res.setHeader('Content-Range', 'items ' + ranges.rangeFrom + '-' + ranges.rangeTo + '/' + queryDocs.total );
-              self._res.json( 200, queryDocs );
-            // Local request: simply return the doc to the asking function
-            } else {
-              next( null, queryDocs, self.idProperty );
-            }
+ 
+          // Set reasonable (good) defaults
+          sortBy = options.sortBy;
+          ranges = options.ranges;
+          filters = options.filters;
+          if( typeof( ranges ) === 'undefined' || ! ranges ) ranges = {};
+          if( typeof( ranges.rangeFrom ) === 'undefined' ) ranges.rangeFrom = 0;
+          if( typeof( ranges.rangeTo )   === 'undefined' ) ranges.rangeTo   = 0;
+          if( typeof( filters) === 'undefined' ) filters = {};
 
-          })
-        })
+
+          // If filters were passed locally, cast them -- REMOVED AS REDUNDANT
+          //var fc = self.searchSchema._cast( filters, { onlyObjectValues: true } );
+
+          // This replicates what schema.castAndParams() would do, but deleting
+          // non-castable search fields rather than giving out errors
+          var originalFilters = self._clone( filters );
+          var failedCasts = self.searchSchema._cast( filters, { onlyObjectValues: true }  );
+          Object.keys( failedCasts ).forEach( function( fieldName ){
+            delete( filters[ fieldName ] ); 
+          });
+
+          self.searchSchema._params( filters, originalFilters, errors, { onlyObjectValues: true }, failedCasts );
+
+          // Errors in casting: give up, run away
+          if( errors.length ){
+            self._sendError( next, new self.BadRequestError( { errors: errors } ) );
+            return;
+          }
+
+          self.driverGetDbQuery( params, body, options, function( err, queryDocs ){
+            self._sendErrorOnErr( err, next, function(){
+
+              self._extrapolateAndPrepareAll( params, body, options, queryDocs, function( err ){
+                self._sendErrorOnErr( err, next, function(){
+
+                  // Remote request: set headers, and send the doc back (if echo is on)
+                  if( self.remote ){
+                    self._res.setHeader('Content-Range', 'items ' + ranges.rangeFrom + '-' + ranges.rangeTo + '/' + queryDocs.total );
+                    self._res.json( 200, queryDocs );
+                  // Local request: simply return the doc to the asking function
+                  } else {
+                    next( null, queryDocs, self.idProperty );
+                  }
+
+                })
+              })
+            })
+          });
+
+        }
       })
-    });
+    })
+
   },
 
 
@@ -1085,7 +1137,7 @@ var Store = declare( null,  {
           self._sendError( next, new self.NotFoundError());
         } else {
 
-          self.extrapolateDoc( params, body, options, fullDoc, function( err, doc ){
+          self._extrapolateDocAndCast( params, body, options, fullDoc, function( err, doc ){
             self._sendErrorOnErr( err, next, function(){
 
               // Check the permissions 
@@ -1129,7 +1181,7 @@ var Store = declare( null,  {
 
 
             }) // err
-          }) // self.extrapolateDoc
+          }) // self._extrapolateDocAndCast
 
         } // if self.fetchedDoc
 
@@ -1169,9 +1221,10 @@ var Store = declare( null,  {
           self._sendError( next, new self.NotFoundError());
         } else {
 
-          self.extrapolateDoc( params, body, options, fullDoc, function( err, doc ){
+          self._extrapolateDocAndCast( params, body, options, fullDoc, function( err, doc ){
             self._sendErrorOnErr( err, next, function(){
 
+              // MERC
 
               // Check the permissions 
               self.checkPermissionsDelete( params, body, options, doc, fullDoc, function( err, granted ){
@@ -1211,7 +1264,7 @@ var Store = declare( null,  {
               }) // self.checkPermissionsGet
 
             }) // err
-          }) // self.extrapolateDoc
+          }) // self._extrapolateDocAndCast
 
         } // if self.fetchedDoc
 
@@ -1308,6 +1361,9 @@ Store.Get = function( id, options, next ){
   // Enrich `options` with `queryFilterType` and `searchPartial`
   request._enrichOptionsFromClassDefaults( options );
 
+  // Turn off permissions etc.
+  request.checkPermissionsGet = function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); };
+
   // Actually run the request
   request._makeGet( params, {}, options, next );
 }
@@ -1325,6 +1381,9 @@ Store.GetQuery = function( options, next ){
 
   // Enrich `options` with `queryFilterType` and `searchPartial`
   request._enrichOptionsFromClassDefaults( options );
+
+  // Turn off permissions etc.
+  request.checkPermissionsGetQuery = function( params, body, options, cb ){ cb( null, true ); };
 
   // Actually run the request
   request._makeGetQuery( {}, {}, options, next );
@@ -1351,6 +1410,10 @@ Store.Put = function( id, body, options, next ){
   // Enrich `options` with `queryFilterType` and `searchPartial`
   request._enrichOptionsFromClassDefaults( options );
 
+  // Turn off permissions etc.
+  request.checkPermissionsPutExisting = function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); };
+  request.checkPermissionsPutNew = function(  params, body, options, cb ){ cb( null, true ); };
+
   // Clone 'body' as _make calls are destructive
   var bodyClone = {}; for( var k in body) bodyClone[ k ] = body[ k ];
 
@@ -1374,6 +1437,9 @@ Store.Post = function( body, options, next ){
 
   // Enrich `options` with `queryFilterType` and `searchPartial`
   request._enrichOptionsFromClassDefaults( options );
+
+  // Turn off permissions etc.
+  request.checkPermissionsPost = function( params, body, options, cb ){ cb( null, true ); };
 
   // Clone 'body' as _make calls are destructive
   var bodyClone = {}; for( var k in body) bodyClone[ k ] = body[ k ];
@@ -1403,6 +1469,9 @@ Store.PostAppend = function( id, body, options, next ){
   // Enrich `options` with `queryFilterType` and `searchPartial`
   request._enrichOptionsFromClassDefaults( options );
 
+  // Turn off permissions etc.
+  request.checkPermissionsPostAppend = function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); };
+
   // Clone 'body' as _make calls are destructive
   var bodyClone = {}; for( var k in body) bodyClone[ k ] = body[ k ];
 
@@ -1430,6 +1499,9 @@ Store.Delete = function( id, options, next ){
 
   // Enrich `options` with `queryFilterType` and `searchPartial`
   request._enrichOptionsFromClassDefaults( options );
+
+  // Turn off permissions etc.
+  request.checkPermissionsDelete = function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); };
 
   // Actually run the request
   request._makeDelete( params, {}, options, next );
