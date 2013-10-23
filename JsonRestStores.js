@@ -302,10 +302,6 @@ var Store = declare( null,  {
 
   },
 
-  _castIncomingData: function( object, errors, options ){
-  // MERC
-  },
-
   _extrapolateDocAndCast: function( params, body, options, doc, next ){
 
      var errors = [];
@@ -1017,6 +1013,7 @@ var Store = declare( null,  {
     var errors = [];
     var sortBy, range, filters;
 
+    debugger;
 
     if( typeof( next ) !== 'function' ) next = function(){};
 
@@ -1054,14 +1051,11 @@ var Store = declare( null,  {
           sortBy = options.sortBy;
           ranges = options.ranges;
           filters = options.filters;
-          if( typeof( ranges ) === 'undefined' || ! ranges ) ranges = {};
+					if( typeof( ranges ) === 'undefined' || ! ranges ) ranges = options.ranges = {};
           if( typeof( ranges.rangeFrom ) === 'undefined' ) ranges.rangeFrom = 0;
           if( typeof( ranges.rangeTo )   === 'undefined' ) ranges.rangeTo   = 0;
           if( typeof( filters) === 'undefined' ) filters = {};
 
-
-          // If filters were passed locally, cast them -- REMOVED AS REDUNDANT
-          //var fc = self.searchSchema._cast( filters, { onlyObjectValues: true } );
 
           // This replicates what schema.castAndParams() would do, but deleting
           // non-castable search fields rather than giving out errors
@@ -1076,29 +1070,44 @@ var Store = declare( null,  {
           // Errors in casting: give up, run away
           if( errors.length ){
             self._sendError( next, new self.BadRequestError( { errors: errors } ) );
-            return;
-          }
+          } else {
 
-          self.driverGetDbQuery( params, body, options, function( err, queryDocs ){
-            self._sendErrorOnErr( err, next, function(){
+            self.driverGetDbQuery( params, body, options, function( err, queryDocs ){
+              self._sendErrorOnErr( err, next, function(){
 
-              self._extrapolateAndPrepareAll( params, body, options, queryDocs, function( err ){
-                self._sendErrorOnErr( err, next, function(){
 
-                  // Remote request: set headers, and send the doc back (if echo is on)
-                  if( self.remote ){
-                    self._res.setHeader('Content-Range', 'items ' + ranges.rangeFrom + '-' + ranges.rangeTo + '/' + queryDocs.total );
-                    self._res.json( 200, queryDocs );
-                  // Local request: simply return the doc to the asking function
-                  } else {
-                    next( null, queryDocs, self.idProperty );
-                  }
+                // It's a normal, cursor-less call
+                if( ! options.cursor ){
 
-                })
+                  self._extrapolateAndPrepareAll( params, body, options, queryDocs, function( err ){
+                    self._sendErrorOnErr( err, next, function(){
+
+                      // Remote request: set headers, and send the doc back (if echo is on)
+                      if( self.remote ){
+                        self._res.setHeader('Content-Range', 'items ' + ranges.rangeFrom + '-' + ranges.rangeTo + '/' + queryDocs.total );
+                        self._res.json( 200, queryDocs );
+                      // Local request: simply return the doc to the asking function
+                      } else {
+                        next( null, queryDocs, self.idProperty );
+                      }
+  
+                    })
+                  })
+
+                // It's a cursor-enabled call: return it
+                // TODO: Apply extrapolatedoc to each document, by redefining cursor.next();
+                } else {
+                  var cursor = queryDocs;
+                  next( null, cursor );
+                }
+
               })
-            })
-          });
 
+
+
+
+            });
+          }
         }
       })
     })
@@ -1223,8 +1232,6 @@ var Store = declare( null,  {
 
           self._extrapolateDocAndCast( params, body, options, fullDoc, function( err, doc ){
             self._sendErrorOnErr( err, next, function(){
-
-              // MERC
 
               // Check the permissions 
               self.checkPermissionsDelete( params, body, options, doc, fullDoc, function( err, granted ){
@@ -1369,6 +1376,7 @@ Store.Get = function( id, options, next ){
 }
 
 
+
 Store.GetQuery = function( options, next ){
 
   var Class = this;
@@ -1388,6 +1396,9 @@ Store.GetQuery = function( options, next ){
   // Actually run the request
   request._makeGetQuery( {}, {}, options, next );
 }
+
+
+
 
 Store.Put = function( id, body, options, next ){
 
@@ -1506,6 +1517,38 @@ Store.Delete = function( id, options, next ){
   // Actually run the request
   request._makeDelete( params, {}, options, next );
 }
+
+
+// 
+// THE FOLLOWING API FUNCTIONS ARE NOT CALLABLE FROM AN ONLINE API
+//
+
+Store.MassDelete = function( options, next ){
+
+  var self = this;
+  var errors = [];
+  var sortBy, range, filters;
+
+  // Initialise filters
+  if( typeof( options.filters) === 'undefined' ) filters = {};
+  else filters = options.filters;
+
+  // Create the actual object, so that
+  // we get the schema
+  var request = new this();
+
+  // Cast filters
+  request.searchSchema.castAndParams( filters, errors, { onlyObjectValues: true }  );
+  if( errors.length != 0 ){
+    request._sendError( next, new request.BadRequestError( { errors: errors } ) );
+  } else {
+
+     // Actually run the mass delete
+     request.driverMassDeleteDbDo( {}, {}, options, next );
+  }
+
+}
+
 
 function fixRequestForApi( request ){
 

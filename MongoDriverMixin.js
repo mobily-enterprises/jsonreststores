@@ -52,7 +52,7 @@ var MongoDriverMixin = declare( null, {
   handleGetQuery: false,
   handleDelete: false,
 
-  _makeMongoFilter: function( params ){
+  _mongoFilterFromParams: function( params ){
     var self = this;
 
     var filter = {};
@@ -70,7 +70,7 @@ var MongoDriverMixin = declare( null, {
     var self = this;
 
     // Make up the filter, based on the store's IDs (used as filters).
-    var filter = self._makeMongoFilter( params );
+    var filter = self._mongoFilterFromParams( params );
 
     this.collection.findOne( filter, self.projectionHash, cb );
   }, 
@@ -114,7 +114,7 @@ var MongoDriverMixin = declare( null, {
     var updateObject = {}, unsetObject = {};
 
     // Make up the filter, based on the store's IDs (used as filters).
-    var filter = self._makeMongoFilter( params );
+    var filter = self._mongoFilterFromParams( params );
 
     // Simply copy values over except self.idProperty (which mustn't be
     // overwritten)
@@ -181,7 +181,7 @@ var MongoDriverMixin = declare( null, {
     var self = this;
 
     // Make up the filter
-    var filter = self._makeMongoFilter( params );
+    var filter = self._mongoFilterFromParams( params );
 
     // Actually remove the field
     self.collection.remove( filter, function( err, doc ){
@@ -194,6 +194,38 @@ var MongoDriverMixin = declare( null, {
 
   },
 
+
+  // THE FOLLOWING API FUNCTIONS ARE NOT CALLABLE FROM AN ONLINE API
+
+
+  driverMassDeleteDbDo: function( params, body, options, cb ){
+    var selector = {};
+   
+    var self = this;
+
+   
+    // Make up the selector based on the query
+    selector = self._queryMakeSelector( options.queryFilterType, options.filters, options.searchPartial, {} );
+
+    // Paranoid check. Important since an empty selector WILL lead
+    // to table zapping...
+    if( Object.keys( selector ).length == 0 && ! options.allowZapping ){
+      cb( new Error("Zapping of table not allowed, mass deletion aborted" ) );
+    } else {
+
+      // Actually remove the field
+      self.collection.remove( selector, function( err, howMany ){
+        if( err ) {
+          cb( err );
+        } else {
+          cb( null, howMany );
+        }
+      });
+    }
+  },
+
+  
+
   driverGetDbQuery: function( params, body, options, next ){
 
     var self = this;
@@ -201,16 +233,14 @@ var MongoDriverMixin = declare( null, {
     var cursor;
     var selector = {};
 
-
     // FIXME: This function has the ugly side effect of actually changing `options.filters`,
     // change it so that it doesn't. Make sure a `mongoFilter` object is created and then
     // used for queryMakeSelector() without side effects
-    this._queryEnrichFilters( options.filters, options.searchPartial ); 
+    // this._queryEnrichFilters( options.filters, options.searchPartial ); 
 
     // Select according to selector
-    selector = self._queryMakeSelector( options.queryFilterType, options.filters, params );
+    selector = self._queryMakeSelector( options.queryFilterType, options.filters, options.searchPartial, params );
     cursor = self.collection.find( selector, self.projectionHash );
-
 
     if( typeof( options.ranges) == 'object' && typeof( options.ranges) === 'object' && options.ranges !== null ){
 
@@ -238,83 +268,151 @@ var MongoDriverMixin = declare( null, {
         cursor.limit( options.ranges.limit );
     }
 
-    cursor.count( function( err, total ){
+    // Sort the results
+    cursor.sort( self._queryMakeMongoSortArray( options.sortBy ), function( err ){
       self._sendErrorOnErr( err, next, function(){
-        
-        cursor.sort( self._queryMakeMongoSortArray( options.sortBy ) );        
-        cursor.toArray( function( err, queryDocs ){
 
-          // Remove resultsSet if so required
-          if( options.remove ){
 
-            // Silent failing
-            self.collection.remove( selector, function( err, doc ){ } );
+
+        if( ! options.cursor ){
+
+          cursor.count( function( err, total ){
+            self._sendErrorOnErr( err, next, function(){
+       
+              cursor.toArray( function( err, queryDocs ){
+                self._sendErrorOnErr( err, next, function(){
+
+                  // Remove resultsSet if so required
+                  if( options.remove ){
+                    // Silent failing
+                    self.collection.remove( selector, function( err, doc ){ } );
+                  }
+                  queryDocs.total = total;
+                  next( null, queryDocs );
+                });
+              });
+            });
+          });
+
+        } else {
+
+          var o = {};
+
+
+          o.next = function( cb ){
+            cursor.nextObject( cb );
+            // TODO: Check options.remove, remove data as it's fetched
+
           }
 
-          self._sendErrorOnErr( err, next, function(){
-            queryDocs.total = total;
-            next( null, queryDocs );
-          });
-        });
+          o.rewind = function( cb ){
+            cursor.rewind();
+            cb( null );
+          }
+          o.close = function( cb ){
+            cursor.close( cb );
+          }
+
+          next( null, o );
+        }
 
       }) // err
-    }) // cursor.count 
+    }) // cursor.sort
 
   },
 
-  _queryEnrichFilters: function( filters, searchPartial ){
-
-    var self = this;    
-
-    for( var k in filters ){
-
-      // They are marked as searchPartial: turn the string into a regexp
-      if( searchPartial[ k ] ){
-        filters[ k ] = { $regex: new RegExp('^' + filters[ k ] + '.*' ) };
-      }
-
-      // ... anything else?
-
-    }
-  },
 
   // Make up the query selector
-  _queryMakeSelector: function( queryFilterType, filters, params ){
-    var selector, s;
+  _queryMakeSelector: function( queryFilterType, filters, searchPartial, params ){
+    var selector;
     var item;
-    var foundOne;
+    var self = this;
+
+    // Set a sane, safe default for queryFilterType
+    if( queryFilterType !== 'and' && queryFilterType !== 'or' ) queryFilterType = 'and';
+
+    // Set a sane, safe default for searchPartial
+    if( typeof( searchPartial ) !== 'object' || searchPartial === null ) searchPartial = {};
+
+    // CASE #1: If there are no filters, then just return the
+    // default urlFilter based on params
+
+    if( typeof( filters ) !== 'object' || Object.keys( filters ).length == 0 ){
+      return this._mongoFilterFromParams( params );
+    }
 
 
-    // Make up the mongo selector based on the passed filter
-    // The end result is either { $and: [ name: 'a'], [ surname: 'b'] } or
-    // { $or: [ name: 'a'], [ surname: 'b'] }
-    foundOne = false;
+    // CASE #2: there are filters. So, the query will be based on BOTH the
+    // params passed, _and_ the filters
+
+
+    // Prepare the selector variable for $and and $or arrays
+    // $or is only needed if the queryType is 'or'
     selector = {};
-    selector[ '$' + queryFilterType ] =  [];
-    for( var k in filters ){
+    selector[ '$and' ] =  [];
+    selector[ '$or' ] =  [];
+
+    // First of all, make up the params filter...
+    var paramsFilter = this._mongoFilterFromParams( params );
+
+    // ...and add the criteria to the $and side of the selector
+    for( var k in paramsFilter ){
       item = {};
-      item[ k ] = filters[ k ];
-      selector[ '$' + queryFilterType ].push( item );
-      foundOne = true;
-    }
-
-    // Make up the URL-based filter
-    var urlFilter = this._makeMongoFilter( params );
-
-    // No criteria found: just return the URL-based filter
-    // and nothing else
-    if( ! foundOne){
-      return urlFilter;
-    }
-
-    // Add the criteria to the $and side of the selector
-    if( queryFilterType !== 'and' ) selector[ '$and' ] = [];
-    for( k in urlFilter ){
-      item = {};
-      item[ k ] = urlFilter[ k ];
+      item[ k ] = paramsFilter[ k ];
       selector[ '$and' ].push( item );
     }
-    
+
+    // Add filters to the selector
+    for( var k in filters ){
+      item = {};
+
+      // Check if it's a filterType field -- if it is, add the correct filter type
+      // if( typeof( self.searchSchema.structure[ k ] ) === 'object' && self.searchSchema.structure[ k ] !== null ){
+      
+      if( self.searchSchema.structure[ k ].filterType ){
+        var filterType = self.searchSchema.structure[ k ].filterType;
+
+        switch( filterType.type ){
+
+          // "range" type of filter: check direction and reference field
+          case 'range':
+
+            // Double check that the referenced field exists
+            if( typeof( self.searchSchema.structure[ filterType.field ] ) === 'undefined' ){
+              throw( new Error('"field" option in filter type is undefined: ' + filterType.field  ) );
+            }
+
+            // Adding the right filter, depending of 'direction' being 'from' or 'to'
+            if( filterType.direction == 'from' ){
+              item[ filterType.field ] = { $gte: filters[ k ] } ; 
+            } else {
+              item[ filterType.field ] = { $lte: filters[ k ] } ; 
+            }
+
+          break;
+        }
+
+
+      } else {
+
+        // If searchPartial is requested, then have it as a regular expression
+        if( searchPartial[ k ] ){
+          item[ k ] = { $regex: new RegExp('^' + filters[ k ] + '.*' ) };
+        } else {
+          item[ k ] = filters[ k ];
+        }
+      }
+
+      // Finally adding the item
+      selector[ '$' + queryFilterType ].push( item );
+    }
+
+    // Clean up selector, as Mongo doesn't like empty arrays for selectors
+    if( selector[ '$and' ].length == 0 ) delete selector[ '$and' ];
+    if( selector[ '$or' ].length == 0 ) delete selector[ '$or' ];
+
+
+ 
     return selector;
     
   },
