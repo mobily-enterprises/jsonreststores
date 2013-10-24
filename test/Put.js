@@ -48,10 +48,17 @@ var MongoSchema = declare( [ Schema, MongoSchemaMixin ] );
         handleDelete: true,
 
         paramIds: [ '_id' ],
+
+        prepareBeforeSend: function( doc, cb ){
+          doc.name = doc.name.toUpperCase();
+          cb( null, doc );
+        },
       });
 
 
       Users.MassDelete( { allowZapping: true }, function( err ) {
+
+
 
         Users.Post( { name: 'Tony', surname: 'Mobily', age: '37' }, function( err ){
           if (err) throw err;
@@ -61,7 +68,7 @@ var MongoSchema = declare( [ Schema, MongoSchemaMixin ] );
               if (err) throw err;
           
      
-                Users.GetQuery( { cursor: true, searchPartial: { surname: true } , filters: { surname: 'Mob' } }, function( err, cursor1 ){ 
+                Users.GetQuery( { remove: false, cursor: true, searchPartial: { surname: true } , filters: { surname: 'Mob' } }, function( err, cursor1 ){ 
                   console.log("CURSOR DATA:");
                   console.log("GetQuery returned error: ");
                   console.log( err );
@@ -91,6 +98,11 @@ var MongoSchema = declare( [ Schema, MongoSchemaMixin ] );
                             console.log("DATA IS AGAINi THIRD:");
                             console.log( err );
                             console.log( data );
+
+                            Users.MassUpdate( { name: "CAUGHT" }, { searchPartial: { surname: true } , filters: { surname: 'Mob' } } , function( err, num ){
+                              console.log("DONE");
+                            } );
+
                           });
 
                         });

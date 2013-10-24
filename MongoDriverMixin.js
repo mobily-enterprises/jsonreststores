@@ -176,7 +176,7 @@ var MongoDriverMixin = declare( null, {
   },
 
 
-  driverDeleteDbDo: function( params, body, options, cb ){
+  driverDeleteDbDelete: function( params, body, options, cb ){
 
     var self = this;
 
@@ -198,7 +198,7 @@ var MongoDriverMixin = declare( null, {
   // THE FOLLOWING API FUNCTIONS ARE NOT CALLABLE FROM AN ONLINE API
 
 
-  driverMassDeleteDbDo: function( params, body, options, cb ){
+  driverAPIDbMassDelete: function( params, body, options, cb ){
     var selector = {};
    
     var self = this;
@@ -224,7 +224,26 @@ var MongoDriverMixin = declare( null, {
     }
   },
 
-  
+   driverAPIDbMassUpdate: function( params, body, options, cb ){
+    var selector = {};
+   
+    var self = this;
+   
+    // Make up the selector based on the query
+    selector = self._queryMakeSelector( options.queryFilterType, options.filters, options.searchPartial, {} );
+
+    // Actually remove the field
+    self.collection.update( selector, { $set: body } , { multi: true },  function( err, howMany ){
+      if( err ) {
+        cb( err );
+      } else {
+        cb( null, howMany );
+      }
+    });
+  },
+
+ 
+  // END OF API FUNCTIONS THAT ARE NOT CALLABLE FROM AN ONLINE API
 
   driverGetDbQuery: function( params, body, options, next ){
 
@@ -232,11 +251,6 @@ var MongoDriverMixin = declare( null, {
 
     var cursor;
     var selector = {};
-
-    // FIXME: This function has the ugly side effect of actually changing `options.filters`,
-    // change it so that it doesn't. Make sure a `mongoFilter` object is created and then
-    // used for queryMakeSelector() without side effects
-    // this._queryEnrichFilters( options.filters, options.searchPartial ); 
 
     // Select according to selector
     selector = self._queryMakeSelector( options.queryFilterType, options.filters, options.searchPartial, params );
@@ -273,7 +287,6 @@ var MongoDriverMixin = declare( null, {
       self._sendErrorOnErr( err, next, function(){
 
 
-
         if( ! options.cursor ){
 
           cursor.count( function( err, total ){
@@ -300,8 +313,26 @@ var MongoDriverMixin = declare( null, {
 
 
           o.next = function( cb ){
-            cursor.nextObject( cb );
-            // TODO: Check options.remove, remove data as it's fetched
+            cursor.nextObject( function( err, obj) {
+              if( err ){
+                cb( err );
+              } else {
+
+                // If options.remove is on, then remove a field straight after fetching it
+                if( options.remove && obj !== null ){
+                  self.collection.remove( { _id: obj._id }, function( err, howMany ){
+                    if( err ){
+                      cb( err );
+                    } else {
+                      cb( null, obj );
+                    }
+                  });
+                } else {
+                   cb( null, obj );
+                }
+
+              }
+            });
 
           }
 
