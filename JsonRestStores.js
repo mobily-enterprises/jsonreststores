@@ -216,7 +216,6 @@ var Store = declare( null,  {
 
     var self = this;
 
-
     var changeFunctions = [];
     docs.forEach( function( fullDoc, index ){
 
@@ -309,7 +308,9 @@ var Store = declare( null,  {
 
      // Extrapolate the doc first
      self.extrapolateDoc( params, body, options, doc, function( err, extrapolatedDoc ){
-       self._sendErrorOnErr( err, next, function(){
+       if( err ){
+         next( err );
+       } else {
 
          // Cast the values. This is a relaxed check: if a field is missing, it won't
          // complain. This way, applications won't start failing when adding fields
@@ -318,14 +319,14 @@ var Store = declare( null,  {
 
            // There was a problem: return the errors
            if( errors.length ){
-             self._sendError( next, new self.BadRequestError( { errors: errors } ) );
+             next( new self.BadRequestError( { errors: errors } ) );
            } else {
              next( null, extrapolatedDoc );
            }
          
          });
 
-       });
+       };
        
      });
 
@@ -333,8 +334,6 @@ var Store = declare( null,  {
 
   _sendErrorOnErr: function( err, next, cb ){
     if( err ) {
-      console.log("WAIT! ERROR!");
-      console.log( err );
       this._sendError( next, err );
     } else {
       cb();
@@ -1071,7 +1070,6 @@ var Store = declare( null,  {
     var errors = [];
     var sortBy, range, filters;
 
-    debugger;
 
     if( typeof( next ) !== 'function' ) next = function(){};
 
@@ -1132,7 +1130,6 @@ var Store = declare( null,  {
 
             self.driverGetDbQuery( params, body, options, function( err, queryDocs ){
               self._sendErrorOnErr( err, next, function(){
-
 
                 // It's a normal, cursor-less call
                 if( ! options.cursor ){
@@ -1218,7 +1215,7 @@ var Store = declare( null,  {
 
     // Check the IDs
     self._checkParamIds( params, body, errors );
- 
+
     // There was a problem: return the errors
     if( errors.length ){
       self._sendError( next, new self.BadRequestError( { errors: errors } ) );
