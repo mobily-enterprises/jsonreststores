@@ -760,7 +760,7 @@ Such functions all start with the name `driver` and are:
 * `driverPutDbUpdate( params, body, options, doc, fullDoc, cb )`(updates a record in the DB after a PUT)
 * `driverPostDbInsertNoId( params, body, options, generatedId, cb  )`(adds a new record to the DB; a new ID will be created)
 * `driverPostDbAppend( params, body, options, doc, fullDoc, cb )` (appends information to existing record via POST)
-* `driverDeleteDbDo( params, body, options, id, cb )`(deletes a record)
+* `driverDeleteDbDelete( params, body, options, id, cb )`(deletes a record)
 
 Writing a database layer is a matter of implementing these functions. Doing so is easy: you should use the MongoDriverMixin file as a template on how to implement those functions for other database layers.
 
