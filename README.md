@@ -606,7 +606,7 @@ This is achieved with the following class functions:
 
 * `Store.Get( id, options, next( err, doc, idProperty ) {})`
 * `Store.GetQuery( options, next( err, queryDocs, idProperty){} )`
-* `Store.Put( id, body, options, next( err, doc, idProperty){} )`
+* `Store.Put( id, body, options, next( err, doc, idProperty){} )`. __Note: `id` can be set as null if body contains it__
 * `Store.Post( body, options, next( err, doc, idProperty ){} )`
 * `Store.PostAppend( id, body, options, next( err, docAfter, idProperty){}  )`
 * `Store.Delete( id, options, next( err, doc, idProperty ){} )`

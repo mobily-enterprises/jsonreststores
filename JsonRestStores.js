@@ -1527,7 +1527,6 @@ Store.GetQuery = function( options, next ){
 
 
 
-//TODO: Document that `id` can be left as NULL, will work it our from body
 Store.Put = function( id, body, options, next ){
 
   var Class = this;
