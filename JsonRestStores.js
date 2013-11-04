@@ -1014,7 +1014,7 @@ var Store = declare( null,  {
                                 self.driverPutDbUpdate( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
                                   self._sendErrorOnErr( err, next, function(){
 
-                                    self.extrapolateDoc( params, body, options, fullDoc, function( err, docAfter ) {
+                                    self.extrapolateDoc( params, body, options, fullDocAfter, function( err, docAfter ) {
                                       self._sendErrorOnErr( err, next, function(){
 
                                         self._castDoc( docAfter, function( err, docAfter ) {
