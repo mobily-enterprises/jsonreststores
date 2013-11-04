@@ -859,17 +859,8 @@ var Store = declare( null,  {
       return;
     }
     
-    // body = self._clone( req.body );
-
-    // Do schema cast and check
-    //if( self.schema !== null ){
     self.schema.castAndParams(  body, errors );
-    //}
 
-    //var validateFunction = function( body, errors, cb ) { cb( null ) }
-    //if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
-
-    //validateFunction.call( self.schema, body,  errors, function( err ){
     self.schema.validate( body,  errors, function( err ){
       self._sendErrorOnErr( err, next, function(){
 
@@ -1536,7 +1527,7 @@ Store.GetQuery = function( options, next ){
 
 
 
-
+//TODO: Document that `id` can be left as NULL, will work it our from body
 Store.Put = function( id, body, options, next ){
 
   var Class = this;
@@ -1553,7 +1544,21 @@ Store.Put = function( id, body, options, next ){
 
   // Make up "params" to be passed to the _makeGet function
   var params = {};
-  params[ request._lastParamId() ] = id;
+
+  // Sets only idProperty in the params hash. Note that
+  // you might well decide to pass the whole object in body, and
+  // pass 'null' as the object ID: in that case, this function
+  // will sort out `params` with the `id` set
+  if( id !== null ){
+    params[ request.idProperty ] = id;
+  } else {
+    var idInBody = body[ request.idProperty ];
+    if( typeof( idInBody ) !== 'undefined'){
+      params[ request.idProperty ] = body[ request.idProperty ];
+    } else {
+      throw( new Error("When calling Store.Put with an ID of null, id MUST be in body") );
+    }
+  }
 
   // Enrich `options` with `queryFilterType` and `searchPartial`
   request._enrichOptionsFromClassDefaults( options );
