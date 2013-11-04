@@ -83,6 +83,7 @@ var MongoDriverMixin = declare( null, {
 
     // Make up the `record` variable, based on the passed `body`
     for( var k in body ) record[ k ] = body[ k ];
+
     self.paramIds.forEach( function( paramId ){
       if( typeof( params[ paramId ] ) !== 'undefined' ){
         record[ paramId ] = params[ paramId ];
@@ -163,7 +164,7 @@ var MongoDriverMixin = declare( null, {
       if( err ) {
         cb( err );
       } else {
-        self.collection.findOne( {_id: record._id }, self.schema.projectionHash, cb );
+        self.collection.findOne( {_id: record._id }, self.projectionHash, cb );
       }
     });
 
