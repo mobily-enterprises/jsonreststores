@@ -210,6 +210,9 @@ var Store = declare( null,  {
   },
 
 
+  prepareBodyPost: function( body, cb ){
+    cb( null, body );
+  },
 
   // ****************************************************
   // *** INTERNAL FUNCTIONS, DO NOT TOUCH
@@ -567,122 +570,120 @@ var Store = declare( null,  {
       self._sendError( next, new self.BadRequestError( { errors: errors }  ) );
       return;
     }
-  
-    //body = self._clone( body );
  
-    // Do schema cast and check
-    //if( self.schema !== null ){
-    self.schema.castAndParams(  body, errors, { notRequired: [ self.idProperty ], skipCast: [ self.idProperty ]  } );
-    //}
 
-    //var validateFunction = function( body, errors, cb ) { cb( null ) }
-    //if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
-
-    //validateFunction.call( self.schema, body,  errors, function( err ){
-    self.schema.validate( body,  errors, function( err ){
+  
+    self.prepareBodyPost( body, function( err, body ){
       self._sendErrorOnErr( err, next, function(){
-
-        if( errors.length ){
-          self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
-        } else {
-
-          // Actually check permissions
-          self.checkPermissionsPost( params, body, options, function( err, granted ){
-            self._sendErrorOnErr( err, next, function(){
-
-              if( ! granted ){
-                self._sendError( next, new self.ForbiddenError() );
-              } else {
-
-                // Clean up body from things that are not to be submitted
-                //if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
-                self.schema.cleanup( body, 'doNotSave' );
-
-                self.schema.makeId( body, function( err, generatedId){
-                  self._sendErrorOnErr( err, next, function(){
-
-                    self.driverPostDbInsertNoId( params, body, options, generatedId, function( err, fullDoc ){
+ 
+        self.schema.castAndParams(  body, errors, { notRequired: [ self.idProperty ], skipCast: [ self.idProperty ]  } );
+        self.schema.validate( body,  errors, function( err ){
+          self._sendErrorOnErr( err, next, function(){
+    
+            if( errors.length ){
+              self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
+            } else {
+    
+              // Actually check permissions
+              self.checkPermissionsPost( params, body, options, function( err, granted ){
+                self._sendErrorOnErr( err, next, function(){
+    
+                  if( ! granted ){
+                    self._sendError( next, new self.ForbiddenError() );
+                  } else {
+    
+                    // Clean up body from things that are not to be submitted
+                    //if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                    self.schema.cleanup( body, 'doNotSave' );
+    
+                    self.schema.makeId( body, function( err, generatedId){
                       self._sendErrorOnErr( err, next, function(){
-
-                        self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
+    
+                        self.driverPostDbInsertNoId( params, body, options, generatedId, function( err, fullDoc ){
                           self._sendErrorOnErr( err, next, function(){
-
-                            self._castDoc( doc, function( err, doc) {
+    
+                            self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                               self._sendErrorOnErr( err, next, function(){
-                            
-                                // Remote request: set headers, and send the doc back (if echo is on)
-                                if( self.remote ){
     
-                                  // Set the Location header if it was a remote request
-                                  self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
-                                  if( self.echoAfterPost ){
-    
-                                    self.prepareBeforeSend( doc, function( err, doc ){
-                                      self._sendErrorOnErr( err, next, function(){
-    
+                                self._castDoc( doc, function( err, doc) {
+                                  self._sendErrorOnErr( err, next, function(){
+                                
+                                    // Remote request: set headers, and send the doc back (if echo is on)
+                                    if( self.remote ){
+        
+                                      // Set the Location header if it was a remote request
+                                      self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
+                                      if( self.echoAfterPost ){
+        
+                                        self.prepareBeforeSend( doc, function( err, doc ){
+                                          self._sendErrorOnErr( err, next, function(){
+        
+                                            self.afterPost( params, body, options, doc, fullDoc, function( err ){
+                                              self._sendErrorOnErr( err, next, function(){
+        
+                                                self._res.json( 201, doc );
+                                              }) // err
+                                            }) // self.afterPost
+        
+                                           }) // err
+                                        }) // self.prepareBeforeSend
+        
+                                      } else {
+        
                                         self.afterPost( params, body, options, doc, fullDoc, function( err ){
                                           self._sendErrorOnErr( err, next, function(){
-    
-                                            self._res.json( 201, doc );
-                                          }) // err
-                                        }) // self.afterPost
-    
-                                       }) // err
-                                    }) // self.prepareBeforeSend
-    
-                                  } else {
-    
-                                    self.afterPost( params, body, options, doc, fullDoc, function( err ){
-                                      self._sendErrorOnErr( err, next, function(){
-    
-                                        self._res.send( 201, '' );
-    
-                                      });
-                                    });
-    
-                                  }
-    
-                                // Local request: simply return the doc to the asking function
-                                } else {
-    
-                                  self.prepareBeforeSend( doc, function( err, doc ){
-                                    self._sendErrorOnErr( err, next, function(){
-    
-                                      self.afterPost( params, body, options, doc, fullDoc, function( err ){
+        
+                                            self._res.send( 201, '' );
+        
+                                          });
+                                        });
+        
+                                      }
+        
+                                    // Local request: simply return the doc to the asking function
+                                    } else {
+        
+                                      self.prepareBeforeSend( doc, function( err, doc ){
                                         self._sendErrorOnErr( err, next, function(){
-    
-                                          next( null, doc, self.idProperty );
-    
+        
+                                          self.afterPost( params, body, options, doc, fullDoc, function( err ){
+                                            self._sendErrorOnErr( err, next, function(){
+        
+                                              next( null, doc, self.idProperty );
+        
+                                            })
+                                          })
+        
                                         })
                                       })
+                            
+                                    } 
+        
+                               
+                                  }) // err
+                                }) // self._castDoc
+                              });
+                            }) // self.extrapolateDoc
+        
     
-                                    })
-                                  })
-                        
-                                } 
+                          }) // err
+                        }) // driverPostDbInsertNoId
     
-                           
-                              }) // err
-                            }) // self._castDoc
-                          });
-                        }) // self.extrapolateDoc
-    
-
                       }) // err
-                    }) // driverPostDbInsertNoId
-
-                  }) // err
-                }) // self.makeId
-
-              } // granted
-
-            }) // err
-          }) // checkPermissionsPost
-
-        } // errors.length
-
-      }) // err
-    }) // validate()
+                    }) // self.makeId
+    
+                  } // granted
+    
+                }) // err
+              }) // checkPermissionsPost
+    
+            } // errors.length
+    
+          }) // err
+        }) // validate()
+  
+      })
+    })
 
 
   },
