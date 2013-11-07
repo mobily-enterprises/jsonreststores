@@ -303,18 +303,31 @@ var Store = declare( null,  {
     });
 
     // Make up the fake schema
+    // TODO: See if we should pass self.schema.options as second parameter too
     fakeSchema = new self.schema.constructor( fakeSchemaDef );
 
     // Apply the fake schema (just paramIds) to the fake record (just the paramIds values)
-    fakeSchema.castAndParams( fakeRecord, errors );
+    fakeSchema.castAndParamsAndValidate( fakeRecord, errors, function( err ){
 
-    // Copy those cast values back onto the params and body, so that
-    // other store calls will have ready-to-use cast
-    // elements in `params` and `body`
-    self.paramIds.forEach( function( k ) {
-      if( typeof( fakeRecord[ k ] ) !== 'undefined' ){
-        params[ k ] = fakeRecord[ k ];
-        body[ k ] = fakeRecord[ k ];
+      if( err ){
+        next( err );
+      } else {
+
+        // There was a problem: return the errors
+        if( errors.length ){
+          next( new self.BadRequestError( { errors: errors } ) );
+        } else {
+
+          // Copy those cast values back onto the params and body, so that
+          // other store calls will have ready-to-use cast
+          // elements in `params` and `body`
+          self.paramIds.forEach( function( k ) {
+            if( typeof( fakeRecord[ k ] ) !== 'undefined' ){
+              params[ k ] = fakeRecord[ k ];
+              body[ k ] = fakeRecord[ k ];
+            }
+          });
+        }
       }
     });
 
@@ -327,16 +340,17 @@ var Store = declare( null,  {
 
     // Cast the values. This is a relaxed check: if a field is missing, it won't
     // complain. This way, applications won't start failing when adding fields
-    self.schema.castAndParams( doc, errors, { onlyObjectValues: true } );
-    self.schema.validate( doc,  errors, function( err ){
-
-      // There was a problem: return the errors
-      if( errors.length ){
-        next( new self.BadRequestError( { errors: errors } ) );
+    self.schema.castAndParamsAndValidate( doc, errors, { onlyObjectValues: true }, function( err ) {
+      if( err ){
+        next( err );
       } else {
-        next( null, doc );
+        // There was a problem: return the errors
+        if( errors.length ){
+          next( new self.BadRequestError( { errors: errors } ) );
+        } else {
+          next( null, doc );
+        }
       }
-    
     });
 
   },
@@ -576,8 +590,7 @@ var Store = declare( null,  {
     self.prepareBodyPost( body, function( err, body ){
       self._sendErrorOnErr( err, next, function(){
  
-        self.schema.castAndParams(  body, errors, { notRequired: [ self.idProperty ], skipCast: [ self.idProperty ]  } );
-        self.schema.validate( body,  errors, function( err ){
+        self.schema.castAndParamsAndValidate( body, errors, { notRequired: [ self.idProperty ],skipCast: [ self.idProperty ]  }, function( err ){
           self._sendErrorOnErr( err, next, function(){
     
             if( errors.length ){
@@ -714,15 +727,7 @@ var Store = declare( null,  {
     //body = self._clone( req.body );
 
     //// Do schema cast and check
-    //if( self.schema !== null ){
-    self.schema.castAndParams(  body, errors );
-    //}
- 
-    //var validateFunction = function( body, errors, cb ) { cb( null ) }
-    //if( typeof( self.schema ) !== 'undefined' ){ validateFunction = self.schema.validate; }
-
-    //validateFunction.call( self.schema, body,  errors, function( err ){
-    self.schema.validate( body,  errors, function( err ){
+    self.schema.castAndParamsAndValidate(  body, errors, function( err ) {
       self._sendErrorOnErr( err, next, function(){
 
         if( errors.length ){
@@ -868,9 +873,7 @@ var Store = declare( null,  {
       return;
     }
     
-    self.schema.castAndParams(  body, errors );
-
-    self.schema.validate( body,  errors, function( err ){
+    self.schema.castAndParamsAndValidate(  body, errors, function( err ) {
       self._sendErrorOnErr( err, next, function(){
 
         if( errors.length ){
@@ -1150,90 +1153,98 @@ var Store = declare( null,  {
 
           // This replicates what schema.castAndParams() would do, but deleting
           // non-castable search fields rather than giving out errors
-          var originalFilters = self._clone( filters );
-          var failedCasts = self.searchSchema._cast( filters, { onlyObjectValues: true }  );
-          Object.keys( failedCasts ).forEach( function( fieldName ){
-            delete( filters[ fieldName ] ); 
-          });
+          //var originalFilters = self._clone( filters );
+          //var failedCasts = self.searchSchema._cast( filters, { onlyObjectValues: true }  );
+          //Object.keys( failedCasts ).forEach( function( fieldName ){
+          //  delete( filters[ fieldName ] ); 
+          //});
 
-          self.searchSchema._params( filters, originalFilters, errors, { onlyObjectValues: true }, failedCasts );
+          //self.searchSchema._params( filters, originalFilters, errors, { onlyObjectValues: true }, failedCasts );
 
-          // Errors in casting: give up, run away
-          if( errors.length ){
-            self._sendError( next, new self.BadRequestError( { errors: errors } ) );
-          } else {
-
-            self.driverGetDbQuery( params, body, options, function( err, queryDocs ){
-              self._sendErrorOnErr( err, next, function(){
-
-                // It's a normal, cursor-less call
-                if( ! options.cursor ){
-
-                  self._extrapolateDocAnd_castDocAndprepareBeforeSendAll( params, body, options, queryDocs, function( err ){
-                    self._sendErrorOnErr( err, next, function(){
-
-                      // Remote request: set headers, and send the doc back (if echo is on)
-                      if( self.remote ){
-                        self._res.setHeader('Content-Range', 'items ' + ranges.rangeFrom + '-' + ranges.rangeTo + '/' + queryDocs.total );
-                        self._res.json( 200, queryDocs );
-                      // Local request: simply return the doc to the asking function
-                      } else {
-                        next( null, queryDocs, self.idProperty );
-                      }
-  
-                    })
-                  })
-
-                // It's a cursor-enabled call: return it
-                } else {
-                  var cursor = queryDocs;
- 
-                  // Make a wrapper around cursor.next(), so that
-                  // anything that comes back from it (except `null`) is
-                  // fed through `_extrapolateDocAndCast()` and `_prepareBeforeSend()`
-                  var originalNext = cursor.next;
-                  cursor.next = function( cb ) {
-
-                    originalNext.call( cursor, function( err, fullDoc ) {
-                      self._sendErrorOnErr( err, cb, function(){
-
-                        if( fullDoc === null ){
-                          cb( null, null );
-                        } else {
-
-                          self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
-                            self._sendErrorOnErr( err, next, function(){
-
-                              self._castDoc( doc, function( err, doc) {
+          self.searchSchema.castAndParamsAndValidate(  filters, errors, { onlyObjectValues: true }, function( err ){
+            self._sendErrorOnErr( err, next, function(){
+              // Errors in casting: give up, run away
+              if( errors.length ){
+                self._sendError( next, new self.BadRequestError( { errors: errors } ) );
+              } else {
+    
+                self.driverGetDbQuery( params, body, options, function( err, queryDocs ){
+                  self._sendErrorOnErr( err, next, function(){
+    
+                    // It's a normal, cursor-less call
+                    if( ! options.cursor ){
+    
+                      self._extrapolateDocAnd_castDocAndprepareBeforeSendAll( params, body, options, queryDocs, function( err ){
+                        self._sendErrorOnErr( err, next, function(){
+    
+                          // Remote request: set headers, and send the doc back (if echo is on)
+                          if( self.remote ){
+                            self._res.setHeader('Content-Range', 'items ' + ranges.rangeFrom + '-' + ranges.rangeTo + '/' + queryDocs.total );
+                            self._res.json( 200, queryDocs );
+                          // Local request: simply return the doc to the asking function
+                          } else {
+                            next( null, queryDocs, self.idProperty );
+                          }
+      
+                        })
+                      })
+    
+                    // It's a cursor-enabled call: return it
+                    } else {
+                      var cursor = queryDocs;
+     
+                      // Make a wrapper around cursor.next(), so that
+                      // anything that comes back from it (except `null`) is
+                      // fed through `_extrapolateDocAndCast()` and `_prepareBeforeSend()`
+                      var originalNext = cursor.next;
+                      cursor.next = function( cb ) {
+    
+                        originalNext.call( cursor, function( err, fullDoc ) {
+                          self._sendErrorOnErr( err, cb, function(){
+    
+                            if( fullDoc === null ){
+                              cb( null, null );
+                            } else {
+    
+                              self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                 self._sendErrorOnErr( err, next, function(){
-
-                                  self.prepareBeforeSend( doc, function( err, doc ){
-                                    self._sendErrorOnErr( err, cb, function(){
-                                      cb( null, doc );
-                                    });
-                                  });
-                                })
-                              })
-
-                            });
+    
+                                  self._castDoc( doc, function( err, doc) {
+                                    self._sendErrorOnErr( err, next, function(){
+    
+                                      self.prepareBeforeSend( doc, function( err, doc ){
+                                        self._sendErrorOnErr( err, cb, function(){
+                                          cb( null, doc );
+                                        });
+                                      });
+                                    })
+                                  })
+    
+                                });
+                              });
+                            }
+    
                           });
-                        }
+                        });
+                      }
+                         
+                      next( null, cursor );
+                    }
+    
+                  })
+    
+    
+    
+    
+                });
+              }
 
-                      });
-                    });
-                  }
-                     
-                  next( null, cursor );
-                }
-
-              })
+            }) // Err
+          })
 
 
-
-
-            });
-          }
         }
+
       })
     })
 
@@ -1688,14 +1699,20 @@ Store.MassDelete = function( options, next ){
   var request = new this();
 
   // Cast filters
-  request.searchSchema.castAndParams( filters, errors, { onlyObjectValues: true }  );
-  if( errors.length != 0 ){
-    request._sendError( next, new request.BadRequestError( { errors: errors } ) );
-  } else {
+  request.searchSchema.castAndParamsAndValidate( filters, errors, { onlyObjectValues: true }, function( err ){
+    if( err ){
+      next( err );
+    } else {
 
-     // Actually run the mass delete
-     request.driverAPIDbMassDelete( {}, {}, options, next );
-  }
+      if( errors.length != 0 ){
+        request._sendError( next, new request.BadRequestError( { errors: errors } ) );
+      } else {
+
+        // Actually run the mass delete
+        request.driverAPIDbMassDelete( {}, {}, options, next );
+      }
+    }
+  })
 
 }
 
@@ -1714,14 +1731,20 @@ Store.MassUpdate = function( body, options, next ){
   var request = new this();
 
   // Cast filters
-  request.searchSchema.castAndParams( filters, errors, { onlyObjectValues: true }  );
-  if( errors.length != 0 ){
-    request._sendError( next, new request.BadRequestError( { errors: errors } ) );
-  } else {
+  request.searchSchema.castAndParamsAndValidate( filters, errors, { onlyObjectValues: true }, function( err ){
+    if( err ){
+      next( err );
+    } else {
 
-     // Actually run the mass delete
-     request.driverAPIDbMassUpdate( {}, body, options, next );
-  }
+      if( errors.length != 0 ){
+        request._sendError( next, new request.BadRequestError( { errors: errors } ) );
+      } else {
+        // Actually run the mass delete
+        request.driverAPIDbMassUpdate( {}, body, options, next );
+      }
+    }
+
+  })
 
 }
 
