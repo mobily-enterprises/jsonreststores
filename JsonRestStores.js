@@ -219,11 +219,6 @@ var Store = declare( null,  {
   // ****************************************************
 
 
-  _clone: function( obj ){
-    return  JSON.parse( JSON.stringify( obj ) );
-  },
-
-
   _extrapolateDocAnd_castDocAndprepareBeforeSendAll: function( params, body, options, docs, cb ){
 
     var self = this;
@@ -268,46 +263,50 @@ var Store = declare( null,  {
     return this.paramIds[ this.paramIds.length -1 ];
   },
 
-
-  
-
   // Check that paramsId are actually legal IDs using
   // paramsSchema
-  _checkParamIds: function( params, body, errors, skipIdProperty ){
+  _checkParamIds: function( params, body, skipIdProperty, next ){
 
     var self = this;
-    var fakeRecord = {}, fakeSchema = {}, fakeSchemaDef = {}, castOptions = {};
+    var fakeRecord = {};
+    var errors = [];
 
     // This shouldn't happen
-    if( self.paramIds.length === 0 ) return;
+    if( self.paramIds.length === 0 ) return next( null );
 
     // This is to optimise a little: if there is only
     // one self.paramIds and skipIdProperty is on,
     // the resulting fakeRecord would be empty and
     // this would be a big waste of time
-    if( self.paramIds.length === 1 && skipIdProperty ) return;
+    if( self.paramIds.length === 1 && skipIdProperty ) return next( null );
 
     // Make up the fake schema definition, based on the paramIds of the "real" schema
+    // (In the meantime, also check that ALL paramIds are indeed required)
     self.paramIds.forEach( function(k ) {
       if( typeof( self.schema.structure[ k ] ) === 'undefined' ){
         throw new Error( 'This paramId must be in schema: ' + k);
-
       } else {
-
         if( !( skipIdProperty && k == self.idProperty ) ){
-          fakeSchemaDef[ k ] = self.schema.structure[ k ];
-          fakeSchemaDef[ k ].required = true;
-          if( typeof( params[ k ]) !== 'undefined' ){  fakeRecord[ k ] = params[ k ]; }
+
+          // Copy values over from params to fakeRecord. If undefined,
+          // raise an error (unless it's dealing with idProperty and it needs to be skipped)
+          if( typeof( params[ k ] ) !== 'undefined' ){
+            fakeRecord[ k ] = params[ k ];
+          } else {
+            if( !( skipIdProperty && k == self.idProperty ) ){
+              errors.push( { field: k, message: 'Field required in the URL: ' + k, mustChange: true } ); 
+            }
+          }
         }
       }
     });
 
-    // Make up the fake schema
-    // TODO: See if we should pass self.schema.options as second parameter too
-    fakeSchema = new self.schema.constructor( fakeSchemaDef );
+    // If one of the key fields was missing, puke back
+    if( errors.length ) return next( new self.BadRequestError( { errors: errors } ) );
 
-    // Apply the fake schema (just paramIds) to the fake record (just the paramIds values)
-    fakeSchema.castAndParamsAndValidate( fakeRecord, errors, function( err ){
+    // Apply the schema (just paramIds) to the fake record (`onlyObjectValues` will ensure
+    // that only the param IDs will be checked)
+    self.schema.validate( fakeRecord, { onlyObjectValues: true }, function( err, fakeRecord, errors ){
 
       if( err ){
         next( err );
@@ -322,11 +321,10 @@ var Store = declare( null,  {
           // other store calls will have ready-to-use cast
           // elements in `params` and `body`
           self.paramIds.forEach( function( k ) {
-            if( typeof( fakeRecord[ k ] ) !== 'undefined' ){
-              params[ k ] = fakeRecord[ k ];
-              body[ k ] = fakeRecord[ k ];
-            }
+            params[ k ] = fakeRecord[ k ];
+            body[ k ] = fakeRecord[ k ];
           });
+          next( null );
         }
       }
     });
@@ -335,12 +333,11 @@ var Store = declare( null,  {
 
   _castDoc: function( doc, next ){
 
-    var errors = [];
     var self = this;
 
     // Cast the values. This is a relaxed check: if a field is missing, it won't
     // complain. This way, applications won't start failing when adding fields
-    self.schema.castAndParamsAndValidate( doc, errors, { onlyObjectValues: true }, function( err ) {
+    self.schema.validate( doc, { onlyObjectValues: true }, function( err, doc, errors ) {
       if( err ){
         next( err );
       } else {
@@ -566,7 +563,6 @@ var Store = declare( null,  {
   _makePost: function( params, body, options, next ){
 
     var self = this;
-    var errors = [];
     var body;
 
     if( typeof( next ) !== 'function' ) next = function(){};
@@ -577,136 +573,132 @@ var Store = declare( null,  {
       return;
     }
 
-    // Check the IDs. If there is a problem, it means an ID is broken:
-    // return a BadRequestError
-    self._checkParamIds( params, body, errors, true );
-    if( errors.length ){
-      self._sendError( next, new self.BadRequestError( { errors: errors }  ) );
-      return;
-    }
- 
-
-  
-    self.prepareBodyPost( body, function( err, body ){
+    // Check the IDs
+    self._checkParamIds( params, body, true, function( err ){  
       self._sendErrorOnErr( err, next, function(){
- 
-        self.schema.castAndParamsAndValidate( body, errors, { notRequired: [ self.idProperty ],skipCast: [ self.idProperty ]  }, function( err ){
+
+        self.prepareBodyPost( body, function( err, body ){
           self._sendErrorOnErr( err, next, function(){
-    
-            if( errors.length ){
-              self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
-            } else {
-    
-              // Actually check permissions
-              self.checkPermissionsPost( params, body, options, function( err, granted ){
-                self._sendErrorOnErr( err, next, function(){
-    
-                  if( ! granted ){
-                    self._sendError( next, new self.ForbiddenError() );
-                  } else {
-    
-                    // Clean up body from things that are not to be submitted
-                    //if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
-                    self.schema.cleanup( body, 'doNotSave' );
-    
-                    self.schema.makeId( body, function( err, generatedId){
-                      self._sendErrorOnErr( err, next, function(){
-    
-                        self.driverPostDbInsertNoId( params, body, options, generatedId, function( err, fullDoc ){
+     
+            var skipParamsObject = {};
+            skipParamsObject[ self.idProperty ] = [ 'required '];
+            self.schema.validate( body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, body, errors ){
+              self._sendErrorOnErr( err, next, function(){
+        
+                if( errors.length ){
+                  self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
+                } else {
+        
+                  // Actually check permissions
+                  self.checkPermissionsPost( params, body, options, function( err, granted ){
+                    self._sendErrorOnErr( err, next, function(){
+        
+                      if( ! granted ){
+                        self._sendError( next, new self.ForbiddenError() );
+                      } else {
+        
+                        // Clean up body from things that are not to be submitted
+                        //if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                        self.schema.cleanup( body, 'doNotSave' );
+        
+                        self.schema.makeId( body, function( err, generatedId){
                           self._sendErrorOnErr( err, next, function(){
-    
-                            self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
+        
+                            self.driverPostDbInsertNoId( params, body, options, generatedId, function( err, fullDoc ){
                               self._sendErrorOnErr( err, next, function(){
-    
-                                self._castDoc( doc, function( err, doc) {
+        
+                                self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                   self._sendErrorOnErr( err, next, function(){
-                                
-                                    // Remote request: set headers, and send the doc back (if echo is on)
-                                    if( self.remote ){
         
-                                      // Set the Location header if it was a remote request
-                                      self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
-                                      if( self.echoAfterPost ){
-        
-                                        self.prepareBeforeSend( doc, function( err, doc ){
-                                          self._sendErrorOnErr( err, next, function(){
-        
+                                    self._castDoc( doc, function( err, doc) {
+                                      self._sendErrorOnErr( err, next, function(){
+                                    
+                                        // Remote request: set headers, and send the doc back (if echo is on)
+                                        if( self.remote ){
+            
+                                          // Set the Location header if it was a remote request
+                                          self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
+                                          if( self.echoAfterPost ){
+            
+                                            self.prepareBeforeSend( doc, function( err, doc ){
+                                              self._sendErrorOnErr( err, next, function(){
+            
+                                                self.afterPost( params, body, options, doc, fullDoc, function( err ){
+                                                  self._sendErrorOnErr( err, next, function(){
+            
+                                                    self._res.json( 201, doc );
+                                                  }) // err
+                                                }) // self.afterPost
+            
+                                               }) // err
+                                            }) // self.prepareBeforeSend
+            
+                                          } else {
+            
                                             self.afterPost( params, body, options, doc, fullDoc, function( err ){
                                               self._sendErrorOnErr( err, next, function(){
-        
-                                                self._res.json( 201, doc );
-                                              }) // err
-                                            }) // self.afterPost
-        
-                                           }) // err
-                                        }) // self.prepareBeforeSend
-        
-                                      } else {
-        
-                                        self.afterPost( params, body, options, doc, fullDoc, function( err ){
-                                          self._sendErrorOnErr( err, next, function(){
-        
-                                            self._res.send( 201, '' );
-        
-                                          });
-                                        });
-        
-                                      }
-        
-                                    // Local request: simply return the doc to the asking function
-                                    } else {
-        
-                                      self.prepareBeforeSend( doc, function( err, doc ){
-                                        self._sendErrorOnErr( err, next, function(){
-        
-                                          self.afterPost( params, body, options, doc, fullDoc, function( err ){
+            
+                                                self._res.send( 201, '' );
+            
+                                              });
+                                            });
+            
+                                          }
+            
+                                        // Local request: simply return the doc to the asking function
+                                        } else {
+            
+                                          self.prepareBeforeSend( doc, function( err, doc ){
                                             self._sendErrorOnErr( err, next, function(){
-        
-                                              next( null, doc, self.idProperty );
-        
+            
+                                              self.afterPost( params, body, options, doc, fullDoc, function( err ){
+                                                self._sendErrorOnErr( err, next, function(){
+            
+                                                  next( null, doc, self.idProperty );
+            
+                                                })
+                                              })
+            
                                             })
                                           })
+                                
+                                        } 
+            
+                                   
+                                      }) // err
+                                    }) // self._castDoc
+                                  });
+                                }) // self.extrapolateDoc
+            
         
-                                        })
-                                      })
-                            
-                                    } 
+                              }) // err
+                            }) // driverPostDbInsertNoId
         
-                               
-                                  }) // err
-                                }) // self._castDoc
-                              });
-                            }) // self.extrapolateDoc
-        
-    
                           }) // err
-                        }) // driverPostDbInsertNoId
-    
-                      }) // err
-                    }) // self.makeId
-    
-                  } // granted
-    
-                }) // err
-              }) // checkPermissionsPost
-    
-            } // errors.length
-    
-          }) // err
-        }) // validate()
-  
+                        }) // self.makeId
+        
+                      } // granted
+        
+                    }) // err
+                  }) // checkPermissionsPost
+        
+                } // errors.length
+        
+              }) // err
+            }) // validate()
+      
+          })
+        })
+
       })
     })
-
 
   },
 
   _makePostAppend: function( params, body, options, next ){
 
     var self = this;
-    var errors = [];
     var body;
-
 
     if( typeof( next ) !== 'function' ) next = function(){};
 
@@ -715,147 +707,141 @@ var Store = declare( null,  {
       self._sendError( next, new self.NotImplementedError( ) );
       return;
     }
-   
-    // Check the IDs. If there is a problem, it means an ID is broken:
-    // return a BadRequestError
-    self._checkParamIds( params, body, errors );
-    if( errors.length ){
-      self._sendError( next, new self.BadRequestError( { errors: errors } ) );
-      return;
-    }
-   
-    //body = self._clone( req.body );
-
-    //// Do schema cast and check
-    self.schema.castAndParamsAndValidate(  body, errors, function( err ) {
+  
+    // Check the IDs
+    self._checkParamIds( params, body, false, function( err ){  
       self._sendErrorOnErr( err, next, function(){
+    
+        self.schema.validate(  body, function( err, body, errors ) {
+          self._sendErrorOnErr( err, next, function(){
+    
+            if( errors.length ){
+              self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
+            } else {
 
-        if( errors.length ){
-          self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
-        } else {
-          // Fetch the doc
-          self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
-            self._sendErrorOnErr( err, next, function(){
-
-
-              self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
+              // Fetch the doc
+              self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
                 self._sendErrorOnErr( err, next, function(){
-
-                  self._castDoc( doc, function( err, doc) {
+    
+    
+                  self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                     self._sendErrorOnErr( err, next, function(){
-
-                      // Actually check permissions
-                      self.checkPermissionsPostAppend( params, body, options, doc, fullDoc, function( err, granted ){
+    
+                      self._castDoc( doc, function( err, doc) {
                         self._sendErrorOnErr( err, next, function(){
     
-                          if( ! granted ){
-                            self._sendError( next, new self.ForbiddenError() );
-                          } else {
-    
-                            // Clean up body from things that are not to be submitted
-                            //if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
-                            self.schema.cleanup( body, 'doNotSave' );
-    
-                            // Paranoid check
-                            // Make sure that the id property in the body does match
-                            // the one passed as last parameter in the list of IDs
-                            body[ self.idProperty ] = params[ self.idProperty ];
-    
-                            self.driverPostDbAppend( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
-                              self._sendErrorOnErr( err, next, function(){
-     
-                                self.extrapolateDoc( params, body, options, fullDocAfter, function( err, doc) {
+                          // Actually check permissions
+                          self.checkPermissionsPostAppend( params, body, options, doc, fullDoc, function( err, granted ){
+                            self._sendErrorOnErr( err, next, function(){
+        
+                              if( ! granted ){
+                                self._sendError( next, new self.ForbiddenError() );
+                              } else {
+        
+                                // Clean up body from things that are not to be submitted
+                                //if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                                self.schema.cleanup( body, 'doNotSave' );
+        
+                                // Paranoid check
+                                // Make sure that the id property in the body does match
+                                // the one passed as last parameter in the list of IDs
+                                body[ self.idProperty ] = params[ self.idProperty ];
+        
+                                self.driverPostDbAppend( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
                                   self._sendErrorOnErr( err, next, function(){
-
-                                    self._castDoc( fullDocAfter, function( err, docAfter) {
+         
+                                    self.extrapolateDoc( params, body, options, fullDocAfter, function( err, doc) {
                                       self._sendErrorOnErr( err, next, function(){
     
-                                        // Remote request: set headers, and send the doc back (if echo is on)
-                                        if( self.remote ){
-                                          if( self.echoAfterPostAppend ){
+                                        self._castDoc( fullDocAfter, function( err, docAfter) {
+                                          self._sendErrorOnErr( err, next, function(){
         
-                                             self.prepareBeforeSend( docAfter, function( err, docAfter ){
-                                               self._sendErrorOnErr( err, next, function(){
-        
+                                            // Remote request: set headers, and send the doc back (if echo is on)
+                                            if( self.remote ){
+                                              if( self.echoAfterPostAppend ){
+            
+                                                 self.prepareBeforeSend( docAfter, function( err, docAfter ){
+                                                   self._sendErrorOnErr( err, next, function(){
+            
+                                                      self.afterPostAppend( params, body, options, doc, fullDoc, docAfter, fullDocAfter, function( err ){
+                                                        self._sendErrorOnErr( err, next, function(){
+            
+                                                          self._res.json( 200, docAfter );
+            
+                                                        });
+                                                      });
+                                                   })
+                                                 })
+                                              } else { 
+            
+                                                self.afterPostAppend( params, body, options, doc, fullDoc, docAfter, fullDocAfter, function( err ){
+                                                  self._sendErrorOnErr( err, next, function(){
+            
+                                                    self._res.send( 204, '' );
+            
+                                                  });
+                                                });
+            
+                                              }
+            
+                                            // Local request: simply return the doc to the asking function
+                                            } else {
+            
+                                              self.prepareBeforeSend( docAfter, function( err, docAfter ){
+                                                self._sendErrorOnErr( err, next, function(){
+            
                                                   self.afterPostAppend( params, body, options, doc, fullDoc, docAfter, fullDocAfter, function( err ){
                                                     self._sendErrorOnErr( err, next, function(){
-        
-                                                      self._res.json( 200, docAfter );
-        
-                                                    });
-                                                  });
-                                               })
-                                             })
-                                          } else { 
-        
-                                            self.afterPostAppend( params, body, options, doc, fullDoc, docAfter, fullDocAfter, function( err ){
-                                              self._sendErrorOnErr( err, next, function(){
-        
-                                                self._res.send( 204, '' );
-        
-                                              });
-                                            });
-        
-                                          }
-        
-                                        // Local request: simply return the doc to the asking function
-                                        } else {
-        
-                                          self.prepareBeforeSend( docAfter, function( err, docAfter ){
-                                            self._sendErrorOnErr( err, next, function(){
-        
-                                              self.afterPostAppend( params, body, options, doc, fullDoc, docAfter, fullDocAfter, function( err ){
-                                                self._sendErrorOnErr( err, next, function(){
-        
-                                                  next( null, docAfter, self.idProperty );
-        
+            
+                                                      next( null, docAfter, self.idProperty );
+            
+                                                    })
+                                                  })
+            
                                                 })
                                               })
-        
-                                            })
+                                            }
+            
                                           })
-                                        }
+                                        });
+    
+                                      });
+                                    })
+    
         
-                                      })
-                                    });
-
-                                  });
-                                })
-
-    
-                              }) // err
-                            }) // driverPostDbAppend
-    
-                          } // granted
-    
-    
-                        })
+                                  }) // err
+                                }) // driverPostDbAppend
+        
+                              } // granted
+        
+        
+                            })
+                          }) 
+        
+                        }) 
                       }) 
     
-                    }) 
+                    })
                   }) 
-
-                })
-              }) 
-
-            }) // err
-          }) // checkPermissionsPostAppend
-   
-        } // errors.length
-
+    
+                }) // err
+              }) // checkPermissionsPostAppend
+       
+            } // errors.length
+    
+          }) // err
+        }) // self.validate
+    
       }) // err
     }) // self.validate
-
   },
 
 
   _makePut: function( params, body, options, next ){
 
     var self = this;
-    var errors = [];
     var overwrite;
     var body;
-
 
     if( typeof( next ) !== 'function' ) next = function(){};
 
@@ -865,237 +851,235 @@ var Store = declare( null,  {
       return;
     }
    
-    // Check the IDs. If there is a problem, it means an ID is broken:
-    // return a BadRequestError
-    self._checkParamIds( params, body, errors );
-    if( errors.length ){
-      self._sendError( next, new self.BadRequestError( { errors: errors }  ) );
-      return;
-    }
-    
-    self.schema.castAndParamsAndValidate(  body, errors, function( err ) {
+    // Check the IDs.
+    self._checkParamIds( params, body, false, function( err ){  
       self._sendErrorOnErr( err, next, function(){
 
-        if( errors.length ){
-          self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
-        } else {
-
-          // Fetch the doc
-          self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
-            self._sendErrorOnErr( err, next, function(){
-  
- 
-              // Check the 'overwrite' option
-              if( typeof( options.overwrite ) !== 'undefined' ){
-                if( fullDoc && ! options.overwrite ){
-                  self._sendError( next, new self.PreconditionFailedError() );
-                } else if( !fullDoc && options.overwrite ) {
-                  self._sendError( next, new self.PreconditionFailedError() );
-                } else {
-                  continueAfterFetch();
-                }
-              } else { 
-                continueAfterFetch();
-              }
+        self.schema.validate(  body, function( err, body, errors ) {
+          self._sendErrorOnErr( err, next, function(){
     
-              function continueAfterFetch(){
-
-                // It's a NEW doc: it will need to be an insert, _and_ permissions will be
-                // done on inputted data
-                if( ! fullDoc ){
-                
-                  // Actually check permissions
-                  self.checkPermissionsPutNew( params, body, options, function( err, granted ){
-                    self._sendErrorOnErr( err, next, function(){
-
-
-                      if( ! granted ){
-                        self._sendError( next, new self.ForbiddenError() );
-                      } else {
-
-                        // Clean up body from things that are not to be submitted
-                        // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
-                        self.schema.cleanup( body, 'doNotSave' );
-
-                        // Paranoid check
-                        // Make sure that the id property in the body does match
-                        // the one passed as last parameter in the list of IDs
-                        body[ self.idProperty ] = params[ self.idProperty ];
-
-                        self.driverPutDbInsert( params, body, options, function( err, fullDoc ){
-                          self._sendErrorOnErr( err, next, function(){
-
-                            self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
-                              self._sendErrorOnErr( err, next, function(){
-
-                                self._castDoc( doc, function( err, doc) {
-                                  self._sendErrorOnErr( err, next, function(){
-
-                                    // Remote request: set headers, and send the doc back (if echo is on)
-                                    if( self.remote ){
+            if( errors.length ){
+              self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
+            } else {
     
-                                      // Set the Location header if it was a remote request
-                                      self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
-                                      if( self.echoAfterPutNew ){
+              // Fetch the doc
+              self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
+                self._sendErrorOnErr( err, next, function(){
+      
+                  // Check the 'overwrite' option
+                  if( typeof( options.overwrite ) !== 'undefined' ){
+                    if( fullDoc && ! options.overwrite ){
+                      self._sendError( next, new self.PreconditionFailedError() );
+                    } else if( !fullDoc && options.overwrite ) {
+                      self._sendError( next, new self.PreconditionFailedError() );
+                    } else {
+                      continueAfterFetch();
+                    }
+                  } else { 
+                    continueAfterFetch();
+                  }
+        
+                  function continueAfterFetch(){
     
-                                        self.prepareBeforeSend( doc, function( err, doc ){
-                                          self._sendErrorOnErr( err, next, function(){
-    
-                                            self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
-                                              self._sendErrorOnErr( err, next, function(){
-    
-                                                res.json( 201, doc );
-                                              });
-                                            });
-                                          })
-                                        })
-                                      } else {
-    
-                                        self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
-                                          self._sendErrorOnErr( err, next, function(){
-    
-                                            res.send( 201, '' );
-    
-                                          });
-                                        });
-                                      }
-    
-                                    // Local request: simply return the doc to the asking function
-                                    } else {
-                                      self.prepareBeforeSend( doc, function( err, doc ){
-                                        self._sendErrorOnErr( err, next, function(){
-    
-                                          self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
-                                            self._sendErrorOnErr( err, next, function(){
-    
-                                              next( null, doc, self.idProperty );
-    
-                                            })
-                                          })
-    
-                                        })
-                                      })
-                                    }
-    
-                                  }) // err
-                                }) // self._castDocs
-                              })
-                            })
-    
-                        
-                          }) // err
-                        }) // self.extrapolateDoc
-
-                      } // granted
-
-                    }) // err
-                  }) // checkPermissionsPutNew
-
-
-                // It's an EXISTING doc: it will need to be an update, _and_ permissions will be
-                // done on inputted data AND existing doc
-                } else {
-
-                  self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
-                    self._sendErrorOnErr( err, next, function(){
-
-                      self._castDoc( doc, function( err, doc) {
+                    // It's a NEW doc: it will need to be an insert, _and_ permissions will be
+                    // done on inputted data
+                    if( ! fullDoc ){
+                    
+                      // Actually check permissions
+                      self.checkPermissionsPutNew( params, body, options, function( err, granted ){
                         self._sendErrorOnErr( err, next, function(){
-
-                          // Actually check permissions
-                          self.checkPermissionsPutExisting( params, body, options, doc, fullDoc, function( err, granted ){
-                            self._sendErrorOnErr( err, next, function(){
     
-                              if( ! granted ){
-                                self._sendError( next, new self.ForbiddenError() );
-                              } else {
     
-                                // Clean up body from things that are not to be submitted
-                                // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
-                                self.schema.cleanup( body, 'doNotSave' );
+                          if( ! granted ){
+                            self._sendError( next, new self.ForbiddenError() );
+                          } else {
     
-                                self.driverPutDbUpdate( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
+                            // Clean up body from things that are not to be submitted
+                            // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                            self.schema.cleanup( body, 'doNotSave' );
+    
+                            // Paranoid check
+                            // Make sure that the id property in the body does match
+                            // the one passed as last parameter in the list of IDs
+                            body[ self.idProperty ] = params[ self.idProperty ];
+    
+                            self.driverPutDbInsert( params, body, options, function( err, fullDoc ){
+                              self._sendErrorOnErr( err, next, function(){
+    
+                                self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                   self._sendErrorOnErr( err, next, function(){
-
-                                    self.extrapolateDoc( params, body, options, fullDocAfter, function( err, docAfter ) {
+    
+                                    self._castDoc( doc, function( err, doc) {
                                       self._sendErrorOnErr( err, next, function(){
-
-                                        self._castDoc( docAfter, function( err, docAfter ) {
-                                          self._sendErrorOnErr( err, next, function(){
+    
+                                        // Remote request: set headers, and send the doc back (if echo is on)
+                                        if( self.remote ){
         
-                                            // Remote request: set headers, and send the doc back (if echo is on)
-                                            if( self.remote ){
+                                          // Set the Location header if it was a remote request
+                                          self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
+                                          if( self.echoAfterPutNew ){
         
-                                              // Set the Location header if it was a remote request
-                                              self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
+                                            self.prepareBeforeSend( doc, function( err, doc ){
+                                              self._sendErrorOnErr( err, next, function(){
         
-                                              if( self.echoAfterPutExisting ){
-        
-                                                self.prepareBeforeSend( docAfter, function( err, docAfter ){
+                                                self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
                                                   self._sendErrorOnErr( err, next, function(){
         
-                                                    self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite, function( err ) {
-                                                      self._sendErrorOnErr( err, next, function(){
-        
-                                                        self._res.json( 200, docAfter );
-        
-                                                      });
-                                                    });
-        
-                                                  })
-                                                })
-                                              } else {
-        
-                                                self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite, function( err ) {
-                                                  self._sendErrorOnErr( err, next, function(){
-        
-                                                    self._res.send( 200, '' );
-                                                    //res.send( 204, 'OK' );
-        
+                                                    res.json( 201, doc );
                                                   });
                                                 });
-                                              }
+                                              })
+                                            })
+                                          } else {
         
-                                            // Local request: simply return the doc to the asking function
-                                            } else {
-                                              self.prepareBeforeSend( docAfter, function( err, docAfter ){
+                                            self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
+                                              self._sendErrorOnErr( err, next, function(){
+        
+                                                res.send( 201, '' );
+        
+                                              });
+                                            });
+                                          }
+        
+                                        // Local request: simply return the doc to the asking function
+                                        } else {
+                                          self.prepareBeforeSend( doc, function( err, doc ){
+                                            self._sendErrorOnErr( err, next, function(){
+        
+                                              self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
                                                 self._sendErrorOnErr( err, next, function(){
         
                                                   next( null, doc, self.idProperty );
+        
                                                 })
                                               })
-                                            }
         
-                                          }) // err
-                                        }) 
-
-                                      })
-                                    })
-
+                                            })
+                                          })
+                                        }
+        
+                                      }) // err
+                                    }) // self._castDocs
+                                  })
+                                })
+        
+                            
+                              }) // err
+                            }) // self.extrapolateDoc
     
-                                  }) // err
-                                }) // self.driverPutDbUpdate
-    
-                              } // granted
-    
-                            }) // err
-                          }) // self.checkPermissionsPutExisting
+                          } // granted
     
                         }) // err
-                      }) 
-
-                    })
-                  })
-
-
-                }
-
-              } // function continueAfterFetch()
+                      }) // checkPermissionsPutNew
     
-            }) // err
-          }) // driverAllDbFetch
-
-        } // if errors.length  
+    
+                    // It's an EXISTING doc: it will need to be an update, _and_ permissions will be
+                    // done on inputted data AND existing doc
+                    } else {
+    
+                      self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
+                        self._sendErrorOnErr( err, next, function(){
+    
+                          self._castDoc( doc, function( err, doc) {
+                            self._sendErrorOnErr( err, next, function(){
+    
+                              // Actually check permissions
+                              self.checkPermissionsPutExisting( params, body, options, doc, fullDoc, function( err, granted ){
+                                self._sendErrorOnErr( err, next, function(){
+        
+                                  if( ! granted ){
+                                    self._sendError( next, new self.ForbiddenError() );
+                                  } else {
+        
+                                    // Clean up body from things that are not to be submitted
+                                    // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                                    self.schema.cleanup( body, 'doNotSave' );
+        
+                                    self.driverPutDbUpdate( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
+                                      self._sendErrorOnErr( err, next, function(){
+    
+                                        self.extrapolateDoc( params, body, options, fullDocAfter, function( err, docAfter ) {
+                                          self._sendErrorOnErr( err, next, function(){
+    
+                                            self._castDoc( docAfter, function( err, docAfter ) {
+                                              self._sendErrorOnErr( err, next, function(){
+            
+                                                // Remote request: set headers, and send the doc back (if echo is on)
+                                                if( self.remote ){
+            
+                                                  // Set the Location header if it was a remote request
+                                                  self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
+            
+                                                  if( self.echoAfterPutExisting ){
+            
+                                                    self.prepareBeforeSend( docAfter, function( err, docAfter ){
+                                                      self._sendErrorOnErr( err, next, function(){
+            
+                                                        self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite, function( err ) {
+                                                          self._sendErrorOnErr( err, next, function(){
+            
+                                                            self._res.json( 200, docAfter );
+            
+                                                          });
+                                                        });
+            
+                                                      })
+                                                    })
+                                                  } else {
+            
+                                                    self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite, function( err ) {
+                                                      self._sendErrorOnErr( err, next, function(){
+            
+                                                        self._res.send( 200, '' );
+                                                        //res.send( 204, 'OK' );
+            
+                                                      });
+                                                    });
+                                                  }
+            
+                                                // Local request: simply return the doc to the asking function
+                                                } else {
+                                                  self.prepareBeforeSend( docAfter, function( err, docAfter ){
+                                                    self._sendErrorOnErr( err, next, function(){
+            
+                                                      next( null, doc, self.idProperty );
+                                                    })
+                                                  })
+                                                }
+            
+                                              }) // err
+                                            }) 
+    
+                                          })
+                                        })
+    
+        
+                                      }) // err
+                                    }) // self.driverPutDbUpdate
+        
+                                  } // granted
+        
+                                }) // err
+                              }) // self.checkPermissionsPutExisting
+        
+                            }) // err
+                          }) 
+    
+                        })
+                      })
+    
+    
+                    }
+    
+                  } // function continueAfterFetch()
+        
+                }) // err
+              }) // driverAllDbFetch
+    
+            } // if errors.length  
+    
+          }) // err 
+        }) // validateFunction
 
       }) // err 
     }) // validateFunction
@@ -1105,7 +1089,6 @@ var Store = declare( null,  {
   _makeGetQuery: function( params, body, options, next ){
 
     var self = this;
-    var errors = [];
     var sortBy, range, filters;
 
 
@@ -1126,135 +1109,124 @@ var Store = declare( null,  {
 
     // Check the IDs. If there is a problem, it means an ID is broken:
     // return a BadRequestError
-    self._checkParamIds( params, body, errors, true );
-    if( errors.length ){
-      self._sendError( next, new self.BadRequestError( { errors: errors } ) );
-      return;
-    }
-
-
-    self.checkPermissionsGetQuery( params, body, options, function( err, granted ){
+    // Check the IDs
+    self._checkParamIds( params, body, true, function( err ){  
       self._sendErrorOnErr( err, next, function(){
-
-        if( ! granted ){
-          self._sendError( next, new self.ForbiddenError() );
-        } else {
-
- 
-          // Set reasonable (good) defaults
-          sortBy = options.sortBy;
-          ranges = options.ranges;
-          filters = options.filters;
-					if( typeof( ranges ) === 'undefined' || ! ranges ) ranges = options.ranges = {};
-          if( typeof( ranges.rangeFrom ) === 'undefined' ) ranges.rangeFrom = 0;
-          if( typeof( ranges.rangeTo )   === 'undefined' ) ranges.rangeTo   = 0;
-          if( typeof( filters) === 'undefined' ) filters = {};
-
-
-          // This replicates what schema.castAndParams() would do, but deleting
-          // non-castable search fields rather than giving out errors
-          //var originalFilters = self._clone( filters );
-          //var failedCasts = self.searchSchema._cast( filters, { onlyObjectValues: true }  );
-          //Object.keys( failedCasts ).forEach( function( fieldName ){
-          //  delete( filters[ fieldName ] ); 
-          //});
-
-          //self.searchSchema._params( filters, originalFilters, errors, { onlyObjectValues: true }, failedCasts );
-
-          self.searchSchema.castAndParamsAndValidate(  filters, errors, { onlyObjectValues: true }, function( err ){
-            self._sendErrorOnErr( err, next, function(){
-              // Errors in casting: give up, run away
-              if( errors.length ){
-                self._sendError( next, new self.BadRequestError( { errors: errors } ) );
-              } else {
     
-                self.driverGetDbQuery( params, body, options, function( err, queryDocs ){
-                  self._sendErrorOnErr( err, next, function(){
+        self.checkPermissionsGetQuery( params, body, options, function( err, granted ){
+          self._sendErrorOnErr( err, next, function(){
     
-                    // It's a normal, cursor-less call
-                    if( ! options.cursor ){
+            if( ! granted ){
+              self._sendError( next, new self.ForbiddenError() );
+            } else {
     
-                      self._extrapolateDocAnd_castDocAndprepareBeforeSendAll( params, body, options, queryDocs, function( err ){
-                        self._sendErrorOnErr( err, next, function(){
-    
-                          // Remote request: set headers, and send the doc back (if echo is on)
-                          if( self.remote ){
-                            self._res.setHeader('Content-Range', 'items ' + ranges.rangeFrom + '-' + ranges.rangeTo + '/' + queryDocs.total );
-                            self._res.json( 200, queryDocs );
-                          // Local request: simply return the doc to the asking function
-                          } else {
-                            next( null, queryDocs, self.idProperty );
-                          }
-      
-                        })
-                      })
-    
-                    // It's a cursor-enabled call: return it
-                    } else {
-                      var cursor = queryDocs;
      
-                      // Make a wrapper around cursor.next(), so that
-                      // anything that comes back from it (except `null`) is
-                      // fed through `_extrapolateDocAndCast()` and `_prepareBeforeSend()`
-                      var originalNext = cursor.next;
-                      cursor.next = function( cb ) {
+              // Set reasonable (good) defaults
+              sortBy = options.sortBy;
+              ranges = options.ranges;
+              filters = options.filters;
+    					if( typeof( ranges ) === 'undefined' || ! ranges ) ranges = options.ranges = {};
+              if( typeof( ranges.rangeFrom ) === 'undefined' ) ranges.rangeFrom = 0;
+              if( typeof( ranges.rangeTo )   === 'undefined' ) ranges.rangeTo   = 0;
+              if( typeof( filters) === 'undefined' ) filters = {};
     
-                        originalNext.call( cursor, function( err, fullDoc ) {
-                          self._sendErrorOnErr( err, cb, function(){
     
-                            if( fullDoc === null ){
-                              cb( null, null );
-                            } else {
-    
-                              self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
-                                self._sendErrorOnErr( err, next, function(){
-    
-                                  self._castDoc( doc, function( err, doc) {
+              self.searchSchema.validate( filters, { onlyObjectValues: true }, function( err, filters, errors ){
+                self._sendErrorOnErr( err, next, function(){
+
+                  options.filters = filters;
+
+                  // Errors in casting: give up, run away
+                  if( errors.length ){
+                    self._sendError( next, new self.BadRequestError( { errors: errors } ) );
+                  } else {
+        
+                    self.driverGetDbQuery( params, body, options, function( err, queryDocs ){
+                      self._sendErrorOnErr( err, next, function(){
+       
+                        // It's a normal, cursor-less call
+                        if( ! options.cursor ){
+        
+                          self._extrapolateDocAnd_castDocAndprepareBeforeSendAll( params, body, options, queryDocs, function( err ){
+                            self._sendErrorOnErr( err, next, function(){
+        
+                              // Remote request: set headers, and send the doc back (if echo is on)
+                              if( self.remote ){
+                                self._res.setHeader('Content-Range', 'items ' + ranges.rangeFrom + '-' + ranges.rangeTo + '/' + queryDocs.total );
+                                self._res.json( 200, queryDocs );
+                              // Local request: simply return the doc to the asking function
+                              } else {
+                                next( null, queryDocs, self.idProperty );
+                              }
+          
+                            })
+                          })
+        
+                        // It's a cursor-enabled call: return it
+                        } else {
+                          var cursor = queryDocs;
+         
+                          // Make a wrapper around cursor.next(), so that
+                          // anything that comes back from it (except `null`) is
+                          // fed through `_extrapolateDocAndCast()` and `_prepareBeforeSend()`
+                          var originalNext = cursor.next;
+                          cursor.next = function( cb ) {
+        
+                            originalNext.call( cursor, function( err, fullDoc ) {
+                              self._sendErrorOnErr( err, cb, function(){
+        
+                                if( fullDoc === null ){
+                                  cb( null, null );
+                                } else {
+        
+                                  self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                     self._sendErrorOnErr( err, next, function(){
-    
-                                      self.prepareBeforeSend( doc, function( err, doc ){
-                                        self._sendErrorOnErr( err, cb, function(){
-                                          cb( null, doc );
-                                        });
-                                      });
-                                    })
-                                  })
-    
-                                });
+        
+                                      self._castDoc( doc, function( err, doc) {
+                                        self._sendErrorOnErr( err, next, function(){
+        
+                                          self.prepareBeforeSend( doc, function( err, doc ){
+                                            self._sendErrorOnErr( err, cb, function(){
+                                              cb( null, doc );
+                                            });
+                                          });
+                                        })
+                                      })
+        
+                                    });
+                                  });
+                                }
+        
                               });
-                            }
+                            });
+                          }
+                             
+                          next( null, cursor );
+                        }
+        
+                      })
+        
+        
+                    });
+                  }
     
-                          });
-                        });
-                      }
-                         
-                      next( null, cursor );
-                    }
-    
-                  })
+                }) // Err
+              })
     
     
+            }
     
-    
-                });
-              }
-
-            }) // Err
           })
-
-
-        }
-
+        })
+    
       })
     })
-
   },
 
 
   _makeGet: function( params, body, options, next ){
 
     var self = this;
-    var errors = [];
 
 
     if( typeof( next ) !== 'function' ) next = function(){};
@@ -1266,168 +1238,156 @@ var Store = declare( null,  {
     }
 
     // Check the IDs
-    self._checkParamIds( params, body, errors );
-
-    // There was a problem: return the errors
-    if( errors.length ){
-      self._sendError( next, new self.BadRequestError( { errors: errors } ) );
-      return;
-    }
- 
-    // Fetch the doc.
-    self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
+    self._checkParamIds( params, body, false, function( err ){  
       self._sendErrorOnErr( err, next, function(){
 
-        if( ! fullDoc ){
-          self._sendError( next, new self.NotFoundError());
-        } else {
-
-          self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
-            self._sendErrorOnErr( err, next, function(){
-
-              self._castDoc( doc, function( err, doc) {
+        // Fetch the doc.
+        self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
+          self._sendErrorOnErr( err, next, function(){
+    
+            if( ! fullDoc ){
+              self._sendError( next, new self.NotFoundError());
+            } else {
+    
+              self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                 self._sendErrorOnErr( err, next, function(){
     
-                  // Check the permissions 
-                  self.checkPermissionsGet( params, body, options, doc, fullDoc, function( err, granted ){
+                  self._castDoc( doc, function( err, doc) {
                     self._sendErrorOnErr( err, next, function(){
-    
-                      if( ! granted ){
-                        self._sendError( next, new self.ForbiddenError() ); 
-                      } else {
-                    
-    
-                        // "preparing" the doc. The same function is used by GET for collections 
-                        self.prepareBeforeSend( doc, function( err, doc ){
-                          self._sendErrorOnErr( err, next, function(){
-    
-                            self.afterGet( params, body, options, doc, fullDoc, function( err ) {
+        
+                      // Check the permissions 
+                      self.checkPermissionsGet( params, body, options, doc, fullDoc, function( err, granted ){
+                        self._sendErrorOnErr( err, next, function(){
+        
+                          if( ! granted ){
+                            self._sendError( next, new self.ForbiddenError() ); 
+                          } else {
+                        
+        
+                            // "preparing" the doc. The same function is used by GET for collections 
+                            self.prepareBeforeSend( doc, function( err, doc ){
                               self._sendErrorOnErr( err, next, function(){
-                
-                                // Remote request: set headers, and send the doc back (if echo is on)
-                                if( self.remote ){
-    
-                                  // Send "prepared" doc
-                                  self._res.json( 200, doc );
-    
-                                // Local request: simply return the doc to the asking function
-                                 } else {
-                                   next( null, doc, self.idProperty );
-                                 }
-    
-    
+        
+                                self.afterGet( params, body, options, doc, fullDoc, function( err ) {
+                                  self._sendErrorOnErr( err, next, function(){
+                    
+                                    // Remote request: set headers, and send the doc back (if echo is on)
+                                    if( self.remote ){
+        
+                                      // Send "prepared" doc
+                                      self._res.json( 200, doc );
+        
+                                    // Local request: simply return the doc to the asking function
+                                     } else {
+                                       next( null, doc, self.idProperty );
+                                     }
+        
+        
+                                  }) // err
+                                }) // self.afterGet
+        
+        
                               }) // err
-                            }) // self.afterGet
-    
-    
-                          }) // err
-                        }) // self.prepareBeforeSend
-    
-                      } // granted
-    
-                    }) // err
-                  }) // self.checkPermissionsGet
-    
-    
+                            }) // self.prepareBeforeSend
+        
+                          } // granted
+        
+                        }) // err
+                      }) // self.checkPermissionsGet
+        
+        
+                    })
+                  }) 
                 })
-              }) 
-            })
-          })
-
-        } // if self.fetchedDoc
+              })
+    
+            } // if self.fetchedDoc
+    
+          }) // err
+        }) // self.driverAllDbFetchDoc
 
       }) // err
-    }) // self.driverAllDbFetchDoc
+    })
   },
 
 
   _makeDelete: function( params, body, options, next ){
 
     var self = this;
-    var errors = [];
-
-
+    
+    
     if( typeof( next ) !== 'function' ) next = function(){};
-
-    // Check that the method is implemented
-    if( ! self.handleDelete ){
-      self._sendError( next, new self.NotImplementedError( ) );
-      return;
-    }
-
+    
     // Check the IDs
-    self._checkParamIds( params, body, errors );
- 
-    // There was a problem: return the errors
-    if( errors.length ){
-      self._sendError( next, new self.BadRequestError( { errors: errors } ) );
-      return;
-    }
-
-    // Fetch the doc.
-    self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
+    self._checkParamIds( params, body, false, function( err ){ 
       self._sendErrorOnErr( err, next, function(){
-
-        if( ! fullDoc ){
-          self._sendError( next, new self.NotFoundError());
-        } else {
-
-          self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
-            self._sendErrorOnErr( err, next, function(){
-
-              self._castDoc( doc, function( err, doc) {
+    
+        // Fetch the doc.
+        self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
+          self._sendErrorOnErr( err, next, function(){
+    
+            if( ! fullDoc ){
+              self._sendError( next, new self.NotFoundError());
+            } else {
+    
+              self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                 self._sendErrorOnErr( err, next, function(){
     
-                  // Check the permissions 
-                  self.checkPermissionsDelete( params, body, options, doc, fullDoc, function( err, granted ){
+                  self._castDoc( doc, function( err, doc) {
                     self._sendErrorOnErr( err, next, function(){
-    
-                      if( ! granted ){
-                        self._sendError( next, new self.ForbiddenError() );
-                      } else {
-                  
-    
-                        // Actually delete the document
-                        self.driverDeleteDbDelete( params, body, options, function( err ){
-                          self._sendErrorOnErr( err, next, function(){
-    
-                            self.afterDelete( params, body, options, doc, fullDoc, function( err ) {
+        
+                      // Check the permissions 
+                      self.checkPermissionsDelete( params, body, options, doc, fullDoc, function( err, granted ){
+                        self._sendErrorOnErr( err, next, function(){
+        
+                          if( ! granted ){
+                            self._sendError( next, new self.ForbiddenError() );
+                          } else {
+                      
+        
+                            // Actually delete the document
+                            self.driverDeleteDbDelete( params, body, options, function( err ){
                               self._sendErrorOnErr( err, next, function(){
-    
-                                // Remote request: send a 204 back
-                                if( self.remote ){
-                                  // Return 204 and empty contents as requested by RFC
-                                  self._res.send( 204, '' );
-    
-                                // Local request: simply return the doc's ID to the asking function
-                                } else {
-                                  next( null, doc, self.idProperty );
-                                }
-    
-                              })  // err
-                            })
-    
-                          }) // err
-                        }) // self.driverDeleteDbDelete
-    
-                      } // granted
-    
-    
+        
+                                self.afterDelete( params, body, options, doc, fullDoc, function( err ) {
+                                  self._sendErrorOnErr( err, next, function(){
+        
+                                    // Remote request: send a 204 back
+                                    if( self.remote ){
+                                      // Return 204 and empty contents as requested by RFC
+                                      self._res.send( 204, '' );
+        
+                                    // Local request: simply return the doc's ID to the asking function
+                                    } else {
+                                      next( null, doc, self.idProperty );
+                                    }
+        
+                                  })  // err
+                                })
+        
+                              }) // err
+                            }) // self.driverDeleteDbDelete
+        
+                          } // granted
+        
+        
+                        }) // err
+                      }) // self.checkPermissionsGet
+        
                     }) // err
-                  }) // self.checkPermissionsGet
+                  }) 
+                })
+              })
     
-                }) // err
-              }) 
-            })
-          })
-
-        } // if self.fetchedDoc
-
+            } // if self.fetchedDoc
+    
+          }) // err
+        }) // self.driverAllDbFetchDoc
+    
       }) // err
     }) // self.driverAllDbFetchDoc
-
   },
-
+    
 });
 
 
@@ -1687,7 +1647,6 @@ Store.Delete = function( id, options, next ){
 Store.MassDelete = function( options, next ){
 
   var self = this;
-  var errors = [];
   var sortBy, range, filters;
 
   // Initialise filters
@@ -1699,7 +1658,7 @@ Store.MassDelete = function( options, next ){
   var request = new this();
 
   // Cast filters
-  request.searchSchema.castAndParamsAndValidate( filters, errors, { onlyObjectValues: true }, function( err ){
+  request.searchSchema.validate( filters, { onlyObjectValues: true }, function( err, filters, errors ){
     if( err ){
       next( err );
     } else {
@@ -1719,7 +1678,6 @@ Store.MassDelete = function( options, next ){
 Store.MassUpdate = function( body, options, next ){
 
   var self = this;
-  var errors = [];
   var sortBy, range, filters;
 
   // Initialise filters
@@ -1731,7 +1689,7 @@ Store.MassUpdate = function( body, options, next ){
   var request = new this();
 
   // Cast filters
-  request.searchSchema.castAndParamsAndValidate( filters, errors, { onlyObjectValues: true }, function( err ){
+  request.searchSchema.validate( filters, { onlyObjectValues: true }, function( err, filters, errors ){
     if( err ){
       next( err );
     } else {
