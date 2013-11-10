@@ -1,6 +1,14 @@
 JsonRestStores
 ==============
 
+# NOTE: I AM REWRITING THIS MODULE AND DOCS ARE 100% OUT OF DATE
+
+The title says it all. Please do NOT use this module until the 15th of November 2013, as it has evolved enormously over the last little while and I still haven't documented the changes.
+
+So... please be patient. The module will be worth the wait!
+
+
+
 JsonRestStores is a one-stop module that allows you to create fully functional, configurable Json REST stores using NodeJS. A store can be inherited from another store, and can define all sorts of hooks to configure how it behaves (including permissions). It's also very easy to create "nested" stores.
 
 Database access is abstracted. At the moment, it supports the following database servers:
