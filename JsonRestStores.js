@@ -25,18 +25,21 @@ var Store = declare( null,  {
   schema: null,
   searchSchema: null,
 
+  DbDriver: null,
+
   idProperty: null,
 
   storeName: null,
+  collectionName: null,
 
   queryFilterType: 'and',
  
-  handlePut: true,
-  handlePost: true,
-  handlePostAppend: true,
-  handleGet: true,
-  handleGetQuery: true,
-  handleDelete: true,
+  handlePut: false,
+  handlePost: false,
+  handlePostAppend: false,
+  handleGet: false,
+  handleGetQuery: false,
+  handleDelete: false,
 
   echoAfterPutNew: true,
   echoAfterPutExisting: false,
@@ -57,9 +60,23 @@ var Store = declare( null,  {
 
   hardLimitOnQueries: 50,
 
-  constructor: function(){
+  constructor: function( DbDriver ){
 
     var self = this;
+
+    // Accept the DB driver from the constructor. If it's not passed through the
+    // constructor, then it must be already in the prototype (inherited or set)
+    if( typeof( DbDriver ) !== 'undefined' ){
+      self.DbDriver = DbDriver;
+    }
+    
+    // The db driver must be defined
+    if( typeof( self.dbDriver ) === 'undefined' || self.dbDriver == null ){
+      throw( new Error("You must define a db driver, via constructor or via prototype") );
+    }
+
+
+    this.collectionName = this.collectionName ? this.collectionName : this.storeName;
 
     // Sets proto.paramId, which (as for the principle of 
     // least surprise) must be the last paramId passed to
@@ -67,68 +84,345 @@ var Store = declare( null,  {
     this.idProperty = self._lastParamId();
 
     // The schema must be defined
-    if( typeof( this.schema ) === 'undefined' || this.schema == null ){
+    if( typeof( self.schema ) === 'undefined' || self.schema == null ){
       throw( new Error("You must define a schema") );
     }
 
     // the store name must be defined
-    if( this.storeName === null  ){
+    if( self.storeName === null  ){
       throw( new Error("You must define a store name for a store") );
     }
 
-
     // Sets SearchSchema
-    if( this.searchSchema == null ){
-      this.searchSchema = this.schema;
+    if( self.searchSchema == null ){
+      self.searchSchema = self.schema;
+    }
+
+    // Create the dbDriver object, ready to accept queries
+    self.dbDriver = new DbDriver( self.collectionName, self.schema );
+  },
+
+
+
+  enrichSelectorWithParams: function( params ){
+
+    var selector = {};
+    
+    selector.conditions = {};
+    selector.conditions.and = {};
+
+    var self = this;
+
+    /*
+    // filter.conditions.and needs to exist and be an object
+    if( typeof( filter.conditions ) === 'undefined' || filter.conditions === null ){
+      filter.conditions = {};
+    } 
+    if( typeof( filter.conditions.and ) === 'undefined' || filter.conditions.and === null ){
+      filter.conditions.and = {};
+    } 
+    */
+
+    // Add param IDs as "AND" conditions to the query
+    self.paramIds.forEach( function( paramId ){
+      if( typeof( params[ paramId ]) !== 'undefined' ){
+        selector.conditions.and[ paramId ] = { type: 'eq', value: params[ paramId ] };
+      }
+    });
+
+    return selector;
+
+  },
+
+
+  // *********************************************************************
+  // *** FUNCTIONS THAT ACTUALLY ACCESS DATA THROUGH THE DB DRIVER
+  // *********************************************************************
+ 
+
+  execAllDbFetch: function( params, body, options, cb ){
+
+    var self = this;
+
+    // Make up the filter, based on the store's IDs (used as filters).
+    var selector = {};
+
+    self.enrichSelectorWithParams( selector, params );
+
+    // Make the database call 
+    self.dbDriver.select( selector, cb );
+
+  }, 
+
+  execPostDbInsertNoId: function( params, body, options, generatedId, cb ){
+   
+    var self = this;
+
+    var record = {};
+
+    // Make up the `record` variable, based on the passed `body`
+    for( var k in body ) record[ k ] = body[ k ];
+
+    // Add param IDs to the record that is being written
+    self.paramIds.forEach( function( paramId ){
+      if( typeof( params[ paramId ] ) !== 'undefined' ){
+        record[ paramId ] = params[ paramId ];
+      }
+    });
+
+    // The last parameter is missing since it
+    // wasn't passed: assign an ObjectId to it
+    record[ self.idProperty ] = generatedId;
+
+    self.dbDriver.insert( record, { returnRecord: true }, cb );
+
+  },
+
+  execPutDbUpdate: function( params, body, options, doc, fullDoc, cb ){
+
+    var self = this;
+    var updateObject = {}, unsetObject = {};
+
+    // Make up the filter, based on the store's IDs (used as filters).
+    var selector = {};
+
+    self.enrichSelectorWithParams( selector, params );
+
+    // Simply copy values over except self.idProperty (which mustn't be
+    // overwritten)
+    for( var i in body ){
+      if( i != self.idProperty ) updateObject[ i ] = body[ i ];
+    }
+
+    self.dbDriver.update( selector, { deleteUnsetFields: true, multi: false }, function( err, howMany ){
+      if( err ){
+        cb( err );
+      } else {
+
+        filter.ranges.limit = 1;
+        self.dbDriver.select( filter, cb );
+
+      }
+
+    });
+  },
+
+
+  execPutDbInsert: function( params, body, options, cb ){
+  
+    var self = this;
+
+    var record = {};
+
+    // Make up the `record` variable, based on the passed `body`
+    for( var k in body ) record[ k ] = body[ k ];
+
+    // Add param IDs to the record that is being written
+    self.paramIds.forEach( function( paramId ){
+      if( typeof( params[ paramId ] ) !== 'undefined' ){
+        record[ paramId ] = params[ paramId ];
+      }
+    });
+
+    self.dbDriver.insert( record, { returnRecord: true }, cb );
+
+  },
+
+  execPostDbAppend: function( params, body, options, doc, fullDoc, cb ){
+
+    // Is this _ever_ implemented, really? Seriously?
+    cb( null, doc );
+  },
+
+
+  execDeleteDbDelete: function( params, body, options, cb ){
+
+    var self = this;
+    var selector = {};
+
+    self.enrichSelectorWithParams( selector, params );
+    self.dbDriver.delete( selector, { multi: false }, cb );
+  },
+
+
+  _queryMakeSelector: function( filters, sort, ranges ){
+
+    // Define and set the conditions variable, which will be returned
+    var conditions = {};
+    conditions.and = {}
+    conditions.or = {}
+
+    // Add filters to the selector
+    for( var filterField in filters ){
+
+      var filterValue = filters[ filterField ];
+
+      if( self.searchSchema.structure[ filterField ].filterType ){
+        var filterType= self.searchSchema.structure[ filterfield ].filterType;
+
+        // Double check that the referenced field exists
+        if( filterType.field && typeof( self.searchSchema.structure[ filterType.field ] ) === 'undefined' ){
+          throw( new Error('"field" option in filter type is undefined: ' + filterType.field  ) );
+        }
+        var dbField = filterType.field || filterField;
+        var condition = filterType.condition || 'or';
+
+        conditions[ condition ] [ dbField ] = { type: filterType.type, value: filters[ filterField ] };
+      }
+    }
+
+    return {
+      conditions: conditions,
+      ranges: ranges,
+      sort: sort,
+    };
+  },
+
+
+  /*
+      * REMOTE: options.filters, options.sortBy, options.ranges are created by _initOptionsFromReq
+      * LOCAL: user sets options.filters, options.sortBy and options.ranges
+
+      * AND THEN
+      * self._queryMakeSelector( options ) returns the full db selector for those options
+      * self._queryMakeSelector( options ) is called
+
+    Local:
+      * user sets options.filters, options.sortBy and options.ranges
+      *
+  */
+
+  _initOptionsFromReq: function( mn, req ){
+
+    var self = this;
+
+    var options = {};
+
+    // Set the 'overwrite' option if the right header
+    // is there
+    if( mn == 'Put' ){
+
+      if( req.headers[ 'if-match' ] === '*' )
+        options.overwrite = true;
+      if( req.headers[ 'if-none-match' ] === '*' )
+        options.overwrite = false;
+    }
+
+
+    // Set the 'SortBy', 'ranges' and 'filters' in
+    // the options, based on the passed headers
+
+    if( mn == 'GetQuery' ){
+      options.sortBy = parseSortBy( req );
+      options.ranges = parseRangeHeaders( req );
+      options.filters = parseFilters( req );
+    }
+
+    return options;
+
+
+    function parseSortBy( req ){
+
+      var url_parts = url.parse( req.url, false );
+      var q = url_parts.query || '';
+      var sortBy;
+      var tokens, subTokens, subToken, subTokenClean, i;
+      var sortObject = {};
+
+      tokens = q.split( '&' ).forEach( function( item ) {
+
+        var tokens = item.split('=');
+        var tokenLeft = tokens[0];
+        var tokenRight = tokens[1];
+
+        if(tokenLeft === 'sortBy'){
+          subTokens = tokenRight.split(',');
+          for( i = 0; i < subTokens.length; i++ ){
+
+            subToken = subTokens[ i ];
+            subTokenClean = subToken.replace( '+', '' ).replace( '-', '' );
+
+            if( ! self.remote || ( self.searchSchema.structure[ subTokenClean ] && self.searchSchema.structure[ subTokenClean ].sortable ) ){
+              var sortDirection = subTokens[i][0] == '+' ? 1 : -1;
+              sortBy = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
+              sortObject[ sortBy ] = sortDirection;
+            }
+          }
+        }
+      });
+      return sortObject;
+    }
+
+    function parseRangeHeaders( req ){
+
+      var tokens;
+      var rangeFrom, rangeTo, limit;
+      var hr;
+
+      // If there was a range request, then set the range to the
+      // query and return the count
+      if( (hr = req.headers['range']) && ( tokens = hr.match(/items=([0-9]+)\-([0-9]+)$/))  ){
+        rangeFrom = tokens[1] - 0;
+        rangeTo = tokens[2] - 0;
+        limit =  rangeTo - rangeFrom + 1;
+
+        return( {
+          from: rangeFrom,
+          to: rangeTo,
+          limit:  limit,
+        });
+      } 
+
+      // Range headers not found or not valid, return null 
+      return null;
+    }
+
+
+    function parseFilters( req ){
+
+      var url_parts = url.parse( req.url, false );
+      var q = url_parts.query || '';
+      var tokens, tokenLeft, tokenRight;
+      var result = {};
+      var failedCasts;
+
+      q.split( '&' ).forEach( function( item ) {
+
+        tokens = item.split('=');
+        tokenLeft  = tokens[0];
+        tokenRight = tokens[1];
+
+        // Only add it to the filter if it's in the schema AND if it's searchable
+        //if( tokenLeft != 'sortBy' && ( ! self.remote || ( self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].filterType )) ) {
+        if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].filterType  ) {
+
+          result[ tokenLeft ] = tokenRight;
+
+        }
+      })
+
+
+      return result;
     }
 
   },
 
 
-  // *********************************************************************
-  // *** DRIVER FUNCTIONS THAT MUST BE OVERRIDDEN BY DB-SPECIFIC DRIVERS
-  // *** (Only sample data here)
-  // *********************************************************************
-  
+  execGetDbQuery: function( params, body, options, next ){
 
-  driverAllDbFetch: function( params, body, options, cb ){
-    cb( null, body );
-  }, 
+    var self = this;
+    var cursor;
 
-  driverGetDbQuery: function( params, body, options, cb ){
-    cb( null, [ ] );
-    //cb( null, [{ id: 'id1', dummyData: 'value1'}, { id: 'id2', dummyData: 'value2'} ] );
+    var selector = {};
+
+    // Select according to selector
+    var selector = self._queryMakeSelector( options );
+
+    self.enrichSelectorWithParams( selector, params );
+
+    // Run the select based on the passed parameters
+    dbLayer.select( selector, next );
   },
-
-  driverPutDbInsert: function( params, body, options, cb ){
-    cb( null, body );
-  },
-
-  driverPutDbUpdate: function( params, body, options, doc, fullDoc, cb ){
-    cb( null, doc );
-  },
-
-  driverPostDbInsertNoId: function( params, body, options, generatedId, cb ){
-    body[ this.idProperty ] = generatedId;
-    cb( null, body );
-  },
-
-  driverPostDbAppend: function( params, body, options, doc, fullDoc, cb ){
-    cb( null, doc );
-  },
-
-  driverDeleteDbDelete: function( params, body, options, id, cb ){
-    cb( null );
-  },
-
-  driverAPIDbMassDelete: function( params, body, options, cb ){
-    cb( null );
-  },
-
-  driverAPIDbMassUpdate: function( params, body, options, cb ){
-    cb( null );
-  },
-
 
   // ****************************************************
   // *** FUNCTIONS THAT CAN BE OVERRIDDEN BY DEVELOPERS
@@ -412,148 +706,6 @@ var Store = declare( null,  {
 
 
 
-  _initOptionsFromReq: function( mn, req ){
-
-    var self = this;
-
-    var options = {};
-
-    // Set the 'overwrite' option if the right header
-    // is there
-    if( mn == 'Put' ){
-      if( req.headers[ 'if-match' ] === '*' )
-        options.overwrite = true;
-      if( req.headers[ 'if-none-match' ] === '*' )
-        options.overwrite = false;
-    }
-
-
-    // Set the 'SortBy', 'ranges' and 'filters' in
-    // the options, based on the passed headers
-
-    if( mn == 'GetQuery' ){
-      options.sortBy = parseSortBy( req );
-      options.ranges = parseRangeHeaders( req );
-      options.filters = parseFilters( req );
-    }
-
-    return options;
-
-
-    function parseSortBy( req ){
-
-      var url_parts = url.parse( req.url, false );
-      var q = url_parts.query || '';
-      var sortBy;
-      var tokens, subTokens, subToken, subTokenClean, i;
-      var sortObject = {};
-
-      tokens = q.split( '&' ).forEach( function( item ) {
-
-        var tokens = item.split('=');
-        var tokenLeft = tokens[0];
-        var tokenRight = tokens[1];
-
-        if(tokenLeft === 'sortBy'){
-          subTokens = tokenRight.split(',');
-          for( i = 0; i < subTokens.length; i++ ){
-
-            subToken = subTokens[ i ];
-            subTokenClean = subToken.replace( '+', '' ).replace( '-', '' );
-
-            if( ! self.remote || ( self.searchSchema.structure[ subTokenClean ] && self.searchSchema.structure[ subTokenClean ].sortable ) ){
-              var sortDirection = subTokens[i][0] == '+' ? 1 : -1;
-              sortBy = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
-              sortObject[ sortBy ] = sortDirection;
-            }
-          }
-        }
-      });
-      return sortObject;
-    }
-
-    function parseRangeHeaders( req ){
-
-      var tokens;
-      var rangeFrom, rangeTo, limit;
-      var hr;
-
-      // If there was a range request, then set the range to the
-      // query and return the count
-      if( (hr = req.headers['range']) && ( tokens = hr.match(/items=([0-9]+)\-([0-9]+)$/))  ){
-        rangeFrom = tokens[1] - 0;
-        rangeTo = tokens[2] - 0;
-        limit =  rangeTo - rangeFrom + 1;
-
-        return( {
-          rangeFrom: rangeFrom,
-          rangeTo: rangeTo,
-          limit:  limit,
-        });
-      } 
-
-      // Range headers not found or not valid, return null 
-      return null;
-    }
-
-
-    function parseFilters( req ){
-
-      var url_parts = url.parse( req.url, false );
-      var q = url_parts.query || '';
-      var tokens, tokenLeft, tokenRight;
-      var result = {};
-      var failedCasts;
-
-      q.split( '&' ).forEach( function( item ) {
-
-        tokens = item.split('=');
-        tokenLeft  = tokens[0];
-        tokenRight = tokens[1];
-
-        // Only add it to the filter if it's in the schema AND if it's searchable
-        if( tokenLeft != 'sortBy' && ( ! self.remote || ( self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].searchable )) ) {
-        // if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] ) {
-          result[ tokenLeft ] = tokenRight;
-        }
-      })
-
-      // Cast result values according to schema
-      //failedCasts = self.schema._castObjectValues( result );
-
-      // Failed casts are taken out of the result
-      //for( var k in failedCasts ) delete result[ k ];
-
-      return result;
-    }
-
-  },
-
-  _enrichOptionsFromClassDefaults: function( options ){
-
-    var self = this;
-
-    // Make up  `options.searchPartial` if not already in `options`
-    if( typeof( options ) === 'object' && typeof( options.searchPartial) === 'undefined' ){
-      options.searchPartial = {};
-      Object.keys( self.searchSchema.structure).forEach( function( k ) {
-        if( self.searchSchema.structure[ k ].searchPartial ){
-          options.searchPartial[ k ] = true;
-        }
-      });
-    }
-
-    // make up options.queryFilterType if not already in `options`
-    if( typeof( options ) === 'object' && typeof( options.queryFilterType ) === 'undefined' ){
-      if( typeof( self.queryFilterType ) === 'undefined' ){
-        options.queryFilterType = 'and';
-      } else {
-        options.queryFilterType = self.queryFilterType;
-      }
-    }
-
-  },
-
 
   // ****************************************************
   // *** INTERNAL FUNCTIONS - THE REAL DANCE
@@ -582,6 +734,7 @@ var Store = declare( null,  {
      
             var skipParamsObject = {};
             skipParamsObject[ self.idProperty ] = [ 'required '];
+
             self.schema.validate( body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, body, errors ){
               self._sendErrorOnErr( err, next, function(){
         
@@ -604,7 +757,7 @@ var Store = declare( null,  {
                         self.schema.makeId( body, function( err, generatedId){
                           self._sendErrorOnErr( err, next, function(){
         
-                            self.driverPostDbInsertNoId( params, body, options, generatedId, function( err, fullDoc ){
+                            self.execPostDbInsertNoId( params, body, options, generatedId, function( err, fullDoc ){
                               self._sendErrorOnErr( err, next, function(){
         
                                 self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
@@ -672,7 +825,7 @@ var Store = declare( null,  {
             
         
                               }) // err
-                            }) // driverPostDbInsertNoId
+                            }) // execPostDbInsertNoId
         
                           }) // err
                         }) // self.makeId
@@ -720,7 +873,7 @@ var Store = declare( null,  {
             } else {
 
               // Fetch the doc
-              self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
+              self.execAllDbFetch( params, body, options, function( err, fullDoc ){
                 self._sendErrorOnErr( err, next, function(){
     
     
@@ -747,7 +900,7 @@ var Store = declare( null,  {
                                 // the one passed as last parameter in the list of IDs
                                 body[ self.idProperty ] = params[ self.idProperty ];
         
-                                self.driverPostDbAppend( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
+                                self.execPostDbAppend( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
                                   self._sendErrorOnErr( err, next, function(){
          
                                     self.extrapolateDoc( params, body, options, fullDocAfter, function( err, doc) {
@@ -810,7 +963,7 @@ var Store = declare( null,  {
     
         
                                   }) // err
-                                }) // driverPostDbAppend
+                                }) // execPostDbAppend
         
                               } // granted
         
@@ -863,7 +1016,7 @@ var Store = declare( null,  {
             } else {
     
               // Fetch the doc
-              self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
+              self.execAllDbFetch( params, body, options, function( err, fullDoc ){
                 self._sendErrorOnErr( err, next, function(){
       
                   // Check the 'overwrite' option
@@ -903,7 +1056,7 @@ var Store = declare( null,  {
                             // the one passed as last parameter in the list of IDs
                             body[ self.idProperty ] = params[ self.idProperty ];
     
-                            self.driverPutDbInsert( params, body, options, function( err, fullDoc ){
+                            self.execPutDbInsert( params, body, options, function( err, fullDoc ){
                               self._sendErrorOnErr( err, next, function(){
     
                                 self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
@@ -995,7 +1148,7 @@ var Store = declare( null,  {
                                     // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
                                     self.schema.cleanup( body, 'doNotSave' );
         
-                                    self.driverPutDbUpdate( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
+                                    self.execPutDbUpdate( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
                                       self._sendErrorOnErr( err, next, function(){
     
                                         self.extrapolateDoc( params, body, options, fullDocAfter, function( err, docAfter ) {
@@ -1055,7 +1208,7 @@ var Store = declare( null,  {
     
         
                                       }) // err
-                                    }) // self.driverPutDbUpdate
+                                    }) // self.execPutDbUpdate
         
                                   } // granted
         
@@ -1074,7 +1227,7 @@ var Store = declare( null,  {
                   } // function continueAfterFetch()
         
                 }) // err
-              }) // driverAllDbFetch
+              }) // execAllDbFetch
     
             } // if errors.length  
     
@@ -1120,17 +1273,20 @@ var Store = declare( null,  {
               self._sendError( next, new self.ForbiddenError() );
             } else {
     
-     
+
+              /*     
               // Set reasonable (good) defaults
               sortBy = options.sortBy;
               ranges = options.ranges;
               filters = options.filters;
-    					if( typeof( ranges ) === 'undefined' || ! ranges ) ranges = options.ranges = {};
+    					if( typeof( sortBy ) === 'undefined' || ! sortBy ) sortBy = {};
+    					if( typeof( ranges ) === 'undefined' || ! ranges ) ranges = {};
               if( typeof( ranges.rangeFrom ) === 'undefined' ) ranges.rangeFrom = 0;
               if( typeof( ranges.rangeTo )   === 'undefined' ) ranges.rangeTo   = 0;
-              if( typeof( filters) === 'undefined' ) filters = {};
-    
-    
+              if( typeof( filters ) === 'undefined' ) filters = {};
+              */
+
+ 
               self.searchSchema.validate( filters, { onlyObjectValues: true }, function( err, filters, errors ){
                 self._sendErrorOnErr( err, next, function(){
 
@@ -1141,7 +1297,7 @@ var Store = declare( null,  {
                     self._sendError( next, new self.BadRequestError( { errors: errors } ) );
                   } else {
         
-                    self.driverGetDbQuery( params, body, options, function( err, queryDocs ){
+                    self.execGetDbQuery( params, body, options, function( err, queryDocs ){
                       self._sendErrorOnErr( err, next, function(){
        
                         // It's a normal, cursor-less call
@@ -1242,7 +1398,7 @@ var Store = declare( null,  {
       self._sendErrorOnErr( err, next, function(){
 
         // Fetch the doc.
-        self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
+        self.execAllDbFetch( params, body, options, function( err, fullDoc ){
           self._sendErrorOnErr( err, next, function(){
     
             if( ! fullDoc ){
@@ -1304,7 +1460,7 @@ var Store = declare( null,  {
             } // if self.fetchedDoc
     
           }) // err
-        }) // self.driverAllDbFetchDoc
+        }) // self.execAllDbFetchDoc
 
       }) // err
     })
@@ -1323,7 +1479,7 @@ var Store = declare( null,  {
       self._sendErrorOnErr( err, next, function(){
     
         // Fetch the doc.
-        self.driverAllDbFetch( params, body, options, function( err, fullDoc ){
+        self.execAllDbFetch( params, body, options, function( err, fullDoc ){
           self._sendErrorOnErr( err, next, function(){
     
             if( ! fullDoc ){
@@ -1346,7 +1502,7 @@ var Store = declare( null,  {
                       
         
                             // Actually delete the document
-                            self.driverDeleteDbDelete( params, body, options, function( err ){
+                            self.execDeleteDbDelete( params, body, options, function( err ){
                               self._sendErrorOnErr( err, next, function(){
         
                                 self.afterDelete( params, body, options, doc, fullDoc, function( err ) {
@@ -1366,7 +1522,7 @@ var Store = declare( null,  {
                                 })
         
                               }) // err
-                            }) // self.driverDeleteDbDelete
+                            }) // self.execDeleteDbDelete
         
                           } // granted
         
@@ -1382,10 +1538,10 @@ var Store = declare( null,  {
             } // if self.fetchedDoc
     
           }) // err
-        }) // self.driverAllDbFetchDoc
+        }) // self.execAllDbFetchDoc
     
       }) // err
-    }) // self.driverAllDbFetchDoc
+    }) // self.execAllDbFetchDoc
   },
     
 });
@@ -1420,7 +1576,7 @@ Store.online = {};
       // Since it's an online request, options are set by "req"
       // This will set things like ranges, sort options, etc.
       var options = request._initOptionsFromReq( mn, req );
-      request._enrichOptionsFromClassDefaults( options );
+      // request._enrichOptionsFromClassDefaults( options );
 
       // Actually run the request
       request['_make' + mn ]( params, body, options, next );
@@ -1473,8 +1629,8 @@ Store.Get = function( id, options, next ){
   var params = {};
   params[ request._lastParamId() ] = id;
 
-  // Enrich `options` with `queryFilterType` and `searchPartial`
-  request._enrichOptionsFromClassDefaults( options );
+  // Enrich `options` with `queryFilterType` and `searchConditions`
+  // request._enrichOptionsFromClassDefaults( options );
 
   // Turn off permissions etc.
   request.checkPermissionsGet = function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); };
@@ -1495,8 +1651,8 @@ Store.GetQuery = function( options, next ){
   // Fix it for the API
   fixRequestForApi( request );
 
-  // Enrich `options` with `queryFilterType` and `searchPartial`
-  request._enrichOptionsFromClassDefaults( options );
+  // Enrich `options` with `queryFilterType` and `searchConditions`
+  // request._enrichOptionsFromClassDefaults( options );
 
   // Turn off permissions etc.
   request.checkPermissionsGetQuery = function( params, body, options, cb ){ cb( null, true ); };
@@ -1539,8 +1695,8 @@ Store.Put = function( id, body, options, next ){
     }
   }
 
-  // Enrich `options` with `queryFilterType` and `searchPartial`
-  request._enrichOptionsFromClassDefaults( options );
+  // Enrich `options` with `queryFilterType` and `searchConditions`
+  // request._enrichOptionsFromClassDefaults( options );
 
   // Turn off permissions etc.
   request.checkPermissionsPutExisting = function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); };
@@ -1567,8 +1723,8 @@ Store.Post = function( body, options, next ){
   // Fix it for the API
   fixRequestForApi( request );
 
-  // Enrich `options` with `queryFilterType` and `searchPartial`
-  request._enrichOptionsFromClassDefaults( options );
+  // Enrich `options` with `queryFilterType` and `searchConditions`
+  // request._enrichOptionsFromClassDefaults( options );
 
   // Turn off permissions etc.
   request.checkPermissionsPost = function( params, body, options, cb ){ cb( null, true ); };
@@ -1598,8 +1754,8 @@ Store.PostAppend = function( id, body, options, next ){
   var params = {};
   params[ request._lastParamId() ] = id;
 
-  // Enrich `options` with `queryFilterType` and `searchPartial`
-  request._enrichOptionsFromClassDefaults( options );
+  // Enrich `options` with `queryFilterType` and `searchConditions`
+  // request._enrichOptionsFromClassDefaults( options );
 
   // Turn off permissions etc.
   request.checkPermissionsPostAppend = function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); };
@@ -1629,8 +1785,8 @@ Store.Delete = function( id, options, next ){
   var params = {};
   params[ request._lastParamId() ] = id;
 
-  // Enrich `options` with `queryFilterType` and `searchPartial`
-  request._enrichOptionsFromClassDefaults( options );
+  // Enrich `options` with `queryFilterType` and `searchConditions`
+  // request._enrichOptionsFromClassDefaults( options );
 
   // Turn off permissions etc.
   request.checkPermissionsDelete = function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); };
@@ -1640,10 +1796,118 @@ Store.Delete = function( id, options, next ){
 }
 
 
-// 
-// THE FOLLOWING API FUNCTIONS ARE NOT CALLABLE FROM AN ONLINE API
-//
 
+function fixRequestForApi( request ){
+
+    // Strip all of the paramIds dictated by the original
+    // definition, just leaves the last one
+    request.paramIds = Array( request._lastParamId() );
+
+    // Makes sure it handles all types of requests
+    request.handlePut = true;
+    request.handlePost = true;
+    request.handlePostAppend = true;
+    request.handleGet = true;
+    request.handleGetQuery = true;
+    request.handleDelete = true;
+
+    // It's not a remote request
+    request.remote = false;   
+}
+
+
+
+exports = module.exports = Store;
+
+// THE FOLLOWING API FUNCTIONS ARE NOT CALLABLE FROM AN ONLINE API
+
+/*
+  execAPIDbMassDelete: function( params, body, options, cb ){
+    var selector = {};
+   
+    var self = this;
+
+   
+    // Make up the selector based on the query
+    selector = self._queryMakeSelector( options.queryFilterType, options.filters, options.searchConditions, {} );
+
+    // Paranoid check. Important since an empty selector WILL lead
+    // to table zapping...
+    if( Object.keys( selector ).length == 0 && ! options.allowZapping ){
+      cb( new Error("Zapping of table not allowed, mass deletion aborted" ) );
+    } else {
+
+      // Actually remove the field
+      self.collection.remove( selector, function( err, howMany ){
+        if( err ) {
+          cb( err );
+        } else {
+          cb( null, howMany );
+        }
+      });
+    }
+  },
+
+   execAPIDbMassUpdate: function( params, body, options, cb ){
+    var selector = {};
+   
+    var self = this;
+   
+    // Make up the selector based on the query
+    selector = self._queryMakeSelector( options.queryFilterType, options.filters, options.searchConditions, {} );
+
+    // Actually remove the field
+    self.collection.update( selector, { $set: body } , { multi: true },  function( err, howMany ){
+      if( err ) {
+        cb( err );
+      } else {
+        cb( null, howMany );
+      }
+    });
+  },
+
+ 
+  // END OF API FUNCTIONS THAT ARE NOT CALLABLE FROM AN ONLINE API
+
+*/
+
+  /*
+  _enrichOptionsFromClassDefaults: function( options ){
+
+    var self = this;
+
+    // Make up  `options.searchConditions` if not already in `options`
+    if( typeof( options ) === 'object' && typeof( options.searchConditions) === 'undefined' ){
+      options.searchConditions = {};
+
+
+      Object.keys( self.searchSchema.structure).forEach( function( k ) {
+
+        if( self.searchSchema.structure[ k ].searchPartial ){
+          options.searchConditions[ k ] = { type: 'partial' };
+        }
+
+
+        if( self.searchSchema.structure[ 
+
+
+
+      });
+    }
+
+    // make up options.queryFilterType if not already in `options`
+    if( typeof( options ) === 'object' && typeof( options.queryFilterType ) === 'undefined' ){
+      if( typeof( self.queryFilterType ) === 'undefined' ){
+        options.queryFilterType = 'and';
+      } else {
+        options.queryFilterType = self.queryFilterType;
+      }
+    }
+
+  },
+  */
+
+/*
 Store.MassDelete = function( options, next ){
 
   var self = this;
@@ -1668,7 +1932,7 @@ Store.MassDelete = function( options, next ){
       } else {
 
         // Actually run the mass delete
-        request.driverAPIDbMassDelete( {}, {}, options, next );
+        request.execAPIDbMassDelete( {}, {}, options, next );
       }
     }
   })
@@ -1698,38 +1962,14 @@ Store.MassUpdate = function( body, options, next ){
         request._sendError( next, new request.BadRequestError( { errors: errors } ) );
       } else {
         // Actually run the mass delete
-        request.driverAPIDbMassUpdate( {}, body, options, next );
+        request.execAPIDbMassUpdate( {}, body, options, next );
       }
     }
 
   })
 
 }
+*/
 
-
-
-
-
-function fixRequestForApi( request ){
-
-    // Strip all of the paramIds dictated by the original
-    // definition, just leaves the last one
-    request.paramIds = Array( request._lastParamId() );
-
-    // Makes sure it handles all types of requests
-    request.handlePut = true;
-    request.handlePost = true;
-    request.handlePostAppend = true;
-    request.handleGet = true;
-    request.handleGetQuery = true;
-    request.handleDelete = true;
-
-    // It's not a remote request
-    request.remote = false;   
-}
-
-
-
-exports = module.exports = Store;
 
 
