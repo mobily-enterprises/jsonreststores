@@ -90,6 +90,28 @@ var Store = declare( null,  {
     }
   },
 
+  // postAppend (a POST call with an ID at the end) is actually a PUT
+  // in a subordinate store. So, if a developer wants this to work,
+  // he will need to reimplement makePostAppend so that it
+  // runs the right PUT onto the right store... by hand.
+  makePostAppend: function( params, body, options, next ){
+
+    var self = this;
+    var body;
+
+    if( typeof( next ) !== 'function' ) next = function(){};
+
+    // Check the IDs
+    self._checkParamIds( params, body, true, function( err ){  
+      self._sendErrorOnErr( err, next, function(){
+
+        self._sendError( next, new self.NotImplementedError( ) );
+
+      });
+    });
+
+  },
+
 
   // **************************************************************************
   // *** END OF FUNCTIONS/ATTRIBUTES THAT NEED/CAN BE OVERRIDDEN BY DEVELOPERS
@@ -797,19 +819,6 @@ var Store = declare( null,  {
 
       });
     });
-
-  },
-
-  // postAppend (a POST call with an ID at the end) is not implementable
-  // with JsonRestStores, it will always respond with NotImplementedError
-  _makePostAppend: function( params, body, options, next ){
-
-    var self = this;
-    var body;
-
-    if( typeof( next ) !== 'function' ) next = function(){};
-
-    self._sendError( next, new self.NotImplementedError( ) );
 
   },
 
@@ -1565,7 +1574,7 @@ Store.Post = function( body, options, next ){
   request._makePost( {}, body, options, next );
 }
 
-// Here only for consistency, it will never work as _makePostAppend will always
+// Here only for consistency, it will never work as makePostAppend will always
 // call next() with an NotImplemented error
 Store.PostAppend = function( id, body, options, next ){
 
@@ -1592,7 +1601,7 @@ Store.PostAppend = function( id, body, options, next ){
   //var bodyClone = {}; for( var k in body) bodyClone[ k ] = body[ k ];
 
   // Actually run the request
-  request._makePostAppend( params, body, options, next );
+  request.makePostAppend( params, body, options, next );
 }
 
 Store.Delete = function( id, options, next ){
