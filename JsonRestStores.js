@@ -179,7 +179,7 @@ var Store = declare( null,  {
   // *********************************************************************
  
 
-  enrichSelectorWithParams: function( selector, params ){
+  _enrichSelectorWithParams: function( selector, params ){
     
     var self = this;
 
@@ -210,7 +210,7 @@ var Store = declare( null,  {
     // Make up the filter, based on the store's IDs (used as filters).
     var selector = {};
 
-    self.enrichSelectorWithParams( selector, params );
+    self._enrichSelectorWithParams( selector, params );
 
     // Make the database call 
     self.dbDriver.select( selector, cb );
@@ -249,7 +249,7 @@ var Store = declare( null,  {
     // Make up the filter, based on the store's IDs (used as filters).
     var selector = {};
 
-    self.enrichSelectorWithParams( selector, params );
+    self._enrichSelectorWithParams( selector, params );
 
     // Simply copy values over except self.idProperty (which mustn't be
     // overwritten)
@@ -299,7 +299,7 @@ var Store = declare( null,  {
     var self = this;
     var selector = {};
 
-    self.enrichSelectorWithParams( selector, params );
+    self._enrichSelectorWithParams( selector, params );
     self.dbDriver.delete( selector, { multi: false }, cb );
   },
 
@@ -475,7 +475,7 @@ var Store = declare( null,  {
 
     var selector = self._queryMakeSelector( options.filters, options.sort, options.ranges );
 
-    self.enrichSelectorWithParams( selector, params );
+    self._enrichSelectorWithParams( selector, params );
 
     // Run the select based on the passed parameters
     dbLayer.select( selector, next );

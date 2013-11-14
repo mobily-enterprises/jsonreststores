@@ -8,7 +8,7 @@
     "mongodb"
   ],
   "main": "JsonRestStores.js",
-  "version": "0.2.17",
+  "version": "0.3.0",
   "private": false,
   "repository": {
     "type": "git",
@@ -18,12 +18,9 @@
     "name": "Tony Mobily"
   },
   "dependencies": {
-    "allhttperrors": "0.1.x",
-    "simpledeclare": "0.2.x",
-    "simpleschema": "0.2.x",
-    "async": "*"
+    "allhttperrors": "0.3.x",
+    "simpledeclare": "0.3.x",
+    "simpleschema": "0.3.x",
+    "async": "0.2.x"
   },
-  "scripts": {
-    "test": "mocha"
-  }
 }
