@@ -142,7 +142,7 @@ var Store = declare( null,  {
     }
     
     // The db driver must be defined
-    if( typeof( self.dbDriver ) === 'undefined' || self.dbDriver == null ){
+    if( typeof( self.DbDriver ) === 'undefined' || self.DbDriver == null ){
       throw( new Error("You must define a db driver, via constructor or via prototype") );
     }
 
@@ -168,8 +168,23 @@ var Store = declare( null,  {
       self.searchSchema = self.schema;
     }
 
+    // Set `fields`, which will need to conform DbDriver's format: every key defined is in the schema, and keys
+    // with `true` values are also searchable.
+    // In this case, all fields with a `filterType` in the searchSchema are indeed searchable. PLUS, any
+    // fields in paramIds are also searchable
+    // 
+    var fields = {};
+    for( var k in self.schema.structure ) fields[ k ] = false;
+    for( var k in self.searchSchema.structure ){
+      if( self.searchSchema.structure[ k ].filterType ) fields[ k ] = true;
+    }
+    for( var i = 0, l  = self.paramIds.length; i <  l; i ++ ) fields[ self.paramIds[ i ] ] = true;
+
     // Create the dbDriver object, ready to accept queries
-    self.dbDriver = new DbDriver( self.collectionName, self.schema );
+    self.dbDriver = new self.DbDriver( self.collectionName, fields );
+
+    console.log("PROJECTION HASH IN JsonRestStores:");
+    console.log( self.dbDriver.projectionHash );
   },
 
 
@@ -188,13 +203,13 @@ var Store = declare( null,  {
       selector.conditions = {};
     } 
     if( typeof( selector.conditions.and ) === 'undefined' || selector.conditions.and === null ){
-      selector.conditions.and = {};
+      selector.conditions.and = [];
     } 
 
     // Add param IDs as "AND" conditions to the query
     self.paramIds.forEach( function( paramId ){
       if( typeof( params[ paramId ]) !== 'undefined' ){
-        selector.conditions.and[ paramId ] = { type: 'eq', value: params[ paramId ] };
+        selector.conditions.and.push( { field: paramId, type: 'eq', value: params[ paramId ] } );
       }
     });
 
@@ -226,6 +241,9 @@ var Store = declare( null,  {
     // Make up the `record` variable, based on the passed `body`
     for( var k in body ) record[ k ] = body[ k ];
 
+    console.log("RECORD 1");
+    console.log( record );
+
     // Add param IDs to the record that is being written
     self.paramIds.forEach( function( paramId ){
       if( typeof( params[ paramId ] ) !== 'undefined' ){
@@ -233,9 +251,15 @@ var Store = declare( null,  {
       }
     });
 
+    console.log("RECORD 2");
+    console.log( record );
+
     // The last parameter is missing since it
     // wasn't passed: assign an ObjectId to it
     record[ self.idProperty ] = generatedId;
+
+    console.log("RECORD 3");
+    console.log( record );
 
     self.dbDriver.insert( record, { returnRecord: true }, cb );
 
@@ -303,13 +327,12 @@ var Store = declare( null,  {
     self.dbDriver.delete( selector, { multi: false }, cb );
   },
 
-
   _queryMakeSelector: function( filters, sort, ranges ){
 
     // Define and set the conditions variable, which will be returned
     var conditions = {};
-    conditions.and = {}
-    conditions.or = {}
+    conditions.and = []
+    conditions.or = []
 
     // Add filters to the selector
     for( var filterField in filters ){
@@ -324,9 +347,9 @@ var Store = declare( null,  {
           throw( new Error('"field" option in filter type is undefined: ' + filterType.field  ) );
         }
         var dbField = filterType.field || filterField;
-        var condition = filterType.condition || 'or';
+        var condition = self.searchSchema.structure[ filterField ].filterCondition || 'and';
 
-        conditions[ condition ][ dbField ] = { type: filterType.type, value: filters[ filterField ] };
+        conditions[ condition ].push( { field: dbField, type: filterType.type, value: filters[ filterField ] } );
       }
     }
 
@@ -480,6 +503,8 @@ var Store = declare( null,  {
     // Run the select based on the passed parameters
     dbLayer.select( selector, next );
   },
+
+
 
   // ****************************************************
   // *** INTERNAL FUNCTIONS, DO NOT TOUCH
