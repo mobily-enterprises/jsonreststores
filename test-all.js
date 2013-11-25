@@ -117,7 +117,7 @@ process.on('uncaughtException', function(err) {
   console.error(err.stack);
 });
 
-
+Error.stackTraceLimit = Infinity;
 
 exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
   
@@ -135,7 +135,6 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
 
     getDbAndDbDriverAndJRS( function( err, db, DbDriver, JRS ){
       if( err ){
-        console.log( err );
         throw( new Error("Could not connect to db, aborting all tests") );
         process.exit();
       }
@@ -145,15 +144,22 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
       g.DbDriver = DbDriver;
       g.JRS = JRS;
 
-
       // Set the basic stores
       g.People = declare( g.JRS, {
 
         schema: new Schema({
-          id:       { type: 'id' },
+          id:       { type: 'id', required: true },
           name:     { type: 'string' },
           surname:  { type: 'string', max: 20 },
           age:      { type: 'number', max: 99 },
+        }),
+
+        searchSchema: new Schema({
+          name:     { type: 'string', filterType: { type: 'eq' }  },
+          surname:  { type: 'string', max: 20, filterType: { type: 'eq'  } },
+          age:      { type: 'number', max: 99, filterType: { type: 'eq' } },
+          ageGt:    { type: 'number', max: 99, filterType: { field: 'age', type: 'gt' } },
+          nameSt:   { type: 'string', filterType: { field: 'surname', type: 'startsWith' } },
         }),
 
         storeName: 'people',
@@ -169,17 +175,14 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
      
 
       // Clear people table
-      g.people = new g.DbDriver( 'people', {  name: true, surname: true, age: false }  ); 
-      g.people.delete( { }, { multi: true }, function( err ){
+      //g.dbPeople = new g.DbDriver( 'people', {  name: true, surname: true, age: false, id: true }  ); 
+      g.dbPeople = new g.People().dbDriver;
+      g.dbPeople.delete( { }, { multi: true }, function( err ){
         if( err ){
           throw( new Error("Could not empty database, giving up") );
           process.exit();
         } else {
-          console.log("Projection hash:");
-          console.log(g.people.projectionHash );
-          g.people.insert( { name:'a', surname:'b', age:10  }, function( err ){
-            test.done();
-          });
+          test.done();
         }
       });
 
@@ -198,19 +201,276 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
   };
 
 
+  var console_log = console.log;
+  console.log2 = function( m ){
+    console_log("I WAS CALLED:");
+    console_log( m );
+    console_log( new Error().stack );
+  }
+
+
   tests = {
 
     startup: startup,
 
-    'testing Post()': function( test ){
+    'API Post(): testing': function( test ){
 
-      g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err ){
+      g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
         test.ifError( err );
-        test.done();
 
-         
+          g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
+          test.ifError( err );
+          test.deepEqual( data[ 0 ], person );
+          test.done();
+        });
 
       });
+    },
+
+    'API Put(): testing': function( test ){
+
+      g.dbPeople.delete( { }, { multi: true }, function( err ){
+        var p = { name: 'Tony', surname: "Mobily", age: 37 };
+        Schema.makeId( p, function( err, id ){
+          test.ifError( err );
+          p.id = id;
+          g.People.Put( null, p, function( err, person ){
+            test.ifError( err );
+
+            g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
+              test.ifError( err );
+              test.deepEqual( data[ 0 ], person );
+              test.done();
+            });
+          });
+        });
+
+      });
+    },
+
+    'API Put(): overwriting': function( test ){
+
+      g.dbPeople.delete( { }, { multi: true }, function( err ){
+        var p = { name: 'Tony', surname: "Mobily", age: 37 };
+        Schema.makeId( p, function( err, id ){
+          test.ifError( err );
+          p.id = id;
+          g.People.Put( null, p, function( err, person ){
+            test.ifError( err );
+
+            g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
+              test.ifError( err );
+              test.deepEqual( data[ 0 ], person );
+
+              person.surname = "Changed";
+              delete person.name;
+              g.People.Put( null, person, function( err, person2 ){
+                test.ifError( err );
+                test.ok( person2, { age: 37, id: 5517971, surname: 'Changed' } ); 
+
+                test.done();
+              });
+            });
+          });
+        });
+
+      });
+    },
+
+
+    'API Get(): testing': function( test ){
+
+      g.dbPeople.delete( { }, { multi: true }, function( err ){
+        test.ifError( err );
+        g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
+          test.ifError( err );
+
+          g.People.Get( person.id, function( err, personGet ){
+            test.ifError( err );
+            test.deepEqual( person, personGet );
+            test.done();
+          });
+        });
+
+      });
+    },
+
+    'API Get(): invalid ID': function( test ){
+      g.People.Get( { a: 10 }, function( err, personGet ){
+        test.deepEqual( err.errors, [ { field: 'id', message: 'Error during casting' } ] );
+        test.deepEqual( err.message, 'Bad Request' );
+        test.deepEqual( err.httpError, 400 );
+        test.done();
+      });
+    },
+
+    'API Get(): getting non-existing data': function( test ){
+
+      g.dbPeople.delete( { }, { multi: true }, function( err ){
+
+        Schema.makeId( {}, function( err, id ){
+          test.ifError( err );
+ 
+          g.People.Get( id, function( err, personGet ){
+            test.ok( err !== null );
+
+            test.equal( personGet, null );
+            test.equal( err.httpError, 404 );
+
+            test.done();
+          });
+        });
+
+      });
+    },
+
+    'API Get(): fetching data that fails schema': function( test ){
+
+      g.dbPeople.delete( { }, { multi: true }, function( err ){
+        test.ifError( err );
+        g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
+          test.ifError( err );
+
+          g.dbPeople.update( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id  } ] } }, { surname: '1234567890123456789012' }, { deleteUnsetFields: false }, function( err, total ){
+            test.ifError( err );
+            test.ok( total === 1 );
+
+            g.People.Get( person.id, function( err, personGet ){
+              test.deepEqual( err.errors, [ { field: 'surname', message: 'Field is too long: surname' } ] );
+              test.deepEqual( err.message, 'Bad Request' );
+              test.deepEqual( err.httpError, 400 );
+ 
+              test.done();
+            });
+          });
+        });
+      });
+    },
+
+
+    'API Delete(): testing': function( test ){
+
+      g.dbPeople.delete( { }, { multi: true }, function( err ){
+        test.ifError( err );
+        g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
+          test.ifError( err );
+
+          g.People.Get( person.id, function( err, personGet ){
+            test.ifError( err );
+            test.deepEqual( person, personGet );
+
+            g.People.Delete( person.id, function( err ){
+              test.ifError( err );
+              
+              g.dbPeople.select( { }, function( err, docs ){
+                test.ifError( err );
+
+                test.equals( docs.length, 0 );
+
+                test.done();
+              });
+            });
+          });
+        });
+
+      });
+    },
+
+    'API Delete(): deleting non-existing data': function( test ){
+
+      g.dbPeople.delete( { }, { multi: true }, function( err ){
+
+        Schema.makeId( {}, function( err, id ){
+          test.ifError( err );
+ 
+          g.People.Delete( id, function( err, total ){
+            test.ok( err !== null );
+            test.equal( err.httpError, 404 );
+
+            test.done();
+          });
+        });
+
+      });
+    },
+
+
+
+    'fetching data with non-unique ids': function( test ){
+
+       // Set the basic stores
+      g.PeopleWrongId = declare( g.JRS, {
+
+        schema: new Schema({
+          name:     { type: 'string' },
+          surname:  { type: 'string', max: 20, filterType: { type: 'eq'  } },
+          age:      { type: 'number', max: 99 },
+        }),
+
+        storeName: 'people',
+        paramIds: [ 'surname' ],
+      });
+     
+      g.dbPeople.delete( { }, { multi: true }, function( err ){
+        test.ifError( err );
+
+        g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person1 ){
+          test.ifError( err );
+          g.People.Post( { name: 'Chiara', surname: "Mobily", age: 24 }, function( err, person2 ){
+            test.ifError( err );
+
+            g.PeopleWrongId.Get( 'Mobily', function( err, person3 ){
+              test.ok( typeof( err ) === 'object' );
+              test.ok( err.message === 'execAllDbFetch fetched more than 1 record' );
+              test.done();
+            });
+          });
+
+        });
+      });  
+
+    },
+
+    
+    'API GetQuery: testing': function( test ){
+
+       // Set the basic stores
+      g.PeopleWrongId = declare( g.JRS, {
+
+        schema: new Schema({
+          name:     { type: 'string' },
+          surname:  { type: 'string', max: 20, filterType: { type: 'eq'  } },
+          age:      { type: 'number', max: 99 },
+        }),
+
+        storeName: 'people',
+        paramIds: [ 'surname' ],
+      });
+     
+      g.dbPeople.delete( { }, { multi: true }, function( err ){
+        test.ifError( err );
+
+        async.series([
+          function( done ){ g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, done ); },
+          function( done ){ g.People.Post( { name: 'Chiara', surname: "Mobily", age: 24 }, done );},
+          function( done ){ g.People.Post( { name: 'Daniela', surname: "Mobily", age: 64 }, done );},
+          function( done ){ g.People.Post( { name: 'Sara', surname: "Fabbietti", age: 14 }, done );},
+        ], function( err ){
+          test.ifError( err );
+          
+          g.People.GetQuery( { filters: { nameSt: 'Mo' } }, function( err, docs ){
+            if( err ) { console.log( err );console.log( err.stack ); }
+            console.log( docs );
+            test.done();
+          });
+        });
+      });
+    /*
+      TODO:
+        * Write tests for URL manipulation functions
+        * Write tests same as API ones, but using the Online calls
+        * Test _all_ hooks with tests
+    */
     }
 
   }
