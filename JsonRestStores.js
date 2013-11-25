@@ -36,6 +36,10 @@ var Store = declare( null,  {
   searchSchema: null, // If not set in prototype, is set as `schema` by constructor
   collectionName: null, // If not set in prototyoe, is set as `storeName` by constructor
 
+  // ****************************************************
+  // *** ATTRIBUTES THAT DEFINE STORE'S BEHAVIOUR
+  // ****************************************************
+
   handlePut: false,
   handlePost: false,
   handleGet: false,
@@ -182,9 +186,6 @@ var Store = declare( null,  {
 
     // Create the dbDriver object, ready to accept queries
     self.dbDriver = new self.DbDriver( self.collectionName, fields );
-
-    console.log("PROJECTION HASH IN JsonRestStores:");
-    console.log( self.dbDriver.projectionHash );
   },
 
 
@@ -228,7 +229,27 @@ var Store = declare( null,  {
     self._enrichSelectorWithParams( selector, params );
 
     // Make the database call 
-    self.dbDriver.select( selector, cb );
+    self.dbDriver.select( selector, function( err, docs ){
+      if( err ){
+        cb( err );
+      } else {
+        if( docs.length === 0 ){
+          cb( null, null );
+        } else if( docs.length !== 1 ){
+
+          cb( new self.ServiceUnavailableError({
+            message: "execAllDbFetch fetched more than 1 record",
+            data: {
+              length: docs.length,
+              selector: selector,
+              store: self.storeName
+            }
+          }));
+        } else {
+          cb( null, docs[ 0 ] );
+        }
+      }
+    });
 
   }, 
 
@@ -241,9 +262,6 @@ var Store = declare( null,  {
     // Make up the `record` variable, based on the passed `body`
     for( var k in body ) record[ k ] = body[ k ];
 
-    console.log("RECORD 1");
-    console.log( record );
-
     // Add param IDs to the record that is being written
     self.paramIds.forEach( function( paramId ){
       if( typeof( params[ paramId ] ) !== 'undefined' ){
@@ -251,15 +269,9 @@ var Store = declare( null,  {
       }
     });
 
-    console.log("RECORD 2");
-    console.log( record );
-
     // The last parameter is missing since it
     // wasn't passed: assign an ObjectId to it
     record[ self.idProperty ] = generatedId;
-
-    console.log("RECORD 3");
-    console.log( record );
 
     self.dbDriver.insert( record, { returnRecord: true }, cb );
 
@@ -268,7 +280,7 @@ var Store = declare( null,  {
   execPutDbUpdate: function( params, body, options, doc, fullDoc, cb ){
 
     var self = this;
-    var updateObject = {}, unsetObject = {};
+    //var updateObject = {};
 
     // Make up the filter, based on the store's IDs (used as filters).
     var selector = {};
@@ -279,20 +291,42 @@ var Store = declare( null,  {
     // overwritten)
     // FIXME: ALL of the idProperties should be left alone and not
     // get overwritten, not just the last one
-    for( var i in body ){
-      if( i != self.idProperty ) updateObject[ i ] = body[ i ];
-    }
+    //for( var i in body ){
+      // if( i != self.idProperty ) updateObject[ i ] = body[ i ];
+    //  updateObject[ i ] = body[ i ];
+    //}
+    
+    //    console.log( "SELECTOR:");
+    //    console.log( require('util').inspect( selector, { depth: 10 } ) );
 
-    self.dbDriver.update( selector, { deleteUnsetFields: true, multi: false }, function( err, howMany ){
+    self.dbDriver.update( selector, body, { deleteUnsetFields: true, multi: false }, function( err, howMany ){
       if( err ){
         cb( err );
       } else {
 
-        filter.ranges.limit = 1;
-        self.dbDriver.select( filter, cb );
+        self.dbDriver.select( selector, function( err, docs ){
+          if( err ){
+            cb( err );
+          } else {
+            if( docs.length === 0 ){
+              cb( null, null );
+            } else if( docs.length !== 1 ){
 
+              cb( new self.ServiceUnavailableError({
+                message: "dbDriver.update updated more than 1 record",
+                data: { 
+                  length: doc.length,
+                  selector: selector,
+                  store: self.storeName
+                }
+              }));
+
+            } else {
+              cb( null, docs[ 0 ] );
+            }
+          }
+        });
       }
-
     });
   },
 
@@ -329,6 +363,8 @@ var Store = declare( null,  {
 
   _queryMakeSelector: function( filters, sort, ranges ){
 
+    var self = this;
+
     // Define and set the conditions variable, which will be returned
     var conditions = {};
     conditions.and = []
@@ -340,7 +376,7 @@ var Store = declare( null,  {
       var filterValue = filters[ filterField ];
 
       if( self.searchSchema.structure[ filterField ].filterType ){
-        var filterType= self.searchSchema.structure[ filterfield ].filterType;
+        var filterType= self.searchSchema.structure[ filterField ].filterType;
 
         // Double check that the referenced field exists
         if( filterType.field && typeof( self.searchSchema.structure[ filterType.field ] ) === 'undefined' ){
@@ -353,6 +389,9 @@ var Store = declare( null,  {
       }
     }
 
+    if( conditions.and.length === 0 ) delete conditions.and;
+    if( conditions.or.length === 0 ) delete conditions.or;
+
     return {
       conditions: conditions,
       ranges: ranges,
@@ -362,15 +401,12 @@ var Store = declare( null,  {
 
 
   /*
-      * REMOTE: options.filters, options.sort, options.ranges are created by _initOptionsFromReq
-      * LOCAL: user sets options.filters, options.sort and options.ranges
+      * FIRST:
+      *   REMOTE: options.filters, options.sort, options.ranges are created by _initOptionsFromReq
+      *   LOCAL: user sets options.filters, options.sort and options.ranges
 
-      * AND THEN
-      * self._queryMakeSelector( options ) s called, and returns the full db selector for those options
-
-    Local:
-      * user sets options.filters, options.sort and options.ranges
-      *
+      * AND THEN:
+      *   self._queryMakeSelector( options ) is called, and returns the full db selector for those options
   */
 
   _initOptionsFromReq: function( mn, req ){
@@ -494,14 +530,12 @@ var Store = declare( null,  {
     var self = this;
     var cursor;
 
-    var selector = {};
-
     var selector = self._queryMakeSelector( options.filters, options.sort, options.ranges );
 
     self._enrichSelectorWithParams( selector, params );
 
     // Run the select based on the passed parameters
-    dbLayer.select( selector, next );
+    self.dbDriver.select( selector, next );
   },
 
 
@@ -731,7 +765,7 @@ var Store = declare( null,  {
           self._sendErrorOnErr( err, next, function(){
      
             var skipParamsObject = {};
-            skipParamsObject[ self.idProperty ] = [ 'required '];
+            skipParamsObject[ self.idProperty ] = [ 'required' ];
 
             self.schema.validate( body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, body, errors ){
               self._sendErrorOnErr( err, next, function(){
@@ -937,7 +971,6 @@ var Store = declare( null,  {
             
                                                 self.prepareBeforeSend( doc, function( err, doc ){
                                                   self._sendErrorOnErr( err, next, function(){
-            
                                                     self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
                                                       self._sendErrorOnErr( err, next, function(){
             
@@ -1023,9 +1056,11 @@ var Store = declare( null,  {
             
                                         self.execPutDbUpdate( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
                                           self._sendErrorOnErr( err, next, function(){
-        
+       
+ 
                                             self.extrapolateDoc( params, body, options, fullDocAfter, function( err, docAfter ) {
                                               self._sendErrorOnErr( err, next, function(){
+
         
                                                 self._castDoc( docAfter, function( err, docAfter ) {
                                                   self._sendErrorOnErr( err, next, function(){
@@ -1068,7 +1103,8 @@ var Store = declare( null,  {
                                                       self.prepareBeforeSend( docAfter, function( err, docAfter ){
                                                         self._sendErrorOnErr( err, next, function(){
                 
-                                                          next( null, doc, self.idProperty );
+                                                          next( null, docAfter, self.idProperty );
+
                                                         });
                                                       });
                                                     }
@@ -1161,10 +1197,11 @@ var Store = declare( null,  {
               if( typeof( filters ) === 'undefined' ) filters = {};
               */
 
- 
-              self.searchSchema.validate( filters, { onlyObjectValues: true }, function( err, filters, errors ){
+
+              self.searchSchema.validate( options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
                 self._sendErrorOnErr( err, next, function(){
 
+                  // Actually assigning cast and validated filters to `options`
                   options.filters = filters;
 
                   // Errors in casting: give up, run away
@@ -1653,7 +1690,6 @@ Store.Delete = function( id, options, next ){
   // Actually run the request
   request._makeDelete( params, {}, options, next );
 }
-
 
 
 function fixRequestForApi( request ){
