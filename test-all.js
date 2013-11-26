@@ -291,34 +291,76 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
 
     startup: startup,
 
-    /* POST
-       * handlePost (REST)
-       * checkParamIds (API general)
-       * prepareBodyPost (API hooks)
-       * validate (API general)
-       * checkPermissionsPost (REST)
-       * cleanup (API general)
-       * extrapolateDoc (API hooks)
-       * castDoc (API, general)
-       * echoAfterPost (REST)
-       * prepareBeforeSend (REST + API hooks )
-       * afterPost (REST + API hooks )
+    /* POST TODO:
+       * REST  handlePost
+       * REST  checkParamIds
+       * APIH  prepareBodyPost
+       * APIG  validate
+       * REST  checkPermissionsPost
+       * APIG  cleanup
+       * APIH  extrapolateDoc
+       * APIG  castDoc
+       * REST  echoAfterPost
+       * REST/APIH prepareBeforeSend
+       * REST/APIH afterPost
     */
 
     'API Post(): testing (general)': function( test ){
 
-      g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
+      
+      g.dbPeople.delete( { }, { multi: true }, function( err ){
         test.ifError( err );
 
-        g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
+        // STRAIGHT
+
+        g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
           test.ifError( err );
-          test.deepEqual( data[ 0 ], person );
 
-          // TODO: Add test for wrong param ID
-          // TODO: Add test for validate
-          // TODO: Add test for cleanup
+          g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
+            test.ifError( err );
+            test.deepEqual( data[ 0 ], person );
 
-          test.done();
+          
+            // APIG validate
+
+            g.People.Post( { name: 'Tony', surname: "1234567890123456789012345", age: 37 }, function( err, person ){
+           
+              test.deepEqual( err.errors,  [ { field: 'surname', message: 'Field is too long: surname' } ] );
+              test.equal( err.message, "Unprocessable Entity");
+              test.equal( err.httpError, 422);
+
+
+              // APIG cleanUp
+
+              // Set the basic stores
+              g.WsPeople.Post( { workspaceId: 1234, name: "Tony", extra: "Won't be saved" }, function( err, person ){
+                test.ifError( err );
+                test.deepEqual( person, { workspaceId: 1234, name: 'Tony', id: person.id } ); 
+
+                // APIG castDoc
+                
+                // This will artificially change the age to its string equivalent. There is no other way
+                // to test this, unless I want to hack the DB layer underneath
+                var People2 = declare( g.People, {
+
+                  extrapolateDoc: function( params, body, options, fullDoc, done ){
+
+                    var doc = {};
+                    for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+                    doc.age = doc.age.toString();
+
+                    done( null, doc );
+                  }
+                });
+                People2.Post( { name: 'Tony', age: 37 }, function( err, person ){
+                  test.ifError( err );
+
+                  test.equal( person.age, 37 );
+                  test.done();
+                });
+              });
+            });
+          });
         });
 
       });
@@ -326,16 +368,18 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
 
     'API Post(): testing (hooks)': function( test ){
 
-      // TODO: prepareBodyPost
-      // TODO: extrapolateDoc
-      // TODO: castDoc
-      // TODO: afterPost
+     /*
+       * APIH prepareBodyPost
+       * APIH extrapolateDoc
+       * REST/APIH prepareBeforeSend
+       * REST/APIH afterPost
+      */
 
-      var WsPeople2 = declare( g.WsPeople, {
+      var afterPost = false;
+      var People2 = declare( g.People, {
 
         prepareBodyPost: function( body, done ){
-          body.name = body.name.toUpperCase();
-          body.surname = body.surname + body.extra;
+          body.name = body.name + "_prepareBodyPost";
           done( null, body );
         },
 
@@ -343,7 +387,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
 
           var doc = {};
           for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
-          doc.name = doc.name + '_EXTRAPOLATED';
+          doc.name = doc.name + '_extrapolateDoc';
 
           done( null, doc );
         },
@@ -352,38 +396,34 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
 
           var sendDoc = {};
           for( var k in doc ) sendDoc[ k ] = doc[ k ];
-          sendDoc.beforeSend = 'PREPARED_BEFORE_SEND';
+          sendDoc.beforeSend = '_prepareBeforeSend';
 
           done( null, sendDoc );
         },
 
         afterPost: function( params, body, options, doc, fullDoc, done){
-          this._res.afterPostRun = true;
+          afterPost = true;
           done( null );
         },
 
       });
 
-      var req = makeReq( { params: { workspaceId: 121212 }, body: { name: 'Tony', surname: 'Mobily', extra: '_PREPARED' } } );
-
-      (WsPeople2.online.Post(WsPeople2))(req, new RES( function( err, type, headers, status, data ){
+ 
+      // Set the basic stores
+      People2.Post( { name: "Tony" }, function( err, person ){
         test.ifError( err );
+        test.deepEqual( person,
 
-        var res = this;
+{ name: 'Tony_prepareBodyPost_extrapolateDoc',
+  id: person.id,
+  beforeSend: '_prepareBeforeSend' }
 
-        test.equal( type, 'json' );
-        test.equal( status, 201 );
-        test.equal( headers.Location, 'http://www.example.com/' + data.id );
-        test.equal( data.name, 'TONY_EXTRAPOLATED' );
-        test.equal( data.surname, 'Mobily_PREPARED' );
-        test.equal( data.workspaceId, 121212 );
-        test.equal( data.beforeSend, 'PREPARED_BEFORE_SEND' );
-        test.equal( data.extra, undefined );
-        test.equal( res.afterPostRun, true );
-        test.ok( data.id );
+        );        
+
+        test.equal( afterPost, true );
 
         test.done();
-      }));
+      }); 
 
 
     },
@@ -391,9 +431,16 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
 
     'REST Post(): testing': function( test ){
 
-      var req = makeReq( { params: { workspaceId: 121212 }, body: { name: 'Tony', surname: 'Mobily' } } );
+/*
+       * REST echoAfterPost
+       * REST/APIH prepareBeforeSend
+       * REST/APIH afterPost
+*/
 
-      (g.WsPeople.online.Post(g.WsPeople))(req, new RES( function( err, type, headers, status, data ){
+      // STRAIGHT
+
+      var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
+      (g.People.online.Post(g.People))(req, new RES( function( err, type, headers, status, data ){
         test.ifError( err );
         var res = this;
 
@@ -402,28 +449,66 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
         test.equal( headers.Location, 'http://www.example.com/' + data.id );
         test.equal( data.name, 'Tony' );
         test.equal( data.surname, 'Mobily' );
-        test.equal( data.workspaceId, 121212 );
         test.ok( data.id );
 
-        var req = makeReq( { params: { workspaceId: 121212 }, body: { name: 'Tony', surname: 'Mobily' } } );
 
+        // * REST handlePost
+
+        var People2 = declare( g.People, {
+          handlePost: false,
+        });
+ 
+        var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
         (g.WsPeople.online.Post(g.WsPeople))(req, new RES( function( err, type, headers, status, data ){
           test.ifError( err );
+
           var res = this;
 
-          test.equal( type, 'json' );
-          test.equal( status, 201 );
-          test.equal( headers.Location, 'http://www.example.com/' + data.id );
-          test.equal( data.name, 'Tony' );
-          test.equal( data.surname, 'Mobily' );
-          test.equal( data.workspaceId, 121212 );
-          test.ok( data.id );
+          test.equal( type, 'bytes' );
+          test.equal( status, 400 );
 
-          test.done();
+       
+          // * REST checkParamIds
 
-      }));
+          var req = makeReq( { params: { }, body: { name: 'Tony', surname: 'Mobily' } } );
+          (g.WsPeople.online.Post(g.WsPeople))(req, new RES( function( err, type, headers, status, data ){
+            test.ifError( err );
+            var res = this;
+
+            test.equal( type, 'bytes' );
+            test.equal( status, 400 );
+            test.deepEqual( data,
+
+{ message: 'Bad Request',
+  errors: 
+   [ { field: 'workspaceId',
+       message: 'Field required in the URL: workspaceId' } ] }
+          );
+          
+            // * REST checkPermissionsPost
+
+            var People2 = declare( g.People, {
+              
+              handlePost: false,
+            });
+ 
+            var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
+            (g.WsPeople.online.Post(g.WsPeople))(req, new RES( function( err, type, headers, status, data ){
+              test.ifError( err );
+
+              var res = this;
+
+              test.equal( type, 'bytes' );
+              test.equal( status, 400 );
+
+ 
 
 
+              test.done();
+            }));
+
+          }));
+        }));
 
       }));
 
