@@ -21,7 +21,43 @@ var
 , Schema = require('simpleschema')
 ;
 
+function makeReq( params ){
+  var req = {};
 
+  req.url = "http://www.example.com/";
+  req.headers = {};
+  req.params = {}; 
+  req.body = {};
+
+  [ 'url', 'headers', 'params', 'body' ].forEach( function( k ){
+    if( params[ k ] ) req[ k ] = params[ k ];
+  });
+
+  req.originalUrl = req.url;
+
+  return req;
+
+}
+
+var RES = function( func ){
+
+  this._headers = {};
+
+  this.send = function( status, data ){
+    func.call( this, null, 'bytes', this._headers, status, data );
+  };
+
+  this.json = function( status, data ){
+    func.call( this, null, 'json', this._headers, status, data );
+  };
+
+  this.setHeader = function( header, value ){
+    this._headers[ header ] = value;
+  };
+
+
+
+}
 
 var peopleData = exports.peopleData = [
   { name: 'Chiara',    surname: 'Mobily',     age: 22 },
@@ -31,7 +67,7 @@ var peopleData = exports.peopleData = [
 ];
 
 
-function i( v ){
+function l( v ){
   console.log( require( 'util' ).inspect( v, { depth: 10 } ) );
 }
 
@@ -117,7 +153,7 @@ process.on('uncaughtException', function(err) {
   console.error(err.stack);
 });
 
-Error.stackTraceLimit = Infinity;
+//Error.stackTraceLimit = Infinity;
 
 exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
   
@@ -148,10 +184,10 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
       g.People = declare( g.JRS, {
 
         schema: new Schema({
-          id:       { type: 'id', required: true },
-          name:     { type: 'string' },
-          surname:  { type: 'string', max: 20 },
-          age:      { type: 'number', max: 99 },
+          id:          { type: 'id', required: true },
+          name:        { type: 'string' },
+          surname:     { type: 'string', max: 20 },
+          age:         { type: 'number', max: 99 },
         }),
 
         searchSchema: new Schema({
@@ -173,17 +209,59 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
         paramIds: [ 'id' ],
       });
      
+      // Set the basic stores
+      g.WsPeople = declare( g.JRS, {
+
+        schema: new Schema({
+          id:          { type: 'id', required: true },
+          workspaceId: { type: 'id', required: true },
+          name:        { type: 'string' },
+          surname:     { type: 'string', max: 20 },
+          age:         { type: 'number', max: 99 },
+          extra:       { type: 'string', max: 99, doNotSave: true },
+        }),
+
+        searchSchema: new Schema({
+          name:     { type: 'string', filterType: { type: 'eq' }  },
+          surname:  { type: 'string', max: 20, filterType: { type: 'eq'  } },
+          age:      { type: 'number', max: 99, filterType: { type: 'eq' } },
+          ageGt:    { type: 'number', max: 99, filterType: { field: 'age', type: 'gt' } },
+          nameSt:   { type: 'string', filterType: { field: 'surname', type: 'startsWith' } },
+        }),
+
+        storeName: 'wsPeople',
+
+        handlePut: true,
+        handlePost: true,
+        handleGet: true,
+        handleGetQuery: true,
+        handleDelete: true,
+
+        paramIds: [ 'workspaceId', 'id' ],
+      });
+     
 
       // Clear people table
       //g.dbPeople = new g.DbDriver( 'people', {  name: true, surname: true, age: false, id: true }  ); 
       g.dbPeople = new g.People().dbDriver;
       g.dbPeople.delete( { }, { multi: true }, function( err ){
         if( err ){
-          throw( new Error("Could not empty database, giving up") );
+          throw( new Error("Could not empty people database, giving up") );
           process.exit();
         } else {
-          test.done();
-        }
+ 
+          // Clear people table
+          //g.dbPeople = new g.DbDriver( 'people', {  name: true, surname: true, age: false, id: true }  ); 
+          g.dbWsPeople = new g.WsPeople().dbDriver;
+          g.dbWsPeople.delete( { }, { multi: true }, function( err ){
+            if( err ){
+              throw( new Error("Could not empty wsPeople database, giving up") );
+              process.exit();
+            } else {
+              test.done();
+            }
+          });
+        };
       });
 
     });
@@ -213,19 +291,215 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
 
     startup: startup,
 
-    'API Post(): testing': function( test ){
+    /* POST
+       * handlePost (REST)
+       * checkParamIds (API general)
+       * prepareBodyPost (API hooks)
+       * validate (API general)
+       * checkPermissionsPost (REST)
+       * cleanup (API general)
+       * extrapolateDoc (API hooks)
+       * castDoc (API, general)
+       * echoAfterPost (REST)
+       * prepareBeforeSend (REST + API hooks )
+       * afterPost (REST + API hooks )
+    */
+
+    'API Post(): testing (general)': function( test ){
 
       g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
         test.ifError( err );
 
-          g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
+        g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
           test.ifError( err );
           test.deepEqual( data[ 0 ], person );
+
+          // TODO: Add test for wrong param ID
+          // TODO: Add test for validate
+          // TODO: Add test for cleanup
+
           test.done();
         });
 
       });
     },
+
+    'API Post(): testing (hooks)': function( test ){
+
+      // TODO: prepareBodyPost
+      // TODO: extrapolateDoc
+      // TODO: castDoc
+      // TODO: afterPost
+
+      var WsPeople2 = declare( g.WsPeople, {
+
+        prepareBodyPost: function( body, done ){
+          body.name = body.name.toUpperCase();
+          body.surname = body.surname + body.extra;
+          done( null, body );
+        },
+
+        extrapolateDoc: function( params, body, options, fullDoc, done ){
+
+          var doc = {};
+          for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+          doc.name = doc.name + '_EXTRAPOLATED';
+
+          done( null, doc );
+        },
+
+        prepareBeforeSend: function( doc, done ){
+
+          var sendDoc = {};
+          for( var k in doc ) sendDoc[ k ] = doc[ k ];
+          sendDoc.beforeSend = 'PREPARED_BEFORE_SEND';
+
+          done( null, sendDoc );
+        },
+
+        afterPost: function( params, body, options, doc, fullDoc, done){
+          this._res.afterPostRun = true;
+          done( null );
+        },
+
+      });
+
+      var req = makeReq( { params: { workspaceId: 121212 }, body: { name: 'Tony', surname: 'Mobily', extra: '_PREPARED' } } );
+
+      (WsPeople2.online.Post(WsPeople2))(req, new RES( function( err, type, headers, status, data ){
+        test.ifError( err );
+
+        var res = this;
+
+        test.equal( type, 'json' );
+        test.equal( status, 201 );
+        test.equal( headers.Location, 'http://www.example.com/' + data.id );
+        test.equal( data.name, 'TONY_EXTRAPOLATED' );
+        test.equal( data.surname, 'Mobily_PREPARED' );
+        test.equal( data.workspaceId, 121212 );
+        test.equal( data.beforeSend, 'PREPARED_BEFORE_SEND' );
+        test.equal( data.extra, undefined );
+        test.equal( res.afterPostRun, true );
+        test.ok( data.id );
+
+        test.done();
+      }));
+
+
+    },
+
+
+    'REST Post(): testing': function( test ){
+
+      var req = makeReq( { params: { workspaceId: 121212 }, body: { name: 'Tony', surname: 'Mobily' } } );
+
+      (g.WsPeople.online.Post(g.WsPeople))(req, new RES( function( err, type, headers, status, data ){
+        test.ifError( err );
+        var res = this;
+
+        test.equal( type, 'json' );
+        test.equal( status, 201 );
+        test.equal( headers.Location, 'http://www.example.com/' + data.id );
+        test.equal( data.name, 'Tony' );
+        test.equal( data.surname, 'Mobily' );
+        test.equal( data.workspaceId, 121212 );
+        test.ok( data.id );
+
+        var req = makeReq( { params: { workspaceId: 121212 }, body: { name: 'Tony', surname: 'Mobily' } } );
+
+        (g.WsPeople.online.Post(g.WsPeople))(req, new RES( function( err, type, headers, status, data ){
+          test.ifError( err );
+          var res = this;
+
+          test.equal( type, 'json' );
+          test.equal( status, 201 );
+          test.equal( headers.Location, 'http://www.example.com/' + data.id );
+          test.equal( data.name, 'Tony' );
+          test.equal( data.surname, 'Mobily' );
+          test.equal( data.workspaceId, 121212 );
+          test.ok( data.id );
+
+          test.done();
+
+      }));
+
+
+
+      }));
+
+    },
+
+    'REST Post(): hooks': function( test ){
+
+      // TODO: permissions
+      // TODO: echoAfterPost
+      // TODO: prepareBeforeSend
+      // TODO: afterPost
+   
+
+
+      var WsPeople2 = declare( g.WsPeople, {
+
+        prepareBodyPost: function( body, done ){
+          body.name = body.name.toUpperCase();
+          body.surname = body.surname + body.extra;
+          done( null, body );
+        },
+
+        extrapolateDoc: function( params, body, options, fullDoc, done ){
+
+          var doc = {};
+          for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+          doc.name = doc.name + '_EXTRAPOLATED';
+
+          done( null, doc );
+        },
+
+        prepareBeforeSend: function( doc, done ){
+
+          var sendDoc = {};
+          for( var k in doc ) sendDoc[ k ] = doc[ k ];
+          sendDoc.beforeSend = 'PREPARED_BEFORE_SEND';
+
+          done( null, sendDoc );
+        },
+
+        afterPost: function( params, body, options, doc, fullDoc, done){
+          this._res.afterPostRun = true;
+          done( null );
+        },
+
+      });
+
+      var req = makeReq( { params: { workspaceId: 121212 }, body: { name: 'Tony', surname: 'Mobily', extra: '_PREPARED' } } );
+
+      (WsPeople2.online.Post(WsPeople2))(req, new RES( function( err, type, headers, status, data ){
+        test.ifError( err );
+
+        var res = this;
+
+        test.equal( type, 'json' );
+        test.equal( status, 201 );
+        test.equal( headers.Location, 'http://www.example.com/' + data.id );
+        test.equal( data.name, 'TONY_EXTRAPOLATED' );
+        test.equal( data.surname, 'Mobily_PREPARED' );
+        test.equal( data.workspaceId, 121212 );
+        test.equal( data.beforeSend, 'PREPARED_BEFORE_SEND' );
+        test.equal( data.extra, undefined );
+        test.equal( res.afterPostRun, true );
+        test.ok( data.id );
+
+        test.done();
+      }));
+
+
+    },
+
+
+
+
+
+
 
     'API Put(): testing': function( test ){
 
@@ -434,44 +708,218 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     
     'API GetQuery: testing': function( test ){
 
-       // Set the basic stores
-      g.PeopleWrongId = declare( g.JRS, {
-
-        schema: new Schema({
-          name:     { type: 'string' },
-          surname:  { type: 'string', max: 20, filterType: { type: 'eq'  } },
-          age:      { type: 'number', max: 99 },
-        }),
-
-        storeName: 'people',
-        paramIds: [ 'surname' ],
-      });
-     
       g.dbPeople.delete( { }, { multi: true }, function( err ){
         test.ifError( err );
 
+        var l = [];
         async.series([
-          function( done ){ g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, done ); },
-          function( done ){ g.People.Post( { name: 'Chiara', surname: "Mobily", age: 24 }, done );},
-          function( done ){ g.People.Post( { name: 'Daniela', surname: "Mobily", age: 64 }, done );},
-          function( done ){ g.People.Post( { name: 'Sara', surname: "Fabbietti", age: 14 }, done );},
+          function( done ){ g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 },    function( err, r ){ l.push( r); done() }) },
+          function( done ){ g.People.Post( { name: 'Chiara', surname: "Mobily", age: 24 },  function( err, r ){ l.push( r); done() }) },
+          function( done ){ g.People.Post( { name: 'Daniela', surname: "Mobily", age: 64 }, function( err, r ){ l.push( r); done() }) },
+          function( done ){ g.People.Post( { name: 'Sara', surname: "Fabbietti", age: 14 }, function( err, r ){             done() }) },
         ], function( err ){
           test.ifError( err );
           
           g.People.GetQuery( { filters: { nameSt: 'Mo' } }, function( err, docs ){
-            if( err ) { console.log( err );console.log( err.stack ); }
-            console.log( docs );
-            test.done();
+            test.ifError( err );
+            compareCollections( test, l, docs );
+
+            g.People.GetQuery( { filters: { ageGt: 20 } }, function( err, docs ){
+              test.ifError( err );
+              compareCollections( test, l, docs );
+              
+              test.done();
+            });
           });
         });
       });
+
+    },
+
+     'testing _queryMakeSelector': function( test ){
+
+       var people = new g.People();
+
+       var selector = people._queryMakeSelector( { name: 'Tony', surname: 'Mobily' } );
+       test.deepEqual( selector,
+
+{ conditions: 
+   { and: 
+      [ { field: 'name', type: 'eq', value: 'Tony' },
+        { field: 'surname', type: 'eq', value: 'Mobily' } ] },
+  ranges: undefined,
+  sort: undefined }
+       );
+      
+       var selector = people._queryMakeSelector( { nameSt: 'Mob', ageGt: 20 } );
+
+       test.deepEqual( selector,
+
+{ conditions: 
+   { and: 
+      [ { field: 'surname', type: 'startsWith', value: 'Mob' },
+        { field: 'age', type: 'gt', value: 20 } ] },
+  ranges: undefined,
+  sort: undefined }
+
+       );
+
+       var selector = people._queryMakeSelector( { name: 'Tony' }, { name: -1, surname: 1 }  );
+
+       test.deepEqual( selector, 
+
+{ conditions: { and: [ { field: 'name', type: 'eq', value: 'Tony' } ] },
+  ranges: undefined,
+  sort: { name: -1, surname: 1 } }
+
+       );
+
+       var selector = people._queryMakeSelector( { name: 'Tony' }, { name: -1, surname: 1 }, { from: 0, to: 10, limit: 5}  );
+
+       test.deepEqual( selector, 
+
+{ conditions: { and: [ { field: 'name', type: 'eq', value: 'Tony' } ] },
+  ranges: { from: 0, to: 10, limit: 5 },
+  sort: { name: -1, surname: 1 } }
+
+       );
+
+       test.done();
+    },
+
+     'testing _initOptionsFromReq for Put()': function( test ){
+
+       var people = new g.People();
+       
+       var req = {};
+       req.headers = {};
+
+       req.headers[ 'if-match' ] = '*';
+       var options = people._initOptionsFromReq( 'Put', req );
+       test.deepEqual( options, { overwrite: true } );
+
+       req.headers[ 'if-none-match' ] = '*';
+       var options = people._initOptionsFromReq( 'Put', req );
+       test.deepEqual( options, { overwrite: false } );
+
+       req.headers = {};
+       var options = people._initOptionsFromReq( 'Put', req );
+       test.deepEqual( options, { } );
+
+       test.done();
+    }, 
+
+     'testing _initOptionsFromReq for GetQuery() -- just parameters': function( test ){
+
+       var people = new g.People();
+       
+       // Basic initialisation
+       var req = {};
+       req.headers = {};
+
+       req.url = "http://www.example.org/people?name=Tony&surname=Mobily";
+
+       var options = people._initOptionsFromReq( 'GetQuery', req );
+       test.deepEqual( options, 
+
+{ sort: {},
+  ranges: null,
+  filters: { name: 'Tony', surname: 'Mobily' } }
+
+       );
+       
+       test.done();
+    }, 
+
+
+     'testing _initOptionsFromReq for GetQuery() -- sortBy': function( test ){
+
+       var people = new g.People();
+       
+       // Basic initialisation
+       var req = {};
+       req.headers = {};
+
+       req.url = "http://www.example.org/people?name=Tony&surname=Mobily&sortBy=+name,-surname";
+
+       var options = people._initOptionsFromReq( 'GetQuery', req );
+       test.deepEqual( options, 
+
+{ sort: { name: 1, surname: -1 },
+  ranges: null,
+  filters: { name: 'Tony', surname: 'Mobily' } }
+
+       );
+
+       req.url = "http://www.example.org/people?name=Tony&surname=Mobily&sortBy=+name,wrongNoSign,-surname";
+
+       var options = people._initOptionsFromReq( 'GetQuery', req );
+       test.deepEqual( options, 
+
+{ sort: { name: 1, surname: -1 },
+  ranges: null,
+  filters: { name: 'Tony', surname: 'Mobily' } }
+       );
+
+       
+       test.done();
+    }, 
+
+     'testing _initOptionsFromReq for GetQuery() -- ranges': function( test ){
+
+       var people = new g.People();
+       
+       // Basic initialisation
+       var req = {};
+       req.headers = {};
+
+       req.headers.range = "items=0-10";
+       req.url = "http://www.example.org/people?name=Tony";
+
+       var options = people._initOptionsFromReq( 'GetQuery', req );
+       test.deepEqual( options, 
+
+{ sort: {},
+  ranges: { from: 0, to: 10, limit: 11 },
+  filters: { name: 'Tony' } }
+
+       );
+
+
+       req.headers.range = "items= 0-10";
+       req.url = "http://www.example.org/people?name=Tony";
+
+       var options = people._initOptionsFromReq( 'GetQuery', req );
+       test.deepEqual( options, 
+
+{ sort: {},
+  ranges: null,
+  filters: { name: 'Tony' } }
+
+       );
+
+       test.done();
+    }, 
+
+
+/* 
+        console.log("Callback called!");
+        console.log( err );
+        console.log( type );
+        console.log( headers );
+        console.log( status );
+        console.log( data );
+*/
+
+
+
+
+
     /*
       TODO:
-        * Write tests for URL manipulation functions
         * Write tests same as API ones, but using the Online calls
-        * Test _all_ hooks with tests
+        * Test _all_ hooks with all tests
     */
-    }
 
   }
 
