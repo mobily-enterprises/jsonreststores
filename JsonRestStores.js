@@ -406,7 +406,7 @@ var Store = declare( null,  {
       *   LOCAL: user sets options.filters, options.sort and options.ranges
 
       * AND THEN:
-      *   self._queryMakeSelector( options ) is called, and returns the full db selector for those options
+      *   self._queryMakeSelector( filters, sort, ranges ) is called, and returns the full db selector for those options
   */
 
   _initOptionsFromReq: function( mn, req ){
@@ -460,9 +460,11 @@ var Store = declare( null,  {
             subTokenClean = subToken.replace( '+', '' ).replace( '-', '' );
 
             if( ! self.remote || ( self.searchSchema.structure[ subTokenClean ] && self.searchSchema.structure[ subTokenClean ].sortable ) ){
-              var sortDirection = subTokens[ i ][ 0 ] == '+' ? 1 : -1;
-              sortField = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
-              sortObject[ sortField ] = sortDirection;
+              if( subTokens[ i ][ 0 ] === '+' || subTokens[ i ][ 0 ] === '-' ){
+                var sortDirection = subTokens[ i ][ 0 ] == '-' ? -1 : 1;
+                sortField = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
+                sortObject[ sortField ] = sortDirection;
+              }
             }
           }
         }
@@ -756,6 +758,7 @@ var Store = declare( null,  {
       self._sendError( next, new self.NotImplementedError( ) );
       return;
     }
+
 
     // Check the IDs
     self._checkParamIds( params, body, true, function( err ){  
@@ -1184,20 +1187,6 @@ var Store = declare( null,  {
               self._sendError( next, new self.ForbiddenError() );
             } else {
     
-
-              /*     
-              // Set reasonable (good) defaults
-              sort = options.sort;
-              ranges = options.ranges;
-              filters = options.filters;
-    					if( typeof( sort ) === 'undefined' || ! sort ) sort = {};
-    					if( typeof( ranges ) === 'undefined' || ! ranges ) ranges = {};
-              if( typeof( ranges.rangeFrom ) === 'undefined' ) ranges.rangeFrom = 0;
-              if( typeof( ranges.rangeTo )   === 'undefined' ) ranges.rangeTo   = 0;
-              if( typeof( filters ) === 'undefined' ) filters = {};
-              */
-
-
               self.searchSchema.validate( options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
                 self._sendErrorOnErr( err, next, function(){
 
@@ -1471,6 +1460,7 @@ Store.online = {};
 [ 'Get', 'GetQuery', 'Put', 'Post', 'PostAppend', 'Delete' ].forEach( function(mn){
   Store.online[mn] = function( Class ){
     return function( req, res, next ){
+
 
       var request = new Class();
    
