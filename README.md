@@ -3,11 +3,14 @@ JsonRestStores
 
 # NOTE: I AM REWRITING THIS MODULE AND DOCS ARE 100% OUT OF DATE
 
-The title says it all. Please do NOT use this module until the 15th of November 2013, as it has evolved enormously over the last little while and I still haven't documented the changes.
+The title says it all. Please do NOT use this module until the 30th of November 2013, as it has evolved enormously over the last little while and I still haven't documented the changes.
+
+
+In a couple of days (in November 30th) the module will be fully unit tested and documented.
 
 So... please be patient. The module will be worth the wait!
 
-
+----
 
 JsonRestStores is a one-stop module that allows you to create fully functional, configurable Json REST stores using NodeJS. A store can be inherited from another store, and can define all sorts of hooks to configure how it behaves (including permissions). It's also very easy to create "nested" stores.
 
@@ -15,8 +18,6 @@ Database access is abstracted. At the moment, it supports the following database
 
 * MongoDb
 * ... (more to come)
-
-**NOTE: I just finished writing up full documentation for this module. While doing so, I also did some (untested) changs to the module. Testing will happen in the next few days. If you try this module out, and encounter a problem, please open up an issue!.**
 
 # Requirements
 
@@ -103,7 +104,6 @@ So, the following routes will be defined:
     DELETE /workspaces/:id (deletes a workspace)
 
 Note that this store is not actually hooked to any database server. So, it will actually send out dummy data.
-
 
 ## A basic store using MongoDB
 
@@ -323,7 +323,7 @@ This is the limit of the number of elements that can be returned by a query. The
 
 ## Permissions
 
-iBy default, everything is allowed: stores allow pretty much anything and anything; anybody can DELETE, PUT, POST, etc. Furtunately, JsonRestStores allows you to decide exactly what is allowed and what isn't, by overriding specific methods.
+By default, everything is allowed: stores allow pretty much anything and anything; anybody can DELETE, PUT, POST, etc. Furtunately, JsonRestStores allows you to decide exactly what is allowed and what isn't, by overriding specific methods.
 
 Each permission function needs to call the callback: if everything went fine, `cb()` will be called with `cb( null, true )`; to fail, `cb( null, false )`.
 
