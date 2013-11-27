@@ -34,7 +34,7 @@ var Store = declare( null,  {
 
   DbDriver: null, // If not set in prototype, NEEDS to be passed as the constructor parameter
   searchSchema: null, // If not set in prototype, is set as `schema` by constructor
-  collectionName: null, // If not set in prototyoe, is set as `storeName` by constructor
+  collectionName: null, // If not set in prototype, is set as `storeName` by constructor
 
   // ****************************************************
   // *** ATTRIBUTES THAT DEFINE STORE'S BEHAVIOUR
@@ -47,7 +47,7 @@ var Store = declare( null,  {
   handleDelete: false,
 
   echoAfterPutNew: true,
-  echoAfterPutExisting: false,
+  echoAfterPutExisting: true,
   echoAfterPost: true,
 
   chainErrors: 'none',  // can be 'none', 'all', 'nonhttp'
@@ -80,8 +80,7 @@ var Store = declare( null,  {
 
   // Body preparation functions
   prepareBodyPost: function( body, cb ){ cb( null, body ); },
-  prepareBodyPutNew: function( body, cb ){ cb( null, body ); },
-  prepareBodyPutExisting: function( body, cb ){ cb( null, body ); },
+  prepareBodyPut: function( body, cb ){ cb( null, body ); },
 
   logError: function( error ){  },
 
@@ -119,7 +118,7 @@ var Store = declare( null,  {
 
   // **************************************************************************
   // *** END OF FUNCTIONS/ATTRIBUTES THAT NEED/CAN BE OVERRIDDEN BY DEVELOPERS
-  // ****************************************(*********************************
+  // **************************************************************************
 
 
   idProperty: null, // Calculated by constructor: last item of paramIds
@@ -622,7 +621,7 @@ var Store = declare( null,  {
             fakeRecord[ k ] = params[ k ];
           } else {
             if( !( skipIdProperty && k == self.idProperty ) ){
-              errors.push( { field: k, message: 'Field required in the URL: ' + k, mustChange: true } ); 
+              errors.push( { field: k, message: 'Field required in the URL: ' + k } ); 
             }
           }
         }
@@ -805,6 +804,7 @@ var Store = declare( null,  {
                                         if( self.remote ){
             
                                           // Set the Location header if it was a remote request
+
                                           self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
                                           if( self.echoAfterPost ){
             
@@ -903,41 +903,39 @@ var Store = declare( null,  {
     self._checkParamIds( params, body, false, function( err ){  
       self._sendErrorOnErr( err, next, function(){
 
-        self.schema.validate(  body, function( err, body, errors ) {
+        self.prepareBodyPut( body, function( err, body ){
           self._sendErrorOnErr( err, next, function(){
-    
-            if( errors.length ){
-              self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
-            } else {
-    
-              // Fetch the doc
-              self.execAllDbFetch( params, body, options, function( err, fullDoc ){
-                self._sendErrorOnErr( err, next, function(){
-      
-                  // Check the 'overwrite' option
-                  if( typeof( options.overwrite ) !== 'undefined' ){
-                    if( fullDoc && ! options.overwrite ){
-                      self._sendError( next, new self.PreconditionFailedError() );
-                    } else if( !fullDoc && options.overwrite ) {
-                      self._sendError( next, new self.PreconditionFailedError() );
-                    } else {
-                      continueAfterFetch();
-                    }
-                  } else { 
-                    continueAfterFetch();
-                  }
-        
-                  function continueAfterFetch(){
-    
-                    // It's a NEW doc: it will need to be an insert, _and_ permissions will be
-                    // done on inputted data
-                    if( ! fullDoc ){
-                    
- 
-                      self.prepareBodyPutNew( body, function( err, body ){
-                        self._sendErrorOnErr( err, next, function(){
 
- 
+            self.schema.validate(  body, function( err, body, errors ) {
+              self._sendErrorOnErr( err, next, function(){
+        
+                if( errors.length ){
+                  self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
+                } else {
+        
+                  // Fetch the doc
+                  self.execAllDbFetch( params, body, options, function( err, fullDoc ){
+                    self._sendErrorOnErr( err, next, function(){
+          
+                      // Check the 'overwrite' option
+                      if( typeof( options.overwrite ) !== 'undefined' ){
+                        if( fullDoc && ! options.overwrite ){
+                          self._sendError( next, new self.PreconditionFailedError() );
+                        } else if( !fullDoc && options.overwrite ) {
+                          self._sendError( next, new self.PreconditionFailedError() );
+                        } else {
+                          continueAfterFetch();
+                        }
+                      } else { 
+                        continueAfterFetch();
+                      }
+            
+                      function continueAfterFetch(){
+        
+                        // It's a NEW doc: it will need to be an insert, _and_ permissions will be
+                        // done on inputted data
+                        if( ! fullDoc ){
+                        
                           // Actually check permissions
                           self.checkPermissionsPutNew( params, body, options, function( err, granted ){
                             self._sendErrorOnErr( err, next, function(){
@@ -977,7 +975,7 @@ var Store = declare( null,  {
                                                     self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
                                                       self._sendErrorOnErr( err, next, function(){
             
-                                                        res.json( 201, doc );
+                                                        self._res.json( 201, doc );
                                                       });
                                                     });
                                                   });
@@ -987,7 +985,7 @@ var Store = declare( null,  {
                                                 self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
                                                   self._sendErrorOnErr( err, next, function(){
             
-                                                    res.send( 201, '' );
+                                                    self._res.send( 201, '' );
             
                                                   });
                                                 });
@@ -1026,18 +1024,10 @@ var Store = declare( null,  {
                             });
                           });
        
-                        });
-                      });
- 
-        
-                    // It's an EXISTING doc: it will need to be an update, _and_ permissions will be
-                    // done on inputted data AND existing doc
-                    } else {
-
-
-
-                      self.prepareBodyPutExisting( body, function( err, body ){
-                        self._sendErrorOnErr( err, next, function(){
+            
+                        // It's an EXISTING doc: it will need to be an update, _and_ permissions will be
+                        // done on inputted data AND existing doc
+                        } else {
     
                           self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                             self._sendErrorOnErr( err, next, function(){
@@ -1133,18 +1123,18 @@ var Store = declare( null,  {
                             });
                           });
     
-                        });
-                      });
-    
-                    }
-    
-                  }
+                        }
         
-                });
+                      }
+            
+                    });
+                  });
+        
+                }
+        
               });
-    
-            }
-    
+            });
+
           });
         });
 
@@ -1201,65 +1191,20 @@ var Store = declare( null,  {
                     self.execGetDbQuery( params, body, options, function( err, queryDocs ){
                       self._sendErrorOnErr( err, next, function(){
        
-                        // It's a normal, cursor-less call
-                        if( ! options.cursor ){
+                        self._extrapolateDocAnd_castDocAndprepareBeforeSendAll( params, body, options, queryDocs, function( err ){
+                          self._sendErrorOnErr( err, next, function(){
         
-                          self._extrapolateDocAnd_castDocAndprepareBeforeSendAll( params, body, options, queryDocs, function( err ){
-                            self._sendErrorOnErr( err, next, function(){
-        
-                              // Remote request: set headers, and send the doc back (if echo is on)
-                              if( self.remote ){
-                                self._res.setHeader('Content-Range', 'items ' + ranges.rangeFrom + '-' + ranges.rangeTo + '/' + queryDocs.total );
-                                self._res.json( 200, queryDocs );
-                              // Local request: simply return the doc to the asking function
-                              } else {
-                                next( null, queryDocs, self.idProperty );
-                              }
+                            // Remote request: set headers, and send the doc back (if echo is on)
+                            if( self.remote ){
+                              self._res.setHeader('Content-Range', 'items ' + ranges.rangeFrom + '-' + ranges.rangeTo + '/' + queryDocs.total );
+                              self._res.json( 200, queryDocs );
+                            // Local request: simply return the doc to the asking function
+                            } else {
+                              next( null, queryDocs, self.idProperty );
+                            }
           
-                            });
                           });
-        
-                        // It's a cursor-enabled call: return it
-                        } else {
-                          var cursor = queryDocs;
-         
-                          // Make a wrapper around cursor.next(), so that
-                          // anything that comes back from it (except `null`) is
-                          // fed through `_extrapolateDocAndCast()` and `_prepareBeforeSend()`
-                          var originalNext = cursor.next;
-                          cursor.next = function( cb ) {
-        
-                            originalNext.call( cursor, function( err, fullDoc ) {
-                              self._sendErrorOnErr( err, cb, function(){
-        
-                                if( fullDoc === null ){
-                                  cb( null, null );
-                                } else {
-        
-                                  self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
-                                    self._sendErrorOnErr( err, next, function(){
-        
-                                      self._castDoc( doc, function( err, doc) {
-                                        self._sendErrorOnErr( err, next, function(){
-        
-                                          self.prepareBeforeSend( doc, function( err, doc ){
-                                            self._sendErrorOnErr( err, cb, function(){
-                                              cb( null, doc );
-                                            });
-                                          });
-                                        });
-                                      });
-        
-                                    });
-                                  });
-                                }
-        
-                              });
-                            });
-                          }
-                             
-                          next( null, cursor );
-                        }
+                        });
         
                       });
         
