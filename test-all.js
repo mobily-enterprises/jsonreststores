@@ -160,7 +160,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
   var tests;
   var g = {};
 
-  var startup = function( test ){
+  var startup = function( done ){
     var self = this;
 
 
@@ -259,7 +259,8 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
               throw( new Error("Could not empty wsPeople database, giving up") );
               process.exit();
             } else {
-              test.done();
+              if( typeof done === 'object') done.done();
+              else done();
             }
           });
         };
@@ -288,172 +289,84 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
   }
 
 
+  function zap( done ){
+    g.dbPeople.delete( { }, { multi: true }, function( err ){
+      if( err ){
+        done( err );
+      } else {
+
+        g.dbWsPeople.delete( { }, { multi: true }, function( err ){
+          if( err ){
+            done( err );
+          } else {
+            done();
+          }
+        })
+      }
+    });
+  }
+
   tests = {
 
     startup: startup,
 
+    // *********************************
+    // ********** POST *****************
+    // *********************************
+
     /* POST:
        * REST  handlePost
        * REST  checkParamIds
-       * APIH  prepareBodyPost
-       * APIG  validate
+       * APIh  prepareBodyPost
+       * APIg  validate
        * REST  checkPermissionsPost
-       * APIG  cleanup
-       * APIH  extrapolateDoc
-       * APIG  castDoc
+       * APIg  cleanup
+       * APIh  extrapolateDoc
+       * APIg  castDoc
        * REST  echoAfterPost
-       * REST/APIH prepareBeforeSend
-       * REST/APIH afterPost
+       * REST/APIh prepareBeforeSend
+       * REST/APIh afterPost
     */
 
-    'API Post(): testing (general)': function( test ){
+    'Post() API Working test': function( test ){
+      zap( function(){
 
-      
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
-
-        g.dbWsPeople.delete( { }, { multi: true }, function( err ){
+        g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
           test.ifError( err );
-  
-          // STRAIGHT
 
-          g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
+          g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
             test.ifError( err );
+            test.deepEqual( data[ 0 ], person );
 
-            g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
-              test.ifError( err );
-              test.deepEqual( data[ 0 ], person );
-
-          
-              // APIG validate
-
-              g.People.Post( { name: 'Tony', surname: "1234567890123456789012345", age: 37 }, function( err, person ){
-           
-                test.deepEqual( err.errors,  [ { field: 'surname', message: 'Field is too long: surname' } ] );
-                test.equal( err.message, "Unprocessable Entity");
-                test.equal( err.httpError, 422);
-
-
-                // APIG cleanUp
-
-                // Set the basic stores
-                g.People.Post( { name: "Tony", extra: "Won't be saved" }, function( err, person ){
-                  test.ifError( err );
-                  test.deepEqual( person, { name: 'Tony', id: person.id } ); 
-
-                  // APIG castDoc
-                
-                  // This will artificially change the age to its string equivalent. There is no other way
-                  // to test this, unless I want to hack the DB layer underneath
-                  var People2 = declare( g.People, {
-
-                    extrapolateDoc: function( params, body, options, fullDoc, done ){
-
-                      var doc = {};
-                      for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
-                      doc.age = doc.age.toString();
-
-                      done( null, doc );
-                    }
-                  });
-                  People2.Post( { name: 'Tony', age: 37 }, function( err, person ){
-                    test.ifError( err );
-
-                    test.equal( person.age, 37 );
-                    test.done();
-                  });
-                });
-              });
-            });
+            test.done();
           });
         });
       });
     },
 
-    'API Post(): testing (hooks)': function( test ){
+    'Post() REST Working test': function( test ){
+      zap( function(){
 
-     /*
-       * APIH prepareBodyPost
-       * APIH extrapolateDoc
-       * REST/APIH prepareBeforeSend
-       * REST/APIH afterPost
-      */
+        var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
+        (g.People.online.Post(g.People))(req, new RES( function( err, type, headers, status, data ){
+          test.ifError( err );
+          var res = this;
 
-      var afterPost = false;
-      var People2 = declare( g.People, {
+          test.equal( type, 'json' );
+          test.equal( status, 201 );
+          test.equal( headers.Location, 'http://www.example.com/' + data.id );
+          test.equal( data.name, 'Tony' );
+          test.equal( data.surname, 'Mobily' );
+          test.ok( data.id );
 
-        prepareBodyPost: function( body, done ){
-          body.name = body.name + "_prepareBodyPost";
-          done( null, body );
-        },
-
-        extrapolateDoc: function( params, body, options, fullDoc, done ){
-
-          var doc = {};
-          for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
-          doc.name = doc.name + '_extrapolateDoc';
-
-          done( null, doc );
-        },
-
-        prepareBeforeSend: function( doc, done ){
-
-          var sendDoc = {};
-          for( var k in doc ) sendDoc[ k ] = doc[ k ];
-          sendDoc.beforeSend = '_prepareBeforeSend';
-
-          done( null, sendDoc );
-        },
-
-        afterPost: function( params, body, options, doc, fullDoc, done){
-          afterPost = true;
-          done( null );
-        },
-
+          test.done();
+        }))
       });
-
- 
-      // Set the basic stores
-      People2.Post( { name: "Tony" }, function( err, person ){
-        test.ifError( err );
-        test.deepEqual( person,
-
-{ name: 'Tony_prepareBodyPost_extrapolateDoc',
-  id: person.id,
-  beforeSend: '_prepareBeforeSend' }
-
-        );        
-
-        test.equal( afterPost, true );
-
-        test.done();
-      }); 
-
-
     },
 
 
-    'REST Post(): testing': function( test ){
-
-/*
-*/
-
-      // STRAIGHT
-
-      var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
-      (g.People.online.Post(g.People))(req, new RES( function( err, type, headers, status, data ){
-        test.ifError( err );
-        var res = this;
-
-        test.equal( type, 'json' );
-        test.equal( status, 201 );
-        test.equal( headers.Location, 'http://www.example.com/' + data.id );
-        test.equal( data.name, 'Tony' );
-        test.equal( data.surname, 'Mobily' );
-        test.ok( data.id );
-
-
-        // * REST handlePost
+    'Post() REST handlePost': function( test ){
+      zap( function(){
 
         var People2 = declare( g.People, {
           handlePost: false,
@@ -467,304 +380,410 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
           test.equal( type, 'bytes' );
           test.equal( status, 501 );
 
-       
-          // * REST checkParamIds
+          test.done();
+        }));
+      });
+    },
 
-          var req = makeReq( { params: { }, body: { name: 'Tony', surname: 'Mobily' } } );
-          (g.WsPeople.online.Post(g.WsPeople))(req, new RES( function( err, type, headers, status, data ){
-            test.ifError( err );
-            var res = this;
+    'Post() REST checkParamIds': function( test ){
+      zap( function(){
 
-            test.equal( type, 'bytes' );
-            test.equal( status, 400 );
-            test.deepEqual( data,
+        var req = makeReq( { params: { }, body: { name: 'Tony', surname: 'Mobily' } } );
+        (g.WsPeople.online.Post(g.WsPeople))(req, new RES( function( err, type, headers, status, data ){
+          test.ifError( err );
+          var res = this;
+
+          test.equal( type, 'bytes' );
+          test.equal( status, 400 );
+          test.deepEqual( data,
 
 { message: 'Bad Request',
   errors: 
    [ { field: 'workspaceId',
        message: 'Field required in the URL: workspaceId' } ] }
           );
-          
-            // * REST checkPermissionsPost
-
-            var People2 = declare( g.People, {
-              checkPermissionsPost: function( params, body, options, cb ){
-                if( body.name === 'TONY' ) cb( null, false );
-                else cb( null, true );
-              },  
-            });
  
-            var req = makeReq( { body: { name: 'TONY', surname: 'Mobily' } } );
-            (People2.online.Post(People2))(req, new RES( function( err, type, headers, status, data ){
-              test.ifError( err );
 
-              var res = this;
+          test.done();
+        }))
+      });
+    },
 
-              test.equal( type, 'bytes' );
-              test.equal( status, 403 );
+    'Post() APIh prepareBodyPost': function( test ){
+      zap( function(){
 
-              var req = makeReq( { body: { name: 'TONy', surname: 'Mobily' } } );
-              (People2.online.Post(People2))(req, new RES( function( err, type, headers, status, data ){
-                test.ifError( err );
+        var People2 = declare( g.People, {
 
-                var res = this;
+          prepareBodyPost: function( body, done ){
+            body.name = body.name + "_prepareBodyPost";
+            done( null, body );
+          },
 
-                test.equal( type, 'json' );
-                test.equal( status, 201 );
-                test.equal( headers.Location, 'http://www.example.com/' + data.id );
-                test.equal( data.name, 'TONy' );
-                test.equal( data.surname, 'Mobily' );
-                test.ok( data.id );
+        });
 
-                // * REST echoAfterPost
+        // Set the basic stores
+        People2.Post( { name: "Tony" }, function( err, person ){
+          test.ifError( err );
+          test.deepEqual( person,
 
-                var People2 = declare( g.People, {
-                  echoAfterPost: false
-                });
+{ name: 'Tony_prepareBodyPost',
+  id: person.id }
+
+          );        
+
+          test.done();
+        });
+      });
+    },
+
+    'Post() APIg validate': function( test ){
+      zap( function(){
+
+        g.People.Post( { name: 'Tony', surname: "1234567890123456789012345", age: 37 }, function( err, person ){
+           
+          test.deepEqual( err.errors,  [ { field: 'surname', message: 'Field is too long: surname' } ] );
+          test.equal( err.message, "Unprocessable Entity");
+          test.equal( err.httpError, 422);
+          test.done();
+        });
+      });
+    },
+
+    'Post() REST checkPermissionsPost': function( test ){
+      zap( function(){
+
+        var People2 = declare( g.People, {
+          checkPermissionsPost: function( params, body, options, cb ){
+            if( body.name === 'TONY' ) cb( null, false );
+            else cb( null, true );
+          },  
+        });
  
-                var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
-                (People2.online.Post(People2))(req, new RES( function( err, type, headers, status, data ){
-                  test.ifError( err );
+        var req = makeReq( { body: { name: 'TONY', surname: 'Mobily' } } );
+        (People2.online.Post(People2))(req, new RES( function( err, type, headers, status, data ){
+          test.ifError( err );
 
-                  var res = this;
+          var res = this;
 
-                  test.equal( type, 'bytes' );
-                  test.equal( status, 201 );
-                  test.equal( data, '' );
+          test.equal( type, 'bytes' );
+          test.equal( status, 403 );
+          test.done();
+        }))
 
+      });
+    },
 
-                  // * REST/APIH prepareBeforeSend
-                  // * REST/APIH afterPost
+    'Post() APIg cleanup': function( test ){
+      zap( function(){
 
-                  var afterPost = false;
-                  var People2 = declare( g.People, {
+        g.People.Post( { name: "Tony", extra: "Won't be saved" }, function( err, person ){
+          test.ifError( err );
+          test.deepEqual( person, { name: 'Tony', id: person.id } ); 
+          test.done();
+        });
+      });
+    },
+
+    'Post() APIh extrapolateDoc': function( test ){
+      zap( function(){
+
+        var People2 = declare( g.People, {
+
+          extrapolateDoc: function( params, body, options, fullDoc, done ){
+
+            var doc = {};
+            for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+            doc.name = doc.name + '_extrapolateDoc';
+
+            done( null, doc );
+          },
+
+        });
+
  
-                    prepareBeforeSend: function( doc, done ){
+        // Set the basic stores
+        People2.Post( { name: "Tony" }, function( err, person ){
+          test.ifError( err );
+          test.deepEqual( person,
 
-                      var sendDoc = {};
-                      for( var k in doc ) sendDoc[ k ] = doc[ k ];
-                      sendDoc.beforeSend = '_prepareBeforeSend';
+{ name: 'Tony_extrapolateDoc',
+  id: person.id }
+          );        
 
-                      done( null, sendDoc );
-                    },
+          test.done();
+        });
+      });
+    },
 
-                    afterPost: function( params, body, options, doc, fullDoc, done){
-                      afterPost = true;
-                      done( null );
-                    },
-                  });
+    'Post() APIg castDoc': function( test ){
+      zap( function(){
 
-                  var req = makeReq( { body: { name: 'TONy', surname: 'Mobily' } } );
-                  (People2.online.Post(People2))(req, new RES( function( err, type, headers, status, data ){
-                    test.ifError( err );
+        var People2 = declare( g.People, {
 
-                    var res = this;
+          extrapolateDoc: function( params, body, options, fullDoc, done ){
 
-                    test.equal( type, 'json' );
-                    test.equal( status, 201 );
-                    test.equal( headers.Location, 'http://www.example.com/' + data.id );
-                    test.equal( data.name, 'TONy' );
-                    test.equal( data.surname, 'Mobily' );
-                    test.equal( data.beforeSend, '_prepareBeforeSend' );
-                    test.ok( data.id );
-                    test.equal( afterPost, true );
+            var doc = {};
+            for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+            doc.age = doc.age.toString();
+            done( null, doc );
+          }
+        });
+        People2.Post( { name: 'Tony', age: 37 }, function( err, person ){
+          test.ifError( err );
 
-                    test.done();
+          test.equal( person.age, 37 );
+          test.done();
+        });
+      })
+    },
 
-                  }));
+    'Post() REST echoAfterPost': function( test ){
+      zap( function(){
 
+        var People2 = declare( g.People, {
+          echoAfterPost: false
+        });
+ 
+        var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
+        (People2.online.Post(People2))(req, new RES( function( err, type, headers, status, data ){
+          test.ifError( err );
 
-                }));
-              }));
-            }));
+          var res = this;
 
-          }));
+          test.equal( type, 'bytes' );
+          test.equal( status, 201 );
+          test.equal( data, '' );
+        }))
+
+        test.done();
+      });
+    },
+
+    'Post() REST prepareBeforeSend': function( test ){
+      zap( function(){
+
+        var People2 = declare( g.People, {
+ 
+          prepareBeforeSend: function( doc, done ){
+
+            var sendDoc = {};
+            for( var k in doc ) sendDoc[ k ] = doc[ k ];
+            sendDoc.beforeSend = '_prepareBeforeSend';
+
+            done( null, sendDoc );
+          }
+        });
+
+        var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
+        (People2.online.Post(People2))(req, new RES( function( err, type, headers, status, data ){
+          test.ifError( err );
+
+          var res = this;
+
+          test.equal( type, 'json' );
+          test.equal( status, 201 );
+          test.equal( headers.Location, 'http://www.example.com/' + data.id );
+          test.equal( data.name, 'Tony' );
+          test.equal( data.surname, 'Mobily' );
+          test.equal( data.beforeSend, '_prepareBeforeSend' );
+          test.ok( data.id );
+
+          test.done();
         }));
 
-      }));
-
-    },
-
-
-    'API Put(): testing (general, common)': function( test ){
-
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        var p = { name: 'Tony', surname: "Mobily", age: 37 };
-
-        // STRAIGHT -- PUT NEW
-
-        Schema.makeId( p, function( err, id ){
-          test.ifError( err );
-          p.id = id;
-          g.People.Put( null, p, function( err, person ){
-            test.ifError( err );
-
-            g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
-              test.ifError( err );
-              test.deepEqual( data[ 0 ], person );
-
-
-              // STRAIGHT -- PUT EXISTING
-
-              var p = { name: 'Tony', surname: "Mobily", age: 38 };
-              g.People.Put( person.id, p, function( err, person ){
-                test.ifError( err );
-
-                g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
-                  test.ifError( err );
-                  test.deepEqual( data[ 0 ], person );
-                  test.deepEqual( data[ 0 ].age, 38 );
-
-                  // * APIG  validate
-
-                  var p = { name: 'Tony', surname: "1234567890123456789012", age: 38, id: person.id };
-                  g.People.Put( person.id, p, function( err, person ){
-
-                    test.deepEqual( err.errors, [ { field: 'surname', message: 'Field is too long: surname' } ] );
-                    test.equal( err.message, 'Unprocessable Entity' );
-                    test.equal( err.httpError, 422 );
-
-                    test.done();
-
-                  });
-                });
-              });
-            });
-          });
-        });
-
-
       });
     },
 
-    'API Put(): testing (general, new)': function( test ){
+    'Post() APIh prepareBeforeSend': function( test ){
+      zap( function(){
 
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
+        var People2 = declare( g.People, {
 
-        g.dbWsPeople.delete( { }, { multi: true }, function( err ){
-          test.ifError( err );
+          prepareBeforeSend: function( doc, done ){
 
-          //* APIG  cleanup
-          Schema.makeId( { }, function( err, generatedId ) {
-            test.ifError( err );
+            var sendDoc = {};
+            for( var k in doc ) sendDoc[ k ] = doc[ k ];
+            sendDoc.beforeSend = '_prepareBeforeSend';
 
-            var p = { name: "Tony", age: 37, extra: "Won't be saved" }; 
-            g.People.Put( generatedId, p, function( err, person ){
-              test.ifError( err );
-              test.deepEqual( person, { name: 'Tony', age: 37, id: person.id } ); 
-  
-              //* APIH  extrapolateDoc
-              //* APIG  castDoc
-  
-              var People2 = declare( g.People, {
-  
-                extrapolateDoc: function( params, body, options, fullDoc, done ){
-  
-                  var doc = {};
-                  for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
-                  doc.name = doc.name + '_extrapolateDoc';
-                  doc.age = doc.age.toString();
-                  done( null, doc );
-                }
-              });
-  
-  
-              People2.Post( { name: "Tony", age: 37 }, function( err, person ){
-                test.ifError( err );
-  
-                test.equal( person.name, 'Tony_extrapolateDoc' );
-                test.equal( person.age, 37 );
-  
-                test.done();
-  
-              });
-            });
-          });
+            done( null, sendDoc );
+          },
+
         });
  
+        // Set the basic stores
+        People2.Post( { name: "Tony" }, function( err, person ){
+          test.ifError( err );
+          test.deepEqual( person,
+
+{ name: 'Tony',
+  id: person.id,
+  beforeSend: '_prepareBeforeSend' }
+
+          );
+
+          test.done();
+        });
       });
     },
 
-    'API Put(): testing (general, existing)': function( test ){
+    'Post() REST afterPost': function( test ){
+      zap( function(){
 
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
 
-        g.dbWsPeople.delete( { }, { multi: true }, function( err ){
+        var afterPost = false;
+        var People2 = declare( g.People, {
+ 
+          afterPost: function( params, body, options, doc, fullDoc, done){
+            afterPost = true;
+            done( null );
+          },
+        });
+
+        var req = makeReq( { body: { name: 'TONy', surname: 'Mobily' } } );
+        (People2.online.Post(People2))(req, new RES( function( err, type, headers, status, data ){
           test.ifError( err );
 
-          //* APIG  (+)castDoc
-          //* APIG  cleanup
-          //* APIG  castDoc
+          var res = this;
 
-          var ageAtFirstExtrapolateDocs;
-          var ageAfterCastDoc;
-          var People2 = declare( g.People, {
-  
-            extrapolateDoc: function( params, body, options, fullDoc, done ){
-              if( ! People2.onlyOnce ){
-                People2.onlyOnce = true;
-                ageAtFirstExtrapolateDocs = fullDoc.age;
-              }
-              done( null, fullDoc );
-            }
-          });
-  
-          Schema.makeId( { }, function( err, generatedId ) {
+          test.equal( afterPost, true );
 
-            g.dbPeople.insert( { id: generatedId, name: 'Tony', age: '37' }, { multi: true }, function( err ){
+          test.done();
+
+        }));
+
+      }); 
+
+    },
+
+    'Post() APIh afterPost': function( test ){
+      zap( function(){
+
+        var afterPost = false;
+        var People2 = declare( g.People, {
+
+          afterPost: function( params, body, options, doc, fullDoc, done){
+            afterPost = true;
+            done( null );
+          },
+
+        });
+
+ 
+        // Set the basic stores
+        People2.Post( { name: "Tony" }, function( err, person ){
+          test.ifError( err );
+          test.equal( afterPost, true );
+
+          test.done();
+        });
+      });
+    },
+
+
+
+    // *********************************
+    // ********** PUT ******************
+    // *********************************
+
+    /* PUT:
+       * REST  handlePut
+       * REST  checkParamIds
+       * APIh  prepareBodyPut
+       * APIg  validate
+       NEW:
+       * REST  checkPermissionsPutNew
+       * APIg  cleanup
+       * APIh  extrapolateDoc
+       * APIg  castDoc
+       * REST  echoAfterPutNew
+       * REST/APIh prepareBeforeSend (if echoAfterPutNew)
+       * REST/APIh afterPutNew
+       EXISTING:
+       * APIh  (+)extrapolateDoc
+       * APIg  (+)castDoc
+       * REST  checkPermissionsPutExisting
+       * APIg  cleanup
+       * APIh  extrapolateDoc
+       * APIg  castDoc
+       * REST  echoAfterPutExisting
+       * REST/APIh prepareBeforeSend (if echoAfterPutExisting)
+       * REST/APIh afterPutExisting
+    */
+
+
+    'Put() API Working test (new, existing)': function( test ){
+      zap( function(){
+
+        // New
+        var p = { id: 1234, name: 'Tony', surname: "Mobily", age: 37 };
+        g.People.Put( null, p, function( err, person ){
+          test.ifError( err );
+
+          g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
+            test.ifError( err );
+            test.deepEqual( data[ 0 ], person );
+
+            // Existing
+            var p = { name: 'Tony', surname: "Mobily", age: 38 };
+            g.People.Put( person.id, p, function( err, person ){
               test.ifError( err );
 
-              People2.Put( generatedId, { name: 'Tony', age: 38, extra: 'EXTRA' }, function( err, person ){
+              g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
                 test.ifError( err );
-                test.equal( typeof ageAtFirstExtrapolateDocs, 'string' );
-                test.equal( typeof( person.age ), 'number' );
-                test.equal( typeof( person.extra ), 'undefined' );
+                test.deepEqual( data[ 0 ], person );
+                test.equal( data[ 0 ].age, 38 );
 
                 test.done();
               });
             });
           });
-          
-
         });
+
       });
     },
 
-    'REST Put(): testing (common)': function( test ){
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
 
-        g.dbWsPeople.delete( { }, { multi: true }, function( err ){
+    'Put() REST Working test (new, existing)': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+    },
+
+    'Put() REST handlePut': function( test ){
+      zap( function(){
+
+        var People2 = declare( g.People, {
+          handlePut: false,
+        });
+ 
+        var req = makeReq( { params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
+        (People2.online.Put(People2))(req, new RES( function( err, type, headers, status, data ){
           test.ifError( err );
 
-          //* REST  handlePut
+          var res = this;
+          test.equal( type, 'bytes' );
+          test.equal( status, 501 );
 
-          var People2 = declare( g.People, {
-            handlePut: false,
-          });
- 
-          Schema.makeId( {}, function( err, generatedId ){
+          test.done();
+        }));
+      });
+    },
 
-            var req = makeReq( { params: { id: generatedId }, body: { name: 'Tony', surname: 'Mobily' } } );
-            (People2.online.Put(People2))(req, new RES( function( err, type, headers, status, data ){
-              test.ifError( err );
+    'Put() REST checkParamIds': function( test ){
+      zap( function(){
 
-              var res = this;
-              test.equal( type, 'bytes' );
-              test.equal( status, 501 );
+        //* REST  checkParamIds
 
-              //* REST  checkParamIds
+        var req = makeReq( { params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
+        (g.WsPeople.online.Post(g.WsPeople))(req, new RES( function( err, type, headers, status, data ){
+          test.ifError( err );
+          var res = this;
 
-              var req = makeReq( { params: { }, body: { name: 'Tony', surname: 'Mobily' } } );
-              (g.WsPeople.online.Post(g.WsPeople))(req, new RES( function( err, type, headers, status, data ){
-                test.ifError( err );
-                var res = this;
-
-                test.equal( type, 'bytes' );
-                test.equal( status, 400 );
-                test.deepEqual( data,
+          test.equal( type, 'bytes' );
+          test.equal( status, 400 );
+          test.deepEqual( data,
 
 { message: 'Bad Request',
   errors: 
@@ -772,116 +791,312 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
        message: 'Field required in the URL: workspaceId' } ] }
                 );
  
-                test.done();
-              }));
-            }));
+          test.done();
+        }));
+      });
+    },
+
+
+    'Put() APIh prepareBodyPut': function( test ){
+      zap( function(){
+
+
+        // TODO
+        test.done();
+      });
+    },
+
+    'Put() APIg validate': function( test ){
+      zap( function(){
+
+        var p = { name: 'Tony', surname: "1234567890123456789012", age: 37 };
+        g.People.Put( 1234, p, function( err, person ){
+
+          test.deepEqual( err.errors, [ { field: 'surname', message: 'Field is too long: surname' } ] );
+          test.equal( err.message, 'Unprocessable Entity' );
+          test.equal( err.httpError, 422 );
+
+          test.done();
+        });
+      });
+    },
+
+ 
+    'Put() NEW REST checkPermissionsPutNew': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+    },
+
+    'Put() NEW APIg cleanup': function( test ){
+      zap( function(){
+
+        var p = { id: 1234, name: "Tony", age: 37, extra: "Won't be saved" }; 
+        g.People.Put( null, p, function( err, person ){
+          test.ifError( err );
+          test.deepEqual( person, { name: 'Tony', age: 37, id: person.id } ); 
+          test.done();
+        });
+      });
+    },
+
+    'Put() NEW APIh extrapolateDoc': function( test ){
+      zap( function(){
+
+        var People2 = declare( g.People, {
+  
+          extrapolateDoc: function( params, body, options, fullDoc, done ){
+  
+            var doc = {};
+            for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+            doc.name = doc.name + '_extrapolateDoc';
+            doc.age = doc.age.toString();
+            done( null, doc );
+          }
+        });
+  
+  
+        People2.Put( 1234, { name: "Tony", age: 37 }, function( err, person ){
+          test.ifError( err );
+  
+          test.equal( person.name, 'Tony_extrapolateDoc' );
+          test.equal( person.age, 37 );
+ 
+          test.done();
+        });
+      });
+    },
+
+    'Put() NEW APIg castDoc': function( test ){
+      zap( function(){
+
+        var People2 = declare( g.People, {
+  
+          extrapolateDoc: function( params, body, options, fullDoc, done ){
+  
+            var doc = {};
+            for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+            doc.age = doc.age.toString();
+            done( null, doc );
+          }
+        });
+  
+  
+        People2.Put( 1234, { name: "Tony", age: 37 }, function( err, person ){
+          test.ifError( err );
+          test.equal( person.age, 37 );
+
+          test.done();
+        });
+      });
+
+    },
+
+    'Put() NEW REST echoAfterPutNew': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+    },
+
+    'Put() NEW APIh prepareBeforeSend': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+    },
+
+    'Put() NEW REST prepareBeforeSend (if echoAfterPutNew)': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+    },
+
+    'Put() NEW APIh afterPutNew': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+    },
+
+    'Put() NEW REST afterPutNew': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+    },
+
+
+    'Put() EXISTING APIh (+)extrapolateDoc': function( test ){
+      zap( function(){
+
+        // This test is done within (+)castDoc        
+        test.done();
+      });
+    },
+
+    'Put() EXISTING APIg (+)castDoc': function( test ){
+      zap( function(){
+
+        var ageAtFirstExtrapolateDocs;
+        var People2 = declare( g.People, {
+  
+          extrapolateDoc: function( params, body, options, fullDoc, done ){
+            if( ! People2.onlyOnce ){
+              People2.onlyOnce = true;
+              ageAtFirstExtrapolateDocs = fullDoc.age;
+            }
+            done( null, fullDoc );
+          }
+        });
+  
+        g.dbPeople.insert( { id: 1234, name: 'Tony', age: '37' }, { multi: true }, function( err ){
+          test.ifError( err );
+
+          People2.Put( 1234, { name: 'Tony', age: 38, extra: 'EXTRA' }, function( err, person ){
+            test.ifError( err );
+            test.equal( typeof ageAtFirstExtrapolateDocs, 'string' );
+
+            test.done();
           });
         });
       });
     },
 
+    'Put() EXISTING REST checkPermissionsPutExisting': function( test ){
+      zap( function(){
 
+        // TODO
+        test.done();
+      });
+    },
 
-    'REST Put(): testing (new)': function( test ){
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
+    'Put() EXISTING APIg cleanup': function( test ){
+      zap( function(){
 
-        g.dbWsPeople.delete( { }, { multi: true }, function( err ){
+        g.dbPeople.insert( { id: 1234, name: 'Tony', age: '37' }, { multi: true }, function( err ){
           test.ifError( err );
 
+          g.People.Put( 1234, { name: 'Tony', age: 38, extra: 'EXTRA' }, function( err, person ){
+            test.ifError( err );
+            test.equal( typeof( person.extra ), 'undefined' );
 
-       //* REST  checkPermissionsPutNew
-       //* REST  echoAfterPutNew
-       //* REST/APIH prepareBeforeSend (if echoAfterPutNew or !remote)
-       //* REST/APIH afterPutNew
- 
-
-          test.done();
+            test.done();
+          });
         });
       });
     },
 
-    'REST Put(): testing (existing)': function( test ){
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
+    'Put() EXISTING APIh extrapolateDoc': function( test ){
+      zap( function(){
 
-        g.dbWsPeople.delete( { }, { multi: true }, function( err ){
+        var firstTimeRun = true;
+        var People2 = declare( g.People, {
+  
+          extrapolateDoc: function( params, body, options, fullDoc, done ){
+
+            var doc = {};
+            for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+
+            if( People2.firstTimeRun ){
+              People2.firstTimeRun = false;
+            } else {
+              doc.age ++;
+            }
+            done( null, doc );
+          }
+        });
+  
+        g.dbPeople.insert( { id: 1234, name: 'Tony', age: '37' }, { multi: true }, function( err ){
           test.ifError( err );
 
+          People2.Put( 1234, { name: 'Tony', age: 37 }, function( err, person ){
+            test.ifError( err );
 
-          //* REST  checkPermissionsPutExisting
-          //* REST  echoAfterPutExisting
-          //* REST/APIH prepareBeforeSend (if echoAfterPutExisting or !remote)
-          //* REST/APIH afterPutExisting
+            test.equal( person.age, 38 );
 
-          test.done();
+            test.done();
+          });
         });
       });
     },
 
+    'Put() EXISTING APIg castDoc': function( test ){
+      zap( function(){
 
-    'PUT REST handlePut': function( test ){
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
-
-        test.done();
-      });
-    },
-
-     'PUT REST checkParamIds': function( test ){
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
+        // Not really testable
 
         test.done();
       });
     },
 
-     'PUT APIh prepareBodyPut': function( test ){
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
+    'Put() EXISTING REST echoAfterPutExisting': function( test ){
+      zap( function(){
 
+        // TODO
         test.done();
       });
     },
 
-     'PUT APIg validate': function( test ){
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
+    'Put() EXISTING APIh prepareBeforeSend': function( test ){
+      zap( function(){
 
+        // TODO
         test.done();
       });
     },
 
- 
-    /* PUT TODO:
-       * REST  handlePut
+
+    'Put() EXISTING REST prepareBeforeSend  (if echoAfterPutExisting)': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+    },
+
+    'Put() EXISTING APIh afterPutExisting': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+    },
+
+    'Put() EXISTING REST afterPutExisting': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+    },
+
+
+
+    // *********************************
+    // ********** GET ******************
+    // *********************************
+    /*
+       * REST  handleGet
        * REST  checkParamIds
-       * APIH  prepareBodyPut
-       * APIG  validate
-       NEW:
-       * REST  checkPermissionsPutNew
-       * APIG  cleanup
-       * APIH  extrapolateDoc
-       * APIG  castDoc
-       * REST  echoAfterPutNew
-       * REST/APIH prepareBeforeSend (if echoAfterPutNew or !remote)
-       * REST/APIH afterPutNew
-       EXISTING:
-       * APIH  (+)extrapolateDoc
-       * APIG  (+)castDoc
-       * REST  checkPermissionsPutExisting
-       * APIG  cleanup
-       * APIH  extrapolateDoc
-       * APIG  castDoc
-       * REST  echoAfterPutExisting
-       * REST/APIH prepareBeforeSend (if echoAfterPutExisting or !remote)
-       * REST/APIH afterPutExisting
+       * APIh  extrapolateDoc
+       * APIg  castDoc
+       * REST  checkPermissionsGet
+       * APIh prepareBeforeSend
+       * APIh afterGet
     */
 
-    'API Get(): testing': function( test ){
+    'Get() API Working test': function( test ){
 
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
+      zap( function(){
         g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
           test.ifError( err );
 
@@ -891,11 +1106,84 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
             test.done();
           });
         });
-
       });
     },
 
-    'API Get(): invalid ID': function( test ){
+    'Get() REST Working test': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+
+    'Get() REST handleGet': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'Get() REST checkParamIds': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'Get() APIh extrapolateDoc': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'Get() APIg castDoc': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'Get() REST checkPermissionsGet': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'Get() APIh prepareBeforeSend': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'Get() APIh afterGet': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+
+    'Get() API toughness test: invalid ID': function( test ){
       g.People.Get( { a: 10 }, function( err, personGet ){
         test.deepEqual( err.errors, [ { field: 'id', message: 'Error during casting' } ] );
         test.deepEqual( err.message, 'Bad Request' );
@@ -904,30 +1192,24 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
       });
     },
 
-    'API Get(): getting non-existing data': function( test ){
+    'Get() API toughness test: getting non-existing data': function( test ){
 
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
+      zap( function(){
 
-        Schema.makeId( {}, function( err, id ){
-          test.ifError( err );
- 
-          g.People.Get( id, function( err, personGet ){
-            test.ok( err !== null );
+        g.People.Get( 1234, function( err, personGet ){
+          test.ok( err !== null );
 
-            test.equal( personGet, null );
-            test.equal( err.httpError, 404 );
+          test.equal( personGet, null );
+          test.equal( err.httpError, 404 );
 
-            test.done();
-          });
+          test.done();
         });
-
       });
     },
 
-    'API Get(): fetching data that fails schema': function( test ){
+    'Get() API toughness test: fetching data that fails schema': function( test ){
 
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
+      zap( function(){
         g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
           test.ifError( err );
 
@@ -947,12 +1229,59 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
       });
     },
 
+    'Get() API toughness test: fetching data with non-unique ids': function( test ){
 
-    'API Delete(): testing': function( test ){
+      zap( function( err ){
 
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
-        g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
+        // Set the basic stores
+        g.PeopleWrongId = declare( g.JRS, {
+
+          schema: new Schema({
+            name:     { type: 'string' },
+            surname:  { type: 'string', max: 20, filterType: { type: 'eq'  } },
+            age:      { type: 'number', max: 99 },
+          }),
+
+          storeName: 'people',
+          paramIds: [ 'surname' ],
+        });
+
+        g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person1 ){
+          test.ifError( err );
+          g.People.Post( { name: 'Chiara', surname: "Mobily", age: 24 }, function( err, person2 ){
+            test.ifError( err );
+
+            g.PeopleWrongId.Get( 'Mobily', function( err, person3 ){
+              test.ok( typeof( err ) === 'object' );
+              test.ok( err.message === 'execAllDbFetch fetched more than 1 record' );
+              test.done();
+            });
+          });
+
+        });
+      });  
+
+    },
+
+
+
+    // *********************************
+    // ********** DELETE ***************
+    // *********************************
+    /*
+       * REST  handleDelete
+       * REST  checkParamIds
+       * APIh  extrapolateDoc
+       * APIg  castDoc
+       * REST  checkPermissionsDelete
+       * APIh afterDelete
+    */
+
+    'Delete() API Working test': function( test ){
+
+      zap( function(){
+
+        g.dbPeople.insert( { id: 1234, name: 'Tony', surname: 'Mobily', age: 37 }, { multi: true, returnRecord: true }, function( err, person ){
           test.ifError( err );
 
           g.People.Get( person.id, function( err, personGet ){
@@ -972,70 +1301,102 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
             });
           });
         });
-
       });
     },
 
-    'API Delete(): deleting non-existing data': function( test ){
+    'Delete() REST Working test': function( test ){
+      zap( function(){
 
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
+        // TODO
+        test.done();
+      });
 
-        Schema.makeId( {}, function( err, id ){
-          test.ifError( err );
- 
-          g.People.Delete( id, function( err, total ){
-            test.ok( err !== null );
-            test.equal( err.httpError, 404 );
+    },
 
-            test.done();
-          });
+
+    'Delete() REST handleDelete': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'Delete() REST checkParamIds': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'Delete() APIh extrapolateDoc': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'Delete() APIg castDoc': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'Delete() REST checkPermissionsGet': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'Delete() APIh afterDelete': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'API Delete() toughness test: deleting non-existing data': function( test ){
+
+      zap( function(){
+
+        g.People.Delete( 1234, function( err, total ){
+          test.ok( err !== null );
+          test.equal( err.httpError, 404 );
+
+          test.done();
         });
 
       });
     },
 
+    // *********************************
+    // ********** GETQUERY ***************
+    // *********************************
+    /*
+       * REST handleGetQuery
+       * REST checkParamIds
+       * REST checkPermissionsGetQuery
+       * APIg validate
+       * APIg extrapolateDoc
+       * APIg castDoc
+       * APIg prepareBeforeSend
+    */
 
-
-    'fetching data with non-unique ids': function( test ){
-
-       // Set the basic stores
-      g.PeopleWrongId = declare( g.JRS, {
-
-        schema: new Schema({
-          name:     { type: 'string' },
-          surname:  { type: 'string', max: 20, filterType: { type: 'eq'  } },
-          age:      { type: 'number', max: 99 },
-        }),
-
-        storeName: 'people',
-        paramIds: [ 'surname' ],
-      });
-     
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
-
-        g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person1 ){
-          test.ifError( err );
-          g.People.Post( { name: 'Chiara', surname: "Mobily", age: 24 }, function( err, person2 ){
-            test.ifError( err );
-
-            g.PeopleWrongId.Get( 'Mobily', function( err, person3 ){
-              test.ok( typeof( err ) === 'object' );
-              test.ok( err.message === 'execAllDbFetch fetched more than 1 record' );
-              test.done();
-            });
-          });
-
-        });
-      });  
-
-    },
-
-    
-    'API GetQuery: testing': function( test ){
-
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
-        test.ifError( err );
+    'GetQuery() API Working test': function( test ){
+      zap( function(){
 
         var l = [];
         async.series([
@@ -1053,16 +1414,91 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
             g.People.GetQuery( { filters: { ageGt: 20 } }, function( err, docs ){
               test.ifError( err );
               compareCollections( test, l, docs );
-              
+ 
+
+
               test.done();
             });
           });
         });
       });
+    },
+
+    'GetQuery() REST Working test': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
 
     },
 
-     'testing _queryMakeSelector': function( test ){
+
+    'GetQuery() REST handleGetQuery': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'GetQuery() REST checkParamIds': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'GetQuery() REST checkPermissionsGetQuery': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'GetQuery() APIg validate': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'GetQuery() APIg extrapolateDoc': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'GetQuery() APIg castDoc': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+    'GetQuery() APIg prepareBeforeSend': function( test ){
+      zap( function(){
+
+        // TODO
+        test.done();
+      });
+
+    },
+
+
+    'testing _queryMakeSelector': function( test ){
 
        var people = new g.People();
 
@@ -1113,7 +1549,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
        test.done();
     },
 
-     'testing _initOptionsFromReq for Put()': function( test ){
+    'testing _initOptionsFromReq for Put()': function( test ){
 
        var people = new g.People();
        
@@ -1135,7 +1571,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
        test.done();
     }, 
 
-     'testing _initOptionsFromReq for GetQuery() -- just parameters': function( test ){
+    'testing _initOptionsFromReq for GetQuery() -- just parameters': function( test ){
 
        var people = new g.People();
        
@@ -1158,7 +1594,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     }, 
 
 
-     'testing _initOptionsFromReq for GetQuery() -- sortBy': function( test ){
+    'testing _initOptionsFromReq for GetQuery() -- sortBy': function( test ){
 
        var people = new g.People();
        
@@ -1191,7 +1627,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
        test.done();
     }, 
 
-     'testing _initOptionsFromReq for GetQuery() -- ranges': function( test ){
+    'testing _initOptionsFromReq for GetQuery() -- ranges': function( test ){
 
        var people = new g.People();
        
@@ -1226,26 +1662,6 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
 
        test.done();
     }, 
-
-
-/* 
-        console.log("Callback called!");
-        console.log( err );
-        console.log( type );
-        console.log( headers );
-        console.log( status );
-        console.log( data );
-*/
-
-
-
-
-
-    /*
-      TODO:
-        * Write tests same as API ones, but using the Online calls
-        * Test _all_ hooks with all tests
-    */
 
   }
 
