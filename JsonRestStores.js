@@ -8,6 +8,17 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+
+/* Out of curiosity, bugs found after VERY thorough unit testing:
+
+* afterPutExisting wasn't called for LOCAL API requests
+* on a PUT UPDATE, the record returned via remote call (as a JSON string) was the object BEFORE extrapolateDoc()
+* prepareBodyPut was split in prepareBodyPutNew and prepareBodyPutExisting, which is logically wrong (prepareBody needed to happen at the very beginning)
+
+
+
+*/
+
 var 
   dummy
 , e = require('allhttperrors')
@@ -114,7 +125,6 @@ var Store = declare( null,  {
     });
 
   },
-
 
   // **************************************************************************
   // *** END OF FUNCTIONS/ATTRIBUTES THAT NEED/CAN BE OVERRIDDEN BY DEVELOPERS
@@ -806,6 +816,7 @@ var Store = declare( null,  {
                                           // Set the Location header if it was a remote request
 
                                           self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
+
                                           if( self.echoAfterPost ){
             
                                             self.prepareBeforeSend( doc, function( err, doc ){
@@ -1095,9 +1106,15 @@ var Store = declare( null,  {
                                                     } else {
                                                       self.prepareBeforeSend( docAfter, function( err, docAfter ){
                                                         self._sendErrorOnErr( err, next, function(){
-                
-                                                          next( null, docAfter, self.idProperty );
 
+
+                                                          self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite, function( err ) {
+                                                            self._sendErrorOnErr( err, next, function(){
+ 
+                                                              next( null, docAfter, self.idProperty );
+
+                                                            });
+                                                          });
                                                         });
                                                       });
                                                     }
