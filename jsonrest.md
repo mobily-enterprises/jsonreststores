@@ -2,7 +2,6 @@
 Here is a summary of the methods that should be implemented by any JsonRest server, and how.
 The reference implementation for the client is JsonRest by Dojo
 
-
 # `PUT {target}/id`
 
 ## "STRAIGHT PUT"
