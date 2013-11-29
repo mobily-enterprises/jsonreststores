@@ -22,5 +22,10 @@
     "simpledeclare": "0.3.x",
     "simpleschema": "0.3.x",
     "async": "0.2.x"
+  },
+  "devDependencies": {
+    "simpledblayer-mongo": "~0.3.3",
+    "mongowrapper": "~0.3.2",
+    "simpledblayer": "~0.3.3"
   }
 }
