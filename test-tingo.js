@@ -3,7 +3,7 @@ var
 
 , declare = require('simpledeclare')
 
-, J = require('jsonreststores')
+, J = require('./jsonreststores')
 , SimpleDbLayer = require('simpledblayer')
 , Db = require('tingodb')().Db
 , TingoMixin = require('simpledblayer-tingo')
