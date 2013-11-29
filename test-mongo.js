@@ -3,7 +3,7 @@ var
 
 , declare = require('simpledeclare')
 
-, J = require('jsonreststores')
+, J = require('./JsonRestStores.js')
 , SimpleDbLayer = require('simpledblayer')
 , MongoMixin = require('simpledblayer-mongo')
 
