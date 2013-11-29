@@ -9,6 +9,14 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+/*
+
+  TODO:
+Tests for:
+  logError: function( error ){  },
+  formatErrorResponse: function( error ){
+*/
+
 var 
   dummy
 
@@ -2483,29 +2491,29 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
           g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
             test.ifError( err );
   
-          var WsPeople2 = declare( g.WsPeople, {
-            chainErrors: 'all'
-          });
+            var WsPeople2 = declare( g.WsPeople, {
+              chainErrors: 'all'
+            });
   
-          var WsPeople3 = declare( g.People, {
-            chainErrors: 'nonhttp',
+            var WsPeople3 = declare( g.People, {
+              chainErrors: 'nonhttp',
   
-            extrapolateDoc: function( params, body, options, fullDoc, cb ){
-              cb( new Error("Some other error") );
-            },
+              extrapolateDoc: function( params, body, options, fullDoc, cb ){
+                cb( new Error("Some other error") );
+              },
    
             
-          });
+            });
   
-          // This chains all of them
-          var req = makeReq( { params: { id: 1234 } } );
-          (WsPeople2.online.Get(WsPeople2))(req,
-            new RES( function( err, type, headers, status, data ){
-              test.equal("I should not be here", "" );
-              test.done();
-            }),
-            function( err ){
-              test.deepEqual( err.errors,
+            // This chains all of them
+            var req = makeReq( { params: { id: 1234 } } );
+            (WsPeople2.online.Get(WsPeople2))(req,
+              new RES( function( err, type, headers, status, data ){
+                test.equal("I should not be here", "" );
+                test.done();
+              }),
+              function( err ){
+                test.deepEqual( err.errors,
   
   [ { field: 'workspaceId',
          message: 'Field required in the URL: workspaceId' } ]
@@ -2518,32 +2526,96 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
   
   
   
-              // This chains all of them
-              var req = makeReq( { params: { id: 1234 } } );
-              (WsPeople3.online.Get(WsPeople3))(req,
-                new RES( function( err, type, headers, status, data ){
+                // This chains all of them
+                var req = makeReq( { params: { id: 1234 } } );
+                (WsPeople3.online.Get(WsPeople3))(req,
+                  new RES( function( err, type, headers, status, data ){
+
+                    test.equal("I should not be here", "" );
   
-                  test.equal("I should not be here", "" );
+                    //console.log("A");
+                    //console.log( err, type, headers, status, data );
+                    test.done();
   
-                  //console.log("A");
-                  //console.log( err, type, headers, status, data );
-                  test.done();
+                  }),
+                  function( err ){
   
-                }),
-                function( err ){
+                    test.equal( err.message, "Some other error" );
+                    test.done();
   
-                  test.equal( err.message, "Some other error" );
-                  test.done();
+                  }
+                );
   
-                }
-              );
+              }
+            );
   
-            }
-          );
+          });
+        }); 
+      },
+
+      'Testing that logError gets fired': function( test ){
+        zap( function(){
+
+          var errorLogged = false;  
+          var People2 = declare( g.People, {
+
+            handleDelete: false,
+
+            logError: function(){
+              errorLogged = true;
+            },
+
+          });
   
+          var req = makeReq( { params: { id: 1234 } } );
+          (People2.online.Delete(People2))(req, new RES( function( err, type, headers, status, data ){
+            test.ifError( err );
+  
+            var res = this;
+            test.equal( type, 'bytes' );
+            test.equal( status, 501 );
+            process.nextTick( function(){
+              test.equal( errorLogged, true ); 
+              test.done();
+            });
+          }));
         });
-      }); 
-    },
+  
+      },
+ 
+      'Testing that formatError is used': function( test ){
+        zap( function(){
+
+          var errorLogged = false;  
+          var People2 = declare( g.People, {
+
+            handleDelete: false,
+
+            formatErrorResponse: function( error ){
+
+              if( error.errors ){
+                return { message: error.message, errors: error.errors, custom: true }
+              } else {
+                return { message: error.message, custom: true }
+              }
+            },
+
+          });
+  
+          var req = makeReq( { params: { id: 1234 } } );
+          (People2.online.Delete(People2))(req, new RES( function( err, type, headers, status, data ){
+            test.ifError( err );
+  
+            var res = this;
+            test.equal( type, 'bytes' );
+            test.equal( status, 501 );
+            test.equal( data.custom, true );
+            test.done();
+          }));
+        });
+  
+      },
+ 
 
   }
 
