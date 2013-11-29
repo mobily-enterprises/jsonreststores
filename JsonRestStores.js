@@ -212,17 +212,27 @@ var Store = declare( null,  {
     // filter.conditions.and needs to exist and be an object
     if( typeof( selector.conditions ) === 'undefined' || selector.conditions === null ){
       selector.conditions = {};
-    } 
+    }
     if( typeof( selector.conditions.and ) === 'undefined' || selector.conditions.and === null ){
       selector.conditions.and = [];
     } 
-
+   
     // Add param IDs as "AND" conditions to the query
     self.paramIds.forEach( function( paramId ){
       if( typeof( params[ paramId ]) !== 'undefined' ){
         selector.conditions.and.push( { field: paramId, type: 'eq', value: params[ paramId ] } );
       }
     });
+
+    // Remove 'and' array from selector condition if it is empty
+    if (selector.conditions.and.length === 0) {
+        delete selector.conditions.and;
+    }
+
+    // Remove conditions object from selector if there is no conditions
+    if (Object.keys(selector.conditions).length === 0) {
+        delete selector.conditions;
+    }
 
     return selector;
 
@@ -377,8 +387,8 @@ var Store = declare( null,  {
 
     // Define and set the conditions variable, which will be returned
     var conditions = {};
-    conditions.and = []
-    conditions.or = []
+    conditions.and = [];
+    conditions.or = [];
 
     // Add filters to the selector
     for( var filterField in filters ){
@@ -541,10 +551,14 @@ var Store = declare( null,  {
 
     var self = this;
     var cursor;
+    //console.log("options: ", options);
 
     var selector = self._queryMakeSelector( options.filters, options.sort, options.ranges );
+    //console.log("selector1 : ", selector);
+    //console.log("params : ", params);
 
     self._enrichSelectorWithParams( selector, params );
+    //console.log("selector2: ", selector);
 
     // Run the select based on the passed parameters
     self.dbDriver.select( selector, next );
@@ -638,7 +652,7 @@ var Store = declare( null,  {
         }
       }
     });
-
+    
     // If one of the key fields was missing, puke back
     if( errors.length ) return next( new self.BadRequestError( { errors: errors } ) );
 
