@@ -20,7 +20,7 @@ Tests for:
 var 
   dummy
 
-, J = require('jsonreststores')
+, J = require('./JsonRestStores.js')
 , declare = require('simpledeclare')
 , SimpleDbLayer = require('simpledblayer')
 , MongoMixin = require('simpledblayer-mongo')
