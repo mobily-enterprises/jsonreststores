@@ -14,6 +14,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 * afterPutExisting wasn't called for LOCAL API requests
 * on a PUT UPDATE, the record returned via remote call (as a JSON string) was the object BEFORE extrapolateDoc()
 * prepareBodyPut was split in prepareBodyPutNew and prepareBodyPutExisting, which is logically wrong (prepareBody needed to happen at the very beginning)
+* handleDelete was not taken into consideration at all
 
 
 
@@ -1334,9 +1335,14 @@ var Store = declare( null,  {
 
     var self = this;
     
-    
     if( typeof( next ) !== 'function' ) next = function(){};
-    
+  
+    // Check that the method is implemented
+    if( ! self.handleDelete ){
+      self._sendError( next, new self.NotImplementedError( ) );
+      return;
+    }
+  
     // Check the IDs
     self._checkParamIds( params, body, false, function( err ){ 
       self._sendErrorOnErr( err, next, function(){
