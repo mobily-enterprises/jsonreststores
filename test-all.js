@@ -744,8 +744,58 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
       });
     },
 
+    'Put() API Working test (overwrite)': function( test ){
+      zap( function(){
 
-    // TODO: put with overwrite option
+        // New
+        var p = { id: 1234, name: 'Tony', surname: "Mobily", age: 37 };
+        g.People.Put( null, p, { overwrite: true }, function( err, person ){
+
+          test.equal( err.message, "Precondition Failed" );
+          test.equal( err.httpError, 412 );
+
+          g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, function( err ){
+
+            var p = { id: 1234, name: 'Tony', surname: "Mobily", age: 37 };
+            g.People.Put( null, p, { overwrite: true }, function( err, person ){
+              test.ifError( err );
+
+              g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
+                test.ifError( err );
+                test.deepEqual( data[ 0 ], person );
+
+
+                zap( function() {
+
+                  // Existing
+                  var p = { name: 'Tony', surname: "Mobily", age: 38 };
+                  g.People.Put( person.id, p, { overwrite: false }, function( err, person ){
+                    test.ifError( err );
+
+                    g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
+                      test.ifError( err );
+                      test.deepEqual( data[ 0 ], person );
+                      test.equal( data[ 0 ].age, 38 );
+
+                      var p = { name: 'Tony', surname: "Mobily", age: 38 };
+                      g.People.Put( person.id, p, { overwrite: false }, function( err, person ){
+
+                        test.equal( err.message, "Precondition Failed" );
+                        test.equal( err.httpError, 412 );
+
+                        test.done();
+                      });
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    },
+
+
     'Put() REST Working test (new, existing)': function( test ){
       zap( function(){
 
@@ -775,6 +825,68 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
 
             test.done();
           }));
+        }));
+      });
+    },
+
+
+    'Put() REST Working test (overwrite)': function( test ){
+      zap( function(){
+
+        var req = makeReq( { headers: { 'if-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
+        (g.People.online.Put(g.People))(req, new RES( function( err, type, headers, status, data ){
+          test.ifError( err );
+          var res = this;
+
+          test.equal( type, 'bytes' );
+          test.equal( status, 412 );
+          test.equal( data.message, 'Precondition Failed' );
+
+                
+          g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, function( err ){
+
+            var req = makeReq( { headers: { 'if-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
+            (g.People.online.Put(g.People))(req, new RES( function( err, type, headers, status, data ){
+              test.ifError( err );
+              var res = this;
+
+              test.equal( type, 'json' );
+              test.equal( status, 200 );
+              test.equal( headers.Location, 'http://www.example.com/1234' );
+              test.equal( data.name, 'Tony' );
+              test.equal( data.surname, 'Mobily' );
+              test.ok( data.id );
+
+              zap( function(){
+
+                var req = makeReq( { headers: { 'if-none-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
+                (g.People.online.Put(g.People))(req, new RES( function( err, type, headers, status, data ){
+                  test.ifError( err );
+                  var res = this;
+
+                  test.equal( type, 'json' );
+                  test.equal( status, 201 );
+                  test.equal( headers.Location, 'http://www.example.com/1234' );
+                  test.equal( data.name, 'Tony' );
+                  test.equal( data.surname, 'Mobily' );
+                  test.ok( data.id );
+
+
+                  var req = makeReq( { headers: { 'if-none-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
+                  (g.People.online.Put(g.People))(req, new RES( function( err, type, headers, status, data ){
+                    test.ifError( err );
+                    var res = this;
+
+                    test.equal( type, 'bytes' );
+                    test.equal( status, 412 );
+                    test.equal( data.message, 'Precondition Failed' );
+
+                    test.done();
+                  }));
+                }));
+              });
+            }));
+          });
         }));
       });
     },
@@ -1122,6 +1234,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
           People2.Put( 1234, { name: 'Tony', age: 38, extra: 'EXTRA' }, function( err, person ){
             test.ifError( err );
             test.equal( typeof ageAtFirstExtrapolateDocs, 'string' );
+            test.equal( typeof person.age, 'number' );
 
             test.done();
           });
@@ -1132,7 +1245,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Put() EXISTING REST checkPermissionsPutExisting': function( test ){
       zap( function(){
 
-        g.dbPeople.insert( { id: 1234, name: 'Tony', age: '37' }, { multi: true }, function( err ){
+        g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
           test.ifError( err );
 
           var People2 = declare( g.People, {
@@ -1160,7 +1273,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Put() EXISTING APIg cleanup': function( test ){
       zap( function(){
 
-        g.dbPeople.insert( { id: 1234, name: 'Tony', age: '37' }, { multi: true }, function( err ){
+        g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
           test.ifError( err );
 
           g.People.Put( 1234, { name: 'Tony', age: 38, extra: 'EXTRA' }, function( err, person ){
@@ -1193,7 +1306,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
           }
         });
   
-        g.dbPeople.insert( { id: 1234, name: 'Tony', age: '37' }, { multi: true }, function( err ){
+        g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
           test.ifError( err );
 
           People2.Put( 1234, { name: 'Tony', age: 37 }, function( err, person ){
@@ -1219,7 +1332,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Put() EXISTING REST echoAfterPutExisting': function( test ){
       zap( function(){
 
-        g.dbPeople.insert( { id: 1234, name: 'Tony', age: '37' }, { multi: true }, function( err ){
+        g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
           test.ifError( err );
 
           var People2 = declare( g.People, {
@@ -1246,7 +1359,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Put() EXISTING APIh prepareBeforeSend': function( test ){
       zap( function(){
 
-        g.dbPeople.insert( { id: 1234, name: 'Tony', age: '37' }, { multi: true }, function( err ){
+        g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
           test.ifError( err );
           var People2 = declare( g.People, {
 
@@ -1281,7 +1394,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Put() EXISTING REST prepareBeforeSend  (if echoAfterPutExisting)': function( test ){
       zap( function(){
 
-        g.dbPeople.insert( { id: 1234, name: 'Tony', age: '37' }, { multi: true }, function( err ){
+        g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
           test.ifError( err );
           var People2 = declare( g.People, {
  
@@ -1318,7 +1431,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Put() EXISTING APIh afterPutExisting': function( test ){
       zap( function(){
 
-        g.dbPeople.insert( { id: 1234, name: 'Tony', age: '37' }, { multi: true }, function( err ){
+        g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
           test.ifError( err );
 
           var flag = false;
@@ -1343,7 +1456,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Put() EXISTING REST afterPutExisting': function( test ){
       zap( function(){
 
-        g.dbPeople.insert( { id: 1234, name: 'Tony', age: '37' }, { multi: true }, function( err ){
+        g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
           test.ifError( err );
 
           var flag = false;
@@ -1390,7 +1503,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
 
       zap( function(){
 
-        var p = { id: 1234, name: 'Tony', surname: 'Mobily', age: '37' };
+        var p = { id: 1234, name: 'Tony', surname: 'Mobily', age: 37 };
         g.dbPeople.insert( p, function( err ){
           test.ifError( err );
 
@@ -1521,9 +1634,28 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Get() REST checkPermissionsGet': function( test ){
       zap( function(){
 
+         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
+          test.ifError( err );
 
-        // TODO
-        test.done();
+          var People2 = declare( g.People, {
+            checkPermissionsGet: function(  params, body, options, doc, fullDoc, cb ){
+              if( params.id === 1234 ) cb( null, false );
+              else cb( null, true );
+            },  
+          });
+ 
+          var req = makeReq( { params: { id: 1234 } } );
+          (People2.online.Get(People2))(req, new RES( function( err, type, headers, status, data ){
+            test.ifError( err );
+
+            var res = this;
+
+            test.equal( type, 'bytes' );
+            test.equal( status, 403 );
+        
+            test.done();
+          }));
+        });
       });
 
     },
@@ -1531,8 +1663,35 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Get() APIh prepareBeforeSend': function( test ){
       zap( function(){
 
-        // TODO
-        test.done();
+        g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
+          test.ifError( err );
+          var People2 = declare( g.People, {
+
+            prepareBeforeSend: function( doc, done ){
+
+              var sendDoc = {};
+              for( var k in doc ) sendDoc[ k ] = doc[ k ];
+              sendDoc.beforeSend = '_prepareBeforeSend';
+
+              done( null, sendDoc );
+            },
+
+          });
+ 
+          // Set the basic stores
+          People2.Get( 1234, { name: "Tony" }, function( err, person ){
+            test.ifError( err );
+            test.deepEqual( person,
+
+{ name: 'Tony',
+  id: person.id,
+  age: 37,
+  beforeSend: '_prepareBeforeSend' }
+
+            );
+            test.done();
+          });
+        });
       });
 
     },
@@ -1540,8 +1699,26 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Get() APIh afterGet': function( test ){
       zap( function(){
 
-        // TODO
-        test.done();
+        g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
+          test.ifError( err );
+
+          var flag = false;
+          var People2 = declare( g.People, {
+ 
+            afterPutExisting: function( params, body, options, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb ){
+              flag = true;
+              cb( null );
+            },
+          });
+
+          // Set the basic stores
+          People2.Put( 1234, { name: "Tony" }, function( err, person ){
+            test.ifError( err );
+            test.equal( flag, true );
+
+            test.done();
+          });
+        });
       });
 
     },
@@ -1670,18 +1847,49 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Delete() REST Working test': function( test ){
       zap( function(){
 
-        // TODO
-        test.done();
-      });
+        var p = { id: 1234, name: 'Tony', surname: 'Mobily', age: 37 };
+        g.dbPeople.insert( p, { multi: true, returnRecord: true }, function( err, person ){
+          test.ifError( err );
 
+          var req = makeReq( { params: { id: 1234 } } );
+          (g.People.online.Delete(g.People))(req, new RES( function( err, type, headers, status, data ){
+            test.ifError( err );
+
+            var res = this;
+
+            test.equal( type, 'bytes' );
+            test.equal( status, 204 );
+
+            g.dbPeople.select( { }, function( err, docs ){
+              test.ifError( err );
+
+              test.equals( docs.length, 0 );
+
+              test.done();
+            });
+          }));
+        });
+      });
     },
 
 
     'Delete() REST handleDelete': function( test ){
       zap( function(){
 
-        // TODO
-        test.done();
+        var People2 = declare( g.People, {
+          handleDelete: false,
+        });
+
+        var req = makeReq( { params: { id: 1234 } } );
+        (People2.online.Delete(People2))(req, new RES( function( err, type, headers, status, data ){
+          test.ifError( err );
+
+          var res = this;
+          test.equal( type, 'bytes' );
+          test.equal( status, 501 );
+
+          test.done();
+        }));
       });
 
     },
@@ -1689,8 +1897,23 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Delete() REST checkParamIds': function( test ){
       zap( function(){
 
-        // TODO
-        test.done();
+        var req = makeReq( { params: { id: 1234 } } );
+        (g.WsPeople.online.Get(g.WsPeople))(req, new RES( function( err, type, headers, status, data ){
+          test.ifError( err );
+          var res = this;
+
+          test.equal( type, 'bytes' );
+          test.equal( status, 400 );
+          test.deepEqual( data,
+
+{ message: 'Bad Request',
+  errors: 
+   [ { field: 'workspaceId',
+       message: 'Field required in the URL: workspaceId' } ] }
+                );
+          test.done();
+        }));
+ 
       });
 
     },
@@ -1698,8 +1921,37 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Delete() APIh extrapolateDoc': function( test ){
       zap( function(){
 
-        // TODO
-        test.done();
+        var extrapolatedSurname = {};
+        var ageBeforeCast;
+
+        var p = { id: 1234, name: 'Tony', surname: 'Mobily', age: '37' };
+        g.dbPeople.insert( p, { multi: true, returnRecord: true }, function( err, person ){
+          test.ifError( err );
+
+          var People2 = declare( g.People, {
+  
+            extrapolateDoc: function( params, body, options, fullDoc, done ){
+
+              var doc = {};
+              for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+              doc.surname += '_extrapolated';
+
+              ageBeforeCast = doc.age;
+              extrapolatedSurname = doc.surname;
+
+              done( null, doc );
+            }
+          });
+  
+          People2.Delete( 1234, function( err, person ){
+            test.ifError( err );
+            test.equal( extrapolatedSurname, 'Mobily_extrapolated' );
+            test.equal( typeof ageBeforeCast, 'string' );
+            test.equal( typeof person.age, 'number' );
+
+            test.done();
+          });
+        });
       });
 
     },
@@ -1707,17 +1959,38 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Delete() APIg castDoc': function( test ){
       zap( function(){
 
-        // TODO
+        // Already tested in 'Delete() APIh extrapolateDoc' with age: '37'
         test.done();
       });
 
     },
 
-    'Delete() REST checkPermissionsGet': function( test ){
+    'Delete() REST checkPermissionsDelete': function( test ){
       zap( function(){
 
-        // TODO
-        test.done();
+         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
+          test.ifError( err );
+
+          var People2 = declare( g.People, {
+            checkPermissionsDelete: function(  params, body, options, doc, fullDoc, cb ){
+              if( params.id === 1234 ) cb( null, false );
+              else cb( null, true );
+            },  
+          });
+ 
+          var req = makeReq( { params: { id: 1234 } } );
+          (People2.online.Delete(People2))(req, new RES( function( err, type, headers, status, data ){
+            test.ifError( err );
+
+            var res = this;
+
+            test.equal( type, 'bytes' );
+            test.equal( status, 403 );
+        
+            test.done();
+          }));
+        });
+ 
       });
 
     },
@@ -1725,8 +1998,26 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'Delete() APIh afterDelete': function( test ){
       zap( function(){
 
-        // TODO
-        test.done();
+        g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
+          test.ifError( err );
+
+          var flag = false;
+          var People2 = declare( g.People, {
+
+            afterDelete: function( params, body, options, doc, fullDoc, cb ){
+              flag = true;
+              cb( null );
+            },
+          });
+
+          // Set the basic stores
+          People2.Delete( 1234, { name: "Tony" }, function( err, person ){
+            test.ifError( err );
+            test.equal( flag, true );
+
+            test.done();
+          });
+        });
       });
 
     },
@@ -1777,8 +2068,6 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
             g.People.GetQuery( { filters: { ageGt: 20 } }, function( err, docs ){
               test.ifError( err );
               compareCollections( test, l, docs );
- 
-
 
               test.done();
             });
@@ -1800,8 +2089,20 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'GetQuery() REST handleGetQuery': function( test ){
       zap( function(){
 
-        // TODO
-        test.done();
+        var People2 = declare( g.People, {
+          handleGetQuery: false,
+        });
+
+        var req = makeReq( { params: { id: 1234 } } );
+        (People2.online.GetQuery(People2))(req, new RES( function( err, type, headers, status, data ){
+          test.ifError( err );
+
+          var res = this;
+          test.equal( type, 'bytes' );
+          test.equal( status, 501 );
+
+          test.done();
+        }));
       });
 
     },
@@ -1809,8 +2110,24 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'GetQuery() REST checkParamIds': function( test ){
       zap( function(){
 
-        // TODO
-        test.done();
+        var req = makeReq( { params: { id: 1234 } } );
+        (g.WsPeople.online.Get(g.WsPeople))(req, new RES( function( err, type, headers, status, data ){
+          test.ifError( err );
+          var res = this;
+
+          test.equal( type, 'bytes' );
+          test.equal( status, 400 );
+          test.deepEqual( data,
+
+{ message: 'Bad Request',
+  errors: 
+   [ { field: 'workspaceId',
+       message: 'Field required in the URL: workspaceId' } ] }
+
+          );
+          test.done();
+        }));
+ 
       });
 
     },
@@ -1818,8 +2135,24 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'GetQuery() REST checkPermissionsGetQuery': function( test ){
       zap( function(){
 
-        // TODO
-        test.done();
+        var People2 = declare( g.People, {
+          checkPermissionsGetQuery: function(  params, body, options, cb ){
+            if( options.filters.name === 'Tony' ) cb( null, false );
+            else cb( null, true );
+          },  
+        });
+ 
+        var req = makeReq( { url: "http://www.example.org/people?name=Tony&surname=Mobily" } );
+        (People2.online.GetQuery(People2))(req, new RES( function( err, type, headers, status, data ){
+          test.ifError( err );
+
+          var res = this;
+
+          test.equal( type, 'bytes' );
+          test.equal( status, 403 );
+
+          test.done();
+        }));
       });
 
     },
@@ -1827,8 +2160,22 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'GetQuery() APIg validate': function( test ){
       zap( function(){
 
-        // TODO
-        test.done();
+        var req = makeReq( { url: "http://www.example.org/people?name=Tony&surname=1234567890123456789012" } );
+        (g.People.online.GetQuery(g.People))(req, new RES( function( err, type, headers, status, data ){
+          test.ifError( err );
+
+          var res = this;
+
+          test.equal( type, 'bytes' );
+          test.equal( status, 400 );
+          test.deepEqual( data,
+
+{ message: 'Bad Request',
+  errors: [ { field: 'surname', message: 'Field is too long: surname' } ] }
+          );
+
+          test.done();
+        }));
       });
 
     },
@@ -1836,8 +2183,40 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'GetQuery() APIg extrapolateDoc': function( test ){
       zap( function(){
 
-        // TODO
-        test.done();
+        var l = [];
+
+        var People2 = declare( g.People, {
+
+          extrapolateDoc: function( params, body, options, fullDoc, done ){
+
+            var doc = {};
+            for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+            doc.surname += '_extrapolated';
+
+            if( doc.name == 'Tony' ) ageBeforeCast = doc.age;
+
+            done( null, doc );
+          }
+        });
+
+ 
+        // NOTE! The age is '37', and then `r` is corrected to 37 for comparison.
+        async.series([
+          function( done ){ g.dbPeople.insert( { name: 'Tony', surname: "Mobily", age: '37' }, { returnRecord: true }, function( err, r ){ r.surname += "_extrapolated"; r.age = 37; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { name: 'Chiara', surname: "Mobily", age: 24 }, { returnRecord: true }, function( err, r ){ r.surname += "_extrapolated"; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { name: 'Daniela', surname: "Mobily", age: 64 }, { returnRecord: true }, function( err, r ){ r.surname += "_extrapolated"; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { name: 'Sara', surname: "Fabbietti", age: 14 }, { returnRecord: true }, function( err, r ){             done() }) },
+        ], function( err ){
+          test.ifError( err );
+
+           People2.GetQuery( { filters: { nameSt: 'Mo' } }, function( err, docs ){
+            test.ifError( err );
+
+            compareCollections( test, l, docs );
+ 
+            test.done();
+          });
+        });
       });
 
     },
@@ -1845,7 +2224,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'GetQuery() APIg castDoc': function( test ){
       zap( function(){
 
-        // TODO
+        // Already tested in 'GetQuery() APIg extrapolateDoc'
         test.done();
       });
 
@@ -1854,8 +2233,34 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     'GetQuery() APIg prepareBeforeSend': function( test ){
       zap( function(){
 
-        // TODO
-        test.done();
+        var l = [];
+
+        var People2 = declare( g.People, {
+          prepareBeforeSend: function( doc, done ){
+            var sendDoc = {};
+            for( var k in doc ) sendDoc[ k ] = doc[ k ];
+            sendDoc.prepared = 10;
+
+             done( null, sendDoc );
+          },
+        });
+ 
+        async.series([
+          function( done ){ g.dbPeople.insert( { name: 'Tony', surname: "Mobily", age: 37 }, { returnRecord: true }, function( err, r ){ r.prepared = 10; l.push( r); done() }) },
+          function( done ){ g.dbPeople.insert( { name: 'Chiara', surname: "Mobily", age: 24 }, { returnRecord: true }, function( err, r ){ r.prepared = 10; l.push( r); done() }) },
+          function( done ){ g.dbPeople.insert( { name: 'Daniela', surname: "Mobily", age: 64 }, { returnRecord: true }, function( err, r ){ r.prepared = 10; l.push( r); done() }) },
+          function( done ){ g.dbPeople.insert( { name: 'Sara', surname: "Fabbietti", age: 14 }, { returnRecord: true }, function( err, r ){             done() }) },
+        ], function( err ){
+          test.ifError( err );
+
+           People2.GetQuery( { filters: { nameSt: 'Mo' } }, function( err, docs ){
+            test.ifError( err );
+
+            compareCollections( test, l, docs );
+ 
+            test.done();
+          });
+        });
       });
 
     },
