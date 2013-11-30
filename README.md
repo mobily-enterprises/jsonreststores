@@ -10,6 +10,7 @@ Database access is done using [simpledblayer](https://github.com/mercmobily/simp
 
 It's really simple to develop more layers (e.g. MariaDb, Postgresql, CouchDb, etc.);
 
+And don't worry, after an overly long introduction, I do have a [quickstart](https://github.com/mercmobily/JsonRestStores#quick-start)!
 
 # The problem it solves
 
@@ -45,6 +46,23 @@ This is only a short list of obvious things. There are many more to consider.
 
 With JsonRestStores, you can create JSON REST stores without ever worrying about any one of those things. You can concentrate on what _really_ matters: your application and your application's logic.
 
+# Features
+
+* Follows the KISS principle: everything is kept as simple as possible.
+
+* 100% compliant with [Dojo's JsonRest stores](http://dojotoolkit.org/reference-guide/1.8/dojo/store/JsonRest.html). This means for example that the server will handle the `if-match` and `if-none-match` headers (for `PUT` calls), or will take into consideration the `range` headers and provide the right `Content-range` header in the responses (for `GET` calls) and so on.
+
+* It's database-agnostic. It uses simpledblayer to access data, and it can also manipulate subsets of existing data.
+
+* It uses a simple schema library  simple, extendible data validation. 
+
+* It uses OOP patterns neatly using simpledeclare: each store is a javascript constructor which inherits from the database-specific constructor (which inherits itself from a generic, base constructor).
+
+* All unimplemented methods will return a `501 Unimplemented Method` server response
+
+* It's able to manipulate only a subset of your DB data. If you have existing tables/collections, JsonRestStores will only ever touch the fields defined in your store's schema.
+
+* It's highly addictive. You will never want to write an API call by hand again.
 
 # Understand a little about REST stores
 
@@ -68,7 +86,6 @@ To understand stores and client interaction, you can read [Dojo's JsonRest store
 * [Allhttperrors](https://npmjs.org/package/allhttperrors). A simple module that creats `Error` objects for all of the possible HTTP statuses.
 
 Note that all of these modules are fully unit-tested, and are written and maintained by me.
-
 
 
 # Quick start
@@ -766,52 +783,6 @@ It represents an objects with the keys `rangeFrom`, `rangeTo`, `limit`. E.g.:
 
 For non-API calls, ranges are set by the 'range' headers. For example `Range: items=0-24`. Note that the server will also return, after a range query, a header that will detail the range returned. For example `Content-Range: items 0-24/66`
 
-# Database layers
-
-## MongoMixin
-
-The `MongoMixin` mixin class is the one responsible of making the Store actually write information onto a MongoDB collection. The following extra attributes are specified:
-
- * `collectionName` It's the MongoDB collection name. If it's not specified, `collectionName` will be the same as `storeName`
- * `db` It's the Mongo DB object, resulting from `connect()`
- * `handleXXX` properties are set by `false` by default (unlike the basic `Store` class, where they are set to `true` by default)
-
-Normally, in MongoDB each record has an ID called `_id`. This is a very important field in MongoDB: even if you don't define one in your collection, mongoDB will automatically add one.
-
-The last element in `paramIds` will tend to be `_id` if you use MongoDB as your database server. However, this is not a prerequisite: if the last paramIds is different to `_id`, things will still work fine. However, you will have an unused `_db` field in your collection.
-
-## ...More to come
-
-For now, there is only MongoDB integration available. However, the next section of the documentation explains exactly how to write a DB driver.
-
-# TODO
-
-The following items are much needed for this module:
-
-* Ability to do forEach on queries for API. This means that, using the API, you can actually iterate amongst a big set of data without having to create an array. This would also bypass `hardLimitOnQueries`
-* Good automatic tests (it would be about time).
-
-# Developing a driver layer
-
-The Store class itself is database-agnostic: it uses a set of functions to perform operations that require access to the database.
-Such functions all start with the name `driver` and are:
-
-* `driverAllDbFetch( params, body, options, cb )` (fetch a document)
-* `driverGetDbQuery( params, body, options, cb )` (executes the query)
-* `driverPutDbInsert( params, body, options, cb )`(inserts a record in the DB after a PUT)
-* `driverPutDbUpdate( params, body, options, doc, fullDoc, cb )`(updates a record in the DB after a PUT)
-* `driverPostDbInsertNoId( params, body, options, generatedId, cb  )`(adds a new record to the DB; a new ID will be created)
-* `driverPostDbAppend( params, body, options, doc, fullDoc, cb )` (appends information to existing record via POST)
-* `driverDeleteDbDelete( params, body, options, id, cb )`(deletes a record)
-
-Writing a database layer is a matter of implementing these functions. Doing so is easy: you should use the MongoDriverMixin file as a template on how to implement those functions for other database layers.
-
-Notes:
-
-* You can see that all functions always have `params, body, options` as first parameters, even though `body` is in some cases always empty (for example in GET and DELETE operations). This is only to keep the codebase sane and consistent.
-
-* The functions `driverPutDbUpdate()` and `driverPostDbAppend()` both work on existing records; they have as parameters `doc` and `fullDoc`, which represent the record _before_ the change; `doc` is basically `fullDoc` after `extrapolateDoc()` is run. 
-
 # Behind the scenes
 
 Understanding what happens behind the scenes is important to understand how the library works.
@@ -928,36 +899,6 @@ This is what happens in `_makeGet()`. Once you understand this, it's actually qu
 * **Runs `self.prepareBeforeSend()`**. This is a "preparation" function: a function that can manipulate the item just before sending it
 
 * **SEND item to client**
-
-
-
-# History and concepts behind it
-
-I was developing a one-page Ajax application completely based on stores: there is a rich client, and a bunch of stores server-side which comply with the cloudy (excuse my pun) JsonRest specifications. I soon realised that creating a store is often a rather complicated process: there are several HTTP methods to _possibly_ implement, and a lot of things to take care of (like permissions, etc.).
-
-I soon realised that the server side of the story was going to become a bunch of unmaintainable, repeated code. I couldn't have it. So, JsonRestStores was born.
-
-Point list:
-
-* Follows the KISS principle: everything is kept as simple as possible.
-
-* 100% compliant with [Dojo's JsonRest stores](http://dojotoolkit.org/reference-guide/1.8/dojo/store/JsonRest.html). This means for example that if you specify the option `{ overwrite: true }` for your store, the server will handle the if-match and if-none-match headers and will call the right method accordingly. Same applies with 
-
-* 100% compliant with Dojo's query format. Dojo's `query()` call sends specific fields to the client. This module has everything you need so that you can concentrate on your data, rather than interpreting HTTP headers
-
-* It's well structured: there is a base class, that provides all of the important methods; it works out of the box, returning dummy data. The base class is obviously not very useful: Database-specific sub-classes are what developers will use. At the moment, the following databases are supported:
-  * Mongodb
-  * ... more to come
-
-* It uses simpleschema for simple, extendible error checking. 
-
-* It uses OOP patterns neatly using simpledeclare: each store is a javascript constructor which inherits from the database-specific constructor (which inherits itself from a generic, base constructor).
-
-* DB-specific stores are build with the principle of "sane defaults": without giving them any special parameters, they will "just work" mapping a database collection to a store/schema.
-
-* The schema is very simple, and there is always one schema per store (although you can obviously re-use a schema variable). Schemas are responsible of 1) Casting input fields to their right type. This means that a field marked as "number" will be cast to a JS number 2) Trimming and input validation. Each type offers a bunch of helper functions. You can also define a schema-wide validate() function.
-
-
 
 
 
