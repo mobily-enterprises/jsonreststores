@@ -1,29 +1,54 @@
 JsonRestStores
 ==============
 
-# NOTE: I AM REWRITING THIS MODULE AND DOCS ARE 100% OUT OF DATE
+JsonRestStores is a one-stop module that allows you to create fully functional, configurable Json REST stores using NodeJS. A store can be inherited from another store, and can define all sorts of hooks to configure how it behaves and what it does (including permissions). It's also very easy to create "nested" stores (`http://www.example.com/bookings/1234/users` for example).
 
-The title says it all. Please do NOT use this module until the 30th of November 2013, as it has evolved enormously over the last little while and I still haven't documented the changes.
-
-
-In a couple of days (in November 30th) the module will be fully unit tested and documented.
-
-So... please be patient. The module will be worth the wait!
-
-----
-
-JsonRestStores is a one-stop module that allows you to create fully functional, configurable Json REST stores using NodeJS. A store can be inherited from another store, and can define all sorts of hooks to configure how it behaves (including permissions). It's also very easy to create "nested" stores.
-
-Database access is abstracted. At the moment, it supports the following database servers:
+Database access is done using [simpledblayer](https://github.com/mercmobily/simpledblayer), which at the moment supports:
 
 * MongoDb
-* ... (more to come)
+* TingoDb
 
-# Requirements
+It's really simple to develop more layers (e.g. MariaDb, Postgresql, CouchDb, etc.);
 
-## Understand a little about REST stores
 
-If you are new to REST and web stores, you should read a couple of things about REST stores. Understanding the concepts behind REST stores will make your life easier.
+# The problem it solves
+
+Imagine that you have a web application with bookings, and users connected to each booking, and that you want to make this information available via a JSON Rest API. You would have to define the following route in your application:
+
+* `GET /bookings`
+* `GET /bookings/:bookingId`
+* `PUT /bookings/:bookingId`
+* `POST /bookings`
+* `DELETE /bookings:/bookingId`
+
+And then to access users for that booking:
+
+* `GET /bookings/:bookingId/users`
+* `GET /bookings/:bookingId/users/:userId`
+* `PUT /bookings/:bookingId/users/:userId`
+* `POST /bookings/:bookingId/users`
+* `DELETE /bookings/:bookingId/users/:userId`
+
+It sounds simple enough (although it's only two tables and it already looks rather boring). It gets tricky when you consider that:
+
+* You need to make sure that permissions are always carefully checked. For example, only users within booking 1234 can `GET /bookings/:bookingId/users`
+* You need to make sure you behave correctly in your `PUT` calls, as data might already be there
+* When implementing `GET /bookings`, you need to make sure people can filter and order by the right fields by parsing the URL correctly. When you do that, you need to keep in mind that different parameters will need to trigger different filters on the database (for example, `GET /bookings?dateFrom=1976-01-10&name=Tony` will need to filter, on the database, all bookings made after the 10th of January 1976 by Tony).
+* When implementing `GET /bookings`, you need to return the right `Content-Range` HTTP headers in your results
+* When implementing `GET /bookings`, you also need to make sure you take into account any `Range` header set by the client, who might only want to receive a subset of the data
+* With `POST` and `PUT`, you need to make sure that data is validated against some kind of schema, and return the appropriate errors if it's not.
+* With `PUT`, you need to consider the HTTP headersd `If-match` and `If-none-match` to see if you can/should/must overwrite existing records
+* You must remember to get your filters right: when implementing `GET /bookings/:bookingId/users/:userId`, you must make sure that you are making queries to the database without forgetting `:bookingId`. This sounds pretty obvious with only 2 stores...
+* Don't forget about URL format validation: you need to make sure that anything submitted by the user is sanitised etc.
+
+This is only a short list of obvious things. There are many more to consider.
+
+With JsonRestStores, you can create JSON REST stores without ever worrying about any one of those things. You can concentrate on what _really_ matters: your application and your application's logic.
+
+
+# Understand a little about REST stores
+
+If you are new to REST and web stores, you will probably benefit by reading a couple of important articles. Understanding the concepts behind REST stores will make your life easier.
 
 I suggest you read [John Calcote's article about REST, PUT, POST, etc.](http://jcalcote.wordpress.com/2008/10/16/put-or-post-the-rest-of-the-story/). (It's a fantastic read, and I realised that it was written by John, who is a long term colleague and friend, only much later!).
 
@@ -31,11 +56,20 @@ You should also read my small summary of [what a REST store actually provides](h
 
 To understand stores and client interaction, you can read [Dojo's JsonRest stores documentation](http://dojotoolkit.org/reference-guide/1.8/dojo/store/JsonRest.html), because the stores created using this module are 100% compliant with what Dojo's basic JsonRest module sends to servers.
 
+
 ## Modules used by JSON rest stores
 
-Each REST store is defined as a "constructor functions" (referred as a "class" from now on). You can derive a REST store from another one if needed. You also need to "mixin" the right DB driver with the main class in order to use it with a DB layer (such as MongoDB). So, if you use this module, you also need to use [SimpleDeclare - Github](https://github.com/mercmobily/SimpleDeclare). Examples are provided.
+* [SimpleDeclare - Github](https://github.com/mercmobily/SimpleDeclare). This module makes creation of constructor functions/classes a breeze. Using SimpleDeclare is a must when using JsonRestStores -- unless you want to drown in unreadable code
 
-Each store has a schema defined. A schema is an object created with the [SimpleSchema - Github](https://github.com/mercmobily/SimpleSchema) constructor. You should make yourself familiar with SimpleSchema if you intend to use this module. Luckily, SimpleSchema is really simple to learn and use.
+* [simpledblayer](https://github.com/mercmobily/simpledblayer). This module provides a constructor function what will act as the DB layer for JsonRestStores. Any DB supported by simpledblayer will work with JsonRestStores.
+
+* [SimpleSchema - Github](https://github.com/mercmobily/SimpleSchema). This module makes it easy (and I mean, really easy) to define a schema and validate/cast data against it. It's really simple to extend a schema as well. It's a no-fuss module.
+
+* [Allhttperrors](https://npmjs.org/package/allhttperrors). A simple module that creats `Error` objects for all of the possible HTTP statuses.
+
+Note that all of these modules are fully unit-tested, and are written and maintained by me.
+
+
 
 # Quick start
 
