@@ -1,6 +1,10 @@
 JsonRestStores
 ==============
 
+# STATUS
+
+**This module is finished. I have just fixed a few small problems with dependencies etc. and am rewriting the documentation. Documentation will be fully finished on Sunday the 1st of December. The new documentation explains how to create stores from a standard Express server, and will use TingoDB in the examples**
+
 JsonRestStores is a one-stop module that allows you to create fully functional, configurable Json REST stores using NodeJS. A store can be inherited from another store, and can define all sorts of hooks to configure how it behaves and what it does (including permissions). It's also very easy to create "nested" stores (`http://www.example.com/bookings/1234/users` for example).
 
 Database access is done using [simpledblayer](https://github.com/mercmobily/simpledblayer), which at the moment supports:
@@ -89,6 +93,52 @@ Note that all of these modules are fully unit-tested, and are written and mainta
 
 
 # Quick start
+
+## Starting with a basic ExpressJS application
+
+Jsonreststores is a module that creates managed routes for you, and integrates very easily with existing ExpressJS applications.
+
+For example, a default Express application at the moment looks like this:
+
+    /**
+     * Module dependencies.
+     */
+
+    var express = require('express');
+    var routes = require('./routes');
+    var user = require('./routes/user');
+    var http = require('http');
+    var path = require('path');
+
+    var app = express();
+
+    // all environments
+    app.set('port', process.env.PORT || 3000);
+    app.set('views', __dirname + '/views');
+    app.set('view engine', 'jade');
+    app.use(express.favicon());
+    app.use(express.logger('dev'));
+    app.use(express.bodyParser());
+    app.use(express.methodOverride());
+    app.use(app.router);
+    app.use(express.static(path.join(__dirname, 'public')));
+
+    // development only
+    if ('development' == app.get('env')) {
+      app.use(express.errorHandler());
+    }
+
+    app.get('/', routes.index);
+    app.get('/users', user.list);
+
+    http.createServer(app).listen(app.get('port'), function(){
+      console.log('Express server listening on port ' + app.get('port'));
+    });
+
+Easy, plain and simple.
+This is how you would add a JSON REST store to it:
+
+
 
 Here are three very common use-cases for JsonRest stores.
 
