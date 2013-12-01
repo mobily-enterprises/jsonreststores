@@ -2134,6 +2134,61 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
           });
         });
       },
+
+      'GetQuery() REST Working test (filters and ranges)': function( test ){
+        zap( function(){
+  
+          async.series([
+            function( done ){ g.People.Post( { name: 'Tony', surname: "Mobily", age: 37 },    function( err, r ){ done() }) },
+            function( done ){ g.People.Post( { name: 'Chiara', surname: "Mobily", age: 24 },  function( err, r ){ done() }) },
+            function( done ){ g.People.Post( { name: 'Daniela', surname: "Mobily", age: 64 }, function( err, r ){ done() }) },
+            function( done ){ g.People.Post( { name: 'Sara', surname: "Fabbietti", age: 14 }, function( err, r ){ done() }) },
+          ], function( err ){
+            test.ifError( err );
+          
+            // var req = makeReq( { url: "http://www.example.org/people?ageGt=90", headers: { range: 'items=1-12' } } );
+            var req = makeReq( { url: "http://www.example.org/people/", headers: { range: 'items=1-2' } } );
+
+            (g.People.online.GetQuery(g.People))(req, new RES( function( err, type, headers, status, data ){
+              test.ifError( err );
+
+              test.equal( type, 'json' );
+              test.equal( data.length, 2 );
+              test.equal( headers['Content-Range'], 'items 1-2/4');
+              test.equal( status, 200);
+
+
+              var req = makeReq( { url: "http://www.example.org/people/?ageGt=90", headers: { range: 'items=1-2' } } );
+
+              (g.People.online.GetQuery(g.People))(req, new RES( function( err, type, headers, status, data ){
+                test.ifError( err );
+
+                test.equal( type, 'json' );
+                test.equal( data.length, 0 );
+                test.equal( headers['Content-Range'], 'items 0-0/0');
+                test.equal( status, 200);
+
+                var req = makeReq( { url: "http://www.example.org/people/", headers: { range: 'items=1-20' } } );
+
+                (g.People.online.GetQuery(g.People))(req, new RES( function( err, type, headers, status, data ){
+                  test.ifError( err );
+
+                  test.equal( type, 'json' );
+                  test.equal( data.length, 3 );
+                  test.equal( headers['Content-Range'], 'items 1-3/4');
+                  test.equal( status, 200);
+ 
+                  //console.log( err, type, headers, status, data );
+
+                  test.done();
+
+                }));
+              }));
+            }));
+ 
+          });
+        });
+      },
   
       'GetQuery() REST handleGetQuery': function( test ){
         zap( function(){
@@ -2191,7 +2246,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
             },  
           });
    
-          var req = makeReq( { url: "http://www.example.org/people?name=Tony&surname=Mobily" } );
+          var req = makeReq( { url: "http://www.example.org/people/?name=Tony&surname=Mobily" } );
           (People2.online.GetQuery(People2))(req, new RES( function( err, type, headers, status, data ){
             test.ifError( err );
   
@@ -2209,7 +2264,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
       'GetQuery() APIg validate': function( test ){
         zap( function(){
   
-          var req = makeReq( { url: "http://www.example.org/people?name=Tony&surname=1234567890123456789012" } );
+          var req = makeReq( { url: "http://www.example.org/people/?name=Tony&surname=1234567890123456789012" } );
           (g.People.online.GetQuery(g.People))(req, new RES( function( err, type, headers, status, data ){
             test.ifError( err );
   
