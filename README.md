@@ -98,7 +98,7 @@ Note that all of these modules are fully unit-tested, and are written and mainta
 
 Jsonreststores is a module that creates managed routes for you, and integrates very easily with existing ExpressJS applications.
 
-For example, a default Express application at the moment looks like this:
+For example, a default Express application at the moment looks like this (if you ignore the extra couple of lines):
 
     /**
      * Module dependencies.
@@ -109,7 +109,6 @@ For example, a default Express application at the moment looks like this:
     var user = require('./routes/user');
     var http = require('http');
     var path = require('path');
-
 
     var app = express();
 
@@ -142,34 +141,224 @@ For example, a default Express application at the moment looks like this:
 
 Easy, plain and simple.
 
-The only extra lines are the ones that require `storesRoutes.js`: that's the file that will create the store and add the necessary routes. Its code is very simple:
+The only extra lines are the ones that require `storesRoutes.js` and run it: that's the file that will create the store and add the necessary routes. Its code is very simple.
+
+For TingoDB, `storeRoutes` would be:
 
     // Requiring important modules
     var tingo = require("tingodb")({}); // TingoDB
+   
+    var declare = require('simpledeclare'); // Declare module
+
+    var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
+
+    var SimpleSchema = require('simpleschema');  // The schema module
+    var SimpleSchemaTingo = require('simpleschema-tingo'); // Tingo-specific functions for the schema module
+
+    var SimpleDbLayer = require('simpledblayer'); // The DB layer
+    var SimpleDbLayerTingo = require('simpledblayer-tingo'); // Tingo-specific functions for the DB layer
+
+
+    // Db Object from Tingo
+    var db = new tingo.Db('/tmp/tests', {} );
+    
+    exports = module.exports = function( app ){
+    
+      // Layer class: mixin of the base SimpleDbLayer and SimpleDbLayerTingo, with `db` property set
+      var DbLayer = declare( [ SimpleDbLayer, SimpleDbLayerTingo ], { db: db } );
+    
+      // JsonRestStore class, created with the DbLayer we just created
+      var JRS = declare( JsonRestStores, { DbLayer: DbLayer } );
+    
+      // Schema class: mixin of the base SimpleSchema class and SimpleSchemaTingo
+      var Schema = declare( [ SimpleSchema, SimpleSchemaTingo ] );
+    
+      var People = declare( JRS, {
+    
+        schema: new Schema({
+          id     : { type: 'id' },
+          name   : { type: 'string', trim: 60 },
+          surname: { type: 'string', trim: 60 },
+        }),
+    
+        paramIds: [ 'id' ],
+        storeName: 'People',
+    
+        handlePut: true,
+        handlePost: true,
+        handleGet: true,
+        handleGetQuery: true,
+        handleDelete: true,
+    
+        hardLimitOnQueries: 50,
+      });
+    
+      People.onlineAll( app, '/people/', ':id' );
+    }
+
+
+This is the same example, using MongoDB:
+
+
+    // Requiring important modules
+    var mongo = require("mongodb"); // MongoDB
+    
+    var declare = require('simpledeclare'); // Declare module
+    
+    var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
+    
+    var SimpleSchema = require('simpleschema');  // The schema module
+    var SimpleSchemaMongo = require('simpleschema-mongo'); // Mongo-specific functions for the schema module
+    
+    var SimpleDbLayer = require('simpledblayer'); // The DB layer
+    var SimpleDbLayerMongo = require('simpledblayer-mongo'); // Mongo-specific functions for the DB layer
+   
+    
+    exports = module.exports = function( app ){
+   
+      // Db Object from Mongo
+      mongo.MongoClient.connect( 'mongodb://localhost/hotplate', {}, function( err, db ){
+
+        // Layer class: mixin of the base SimpleDbLayer and SimpleDbLayerMongo, with `db` property set
+        var DbLayer = declare( [ SimpleDbLayer, SimpleDbLayerMongo ], { db: db } );
+    
+        // JsonRestStore class, created with the DbLayer we just created
+        var JRS = declare( JsonRestStores, { DbLayer: DbLayer } );
+    
+        // Schema class: mixin of the base SimpleSchema class and SimpleSchemaMongo
+        var Schema = declare( [ SimpleSchema, SimpleSchemaMongo ] );
+    
+        var People = declare( JRS, {
+    
+          schema: new Schema({
+            id     : { type: 'id' },
+            name   : { type: 'string', trim: 60 },
+            surname: { type: 'string', trim: 60 },
+          }),
+    
+          paramIds: [ 'id' ],
+          storeName: 'People',
+    
+          handlePut: true,
+          handlePost: true,
+          handleGet: true,
+          handleGetQuery: true,
+          handleDelete: true,
+    
+          hardLimitOnQueries: 50,
+        });
+    
+        People.onlineAll( app, '/people/', ':id' );
+      });
+    }
+
+## Sharing the DB variable in an ExpressJS application
+
+In many cases, you want to be able to define routes in different modules within your application. What you need to do in this case is:
+
+1) Write a simple module that connects to the database for you
+2) `require()` that module, which will have a `db` property attached to it
+
+Most databases will return a `db` object after an async call. So, this is what your app.js would look like:
+
+    /**
+     * Module dependencies.
+     */
+
+    var express = require('express');
+    var routes = require('./routes');
+    var user = require('./routes/user');
+    var http = require('http');
+    var path = require('path');
+    var mongoConnect = require('./mongoConnect.js');
+   
+    var app = express();
+    
+    // The whole app will be wrapped around the connecton
+    mongoConnect.connect( 'mongodb://localhost/hotplate', {}, function( err, db ){
+      if( err ){
+        console.error("Could not connect to the database server");
+        process.exit(1);
+      } else {
+
+        // From this point on, mongoConnect.db will be available to anybody
+        // requiring `mongoConnect.js`
+
+        // all environments
+        app.set('port', process.env.PORT || 3000);
+        app.set('views', __dirname + '/views');
+        app.set('view engine', 'jade');
+        app.use(express.favicon());
+        app.use(express.logger('dev'));
+        app.use(express.bodyParser());
+        app.use(express.methodOverride());
+        app.use(app.router);
+        app.use(express.static(path.join(__dirname, 'public')));
+    
+        // Set JsonRestStore routes for REST stores
+        var storesRoutes = require('./storesRoutes-mongo-async.js');
+        storesRoutes( app );
+    
+        // development only
+        if ('development' == app.get('env')) {
+          app.use(express.errorHandler());
+        } 
+
+        app.get('/', routes.index);
+        app.get('/users', user.list);
+
+        http.createServer(app).listen(app.get('port'), function(){
+          console.log('Express server listening on port ' + app.get('port'));
+        });
+      }
+    });
+
+
+Your `mongoConnect.js` file would look like this:
+
+    // Requiring important modules
+    var mongo = require("mongodb"); // MongoDB
+
+    exports.db = null
+
+    exports.connect = function( url, options, cb ){
+      mongo.MongoClient.connect( 'mongodb://localhost/hotplate', {}, function( err, db ){
+        if( err ){
+          cb( err );
+        } else {
+          exports.db = db;
+          cb( null, db );
+        }
+      });
+    }
+
+It's basically just a module that exports `db` (the database connection) and `connect` (the function to connect asynchronously).
+
+Your `storesRoutes-mongo-async.js` file will then use `mongoConnect.js`:
+
+    var mongoConnect = require('./mongoConnect.js');
 
     var declare = require('simpledeclare'); // Declare module
 
     var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
 
-    var SimpleSchema = require('simpleschema');  // The schema module (main + tingo)
-    var SimpleSchemaTingo = require('simpleschema-tingo');
+    var SimpleSchema = require('simpleschema');  // The schema module
+    var SimpleSchemaMongo = require('simpleschema-mongo'); // Mongo-specific functions for the schema module
 
-    var SimpleDbLayer = require('simpledblayer'); // The DB layer (main + tingo)
-    var SimpleDbLayerTingo = require('simpledblayer-tingo');
-    
-    // Db Object from Tingo
-    var db = new tingo.Db('/tmp/tests', {} );
+    var SimpleDbLayer = require('simpledblayer'); // The DB layer
+    var SimpleDbLayerMongo = require('simpledblayer-mongo'); // Mongo-specific functions for the DB layer
 
-    exports = module.exports = function( app ){ 
 
-      // Layer class: mixin of the base SimpleDbLayer and SimpleDbLayerTingo, with `db` property set
-      var DbLayer = declare( [ SimpleDbLayer, SimpleDbLayerTingo ], { db: db } );
+    exports = module.exports = function( app ){
 
-      // JsonRestStore class, created with the DbLayer we just created added to its prototype
+      // Layer class: mixin of the base SimpleDbLayer and SimpleDbLayerMongo, with `db` property set
+      var DbLayer = declare( [ SimpleDbLayer, SimpleDbLayerMongo ], { db: mongoConnect.db } );
+
+      // JsonRestStore class, created with the DbLayer we just created
       var JRS = declare( JsonRestStores, { DbLayer: DbLayer } );
 
-      // Schema class: mixin of the base SimpleSchema class and SimpleSchemaTingo
-      var Schema = declare( [ SimpleSchema, SimpleSchemaTingo ] );
+      // Schema class: mixin of the base SimpleSchema class and SimpleSchemaMongo
+      var Schema = declare( [ SimpleSchema, SimpleSchemaMongo ] );
 
       var People = declare( JRS, {
 
@@ -177,7 +366,7 @@ The only extra lines are the ones that require `storesRoutes.js`: that's the fil
           id     : { type: 'id' },
           name   : { type: 'string', trim: 60 },
           surname: { type: 'string', trim: 60 },
-        }), 
+        }),
 
         paramIds: [ 'id' ],
         storeName: 'People',
@@ -191,10 +380,11 @@ The only extra lines are the ones that require `storesRoutes.js`: that's the fil
         hardLimitOnQueries: 50,
       });
 
-      People.onlineAll( app, '/users/', ':id' );
+      People.onlineAll( app, '/people/', ':id' );
     }
 
 
+In the rest of the documentation, I will assume that your `db` variable is set.
 
 # DOCUMENTATION IS COMPLETELY OUT OF DATE FROM THIS POINT ON -- SORRY.
 
