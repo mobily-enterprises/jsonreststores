@@ -1220,7 +1220,7 @@ var Store = declare( null,  {
                     self._sendError( next, new self.BadRequestError( { errors: errors } ) );
                   } else {
         
-                    self.execGetDbQuery( params, body, options, function( err, queryDocs ){
+                    self.execGetDbQuery( params, body, options, function( err, queryDocs, total, grandTotal ){
                       self._sendErrorOnErr( err, next, function(){
        
                         self._extrapolateDocAnd_castDocAndprepareBeforeSendAll( params, body, options, queryDocs, function( err ){
@@ -1228,7 +1228,14 @@ var Store = declare( null,  {
         
                             // Remote request: set headers, and send the doc back (if echo is on)
                             if( self.remote ){
-                              self._res.setHeader('Content-Range', 'items ' + ranges.rangeFrom + '-' + ranges.rangeTo + '/' + queryDocs.total );
+
+                              if( options.ranges ){
+                                var from, to, of;
+                                from = total ? options.ranges.from : 0;
+                                to = total ? options.ranges.from + total - 1 : 0 ;
+                                of = grandTotal;
+                                self._res.setHeader('Content-Range', 'items ' + from + '-' + to + '/' + of );
+                              }
                               self._res.json( 200, queryDocs );
                             // Local request: simply return the doc to the asking function
                             } else {
