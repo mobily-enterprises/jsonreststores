@@ -33,7 +33,7 @@ var db = new tingo.Db('/tmp/tests', {} );
 
 // Layer class, mixing in SimpleDbLayer and SimpleDbLayerTingo
 var DbLayer = declare( [ SimpleDbLayer, SimpleDbLayerTingo ], { db: db } );
-var JRS = declare( JsonRestStores, { DbDriver: DbLayer } );
+var JRS = declare( JsonRestStores, { DbLayer: DbLayer } );
 var Schema = declare( [ SimpleSchema, SimpleSchemaTingo ] );
 
 var People = declare( JRS, {

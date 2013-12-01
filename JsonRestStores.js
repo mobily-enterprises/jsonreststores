@@ -44,7 +44,7 @@ var Store = declare( null,  {
   // *** ATTRIBUTES THAT CAN TO BE DEFINED IN PROTOTYPE
   // ****************************************************
 
-  DbDriver: null, // If not set in prototype, NEEDS to be passed as the constructor parameter
+  DbLayer: null, // If not set in prototype, NEEDS to be passed as the constructor parameter
   searchSchema: null, // If not set in prototype, is set as `schema` by constructor
   collectionName: null, // If not set in prototype, is set as `storeName` by constructor
 
@@ -145,18 +145,18 @@ var Store = declare( null,  {
   ServiceUnavailableError: e.ServiceUnavailableError,
 
 
-  constructor: function( DbDriver ){
+  constructor: function( DbLayer ){
 
     var self = this;
 
     // Accept the DB driver from the constructor. If it's not passed through the
     // constructor, then it must be already in the prototype (inherited or set)
-    if( typeof( DbDriver ) !== 'undefined' ){
-      self.DbDriver = DbDriver;
+    if( typeof( DbLayer ) !== 'undefined' ){
+      self.DbLayer = DbLayer;
     }
     
     // The db driver must be defined
-    if( typeof( self.DbDriver ) === 'undefined' || self.DbDriver == null ){
+    if( typeof( self.DbLayer ) === 'undefined' || self.DbLayer == null ){
       throw( new Error("You must define a db driver, via constructor or via prototype") );
     }
 
@@ -182,7 +182,7 @@ var Store = declare( null,  {
       self.searchSchema = self.schema;
     }
 
-    // Set `fields`, which will need to conform DbDriver's format: every key defined is in the schema, and keys
+    // Set `fields`, which will need to conform DbLayer's format: every key defined is in the schema, and keys
     // with `true` values are also searchable.
     // In this case, all fields with a `filterType` in the searchSchema are indeed searchable. PLUS, any
     // fields in paramIds are also searchable
@@ -194,8 +194,8 @@ var Store = declare( null,  {
     }
     for( var i = 0, l  = self.paramIds.length; i <  l; i ++ ) fields[ self.paramIds[ i ] ] = true;
 
-    // Create the dbDriver object, ready to accept queries
-    self.dbDriver = new self.DbDriver( self.collectionName, fields );
+    // Create the dbLayer object, ready to accept queries
+    self.dbLayer = new self.DbLayer( self.collectionName, fields );
   },
 
 
@@ -249,7 +249,7 @@ var Store = declare( null,  {
     self._enrichSelectorWithParams( selector, params );
 
     // Make the database call 
-    self.dbDriver.select( selector, function( err, docs ){
+    self.dbLayer.select( selector, function( err, docs ){
       if( err ){
         cb( err );
       } else {
@@ -293,7 +293,7 @@ var Store = declare( null,  {
     // wasn't passed: assign an ObjectId to it
     record[ self.idProperty ] = generatedId;
 
-    self.dbDriver.insert( record, { returnRecord: true }, cb );
+    self.dbLayer.insert( record, { returnRecord: true }, cb );
 
   },
 
@@ -319,12 +319,12 @@ var Store = declare( null,  {
     //    console.log( "SELECTOR:");
     //    console.log( require('util').inspect( selector, { depth: 10 } ) );
 
-    self.dbDriver.update( selector, body, { deleteUnsetFields: true, multi: false }, function( err, howMany ){
+    self.dbLayer.update( selector, body, { deleteUnsetFields: true, multi: false }, function( err, howMany ){
       if( err ){
         cb( err );
       } else {
 
-        self.dbDriver.select( selector, function( err, docs ){
+        self.dbLayer.select( selector, function( err, docs ){
           if( err ){
             cb( err );
           } else {
@@ -333,7 +333,7 @@ var Store = declare( null,  {
             } else if( docs.length !== 1 ){
 
               cb( new self.ServiceUnavailableError({
-                message: "dbDriver.update updated more than 1 record",
+                message: "dbLayer.update updated more than 1 record",
                 data: { 
                   length: doc.length,
                   selector: selector,
@@ -367,7 +367,7 @@ var Store = declare( null,  {
       }
     });
 
-    self.dbDriver.insert( record, { returnRecord: true }, cb );
+    self.dbLayer.insert( record, { returnRecord: true }, cb );
 
   },
 
@@ -378,7 +378,7 @@ var Store = declare( null,  {
     var selector = {};
 
     self._enrichSelectorWithParams( selector, params );
-    self.dbDriver.delete( selector, { multi: false }, cb );
+    self.dbLayer.delete( selector, { multi: false }, cb );
   },
 
   _queryMakeSelector: function( filters, sort, ranges ){
@@ -561,7 +561,7 @@ var Store = declare( null,  {
     //console.log("selector2: ", selector);
 
     // Run the select based on the passed parameters
-    self.dbDriver.select( selector, next );
+    self.dbLayer.select( selector, next );
   },
 
 

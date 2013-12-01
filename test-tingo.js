@@ -16,7 +16,7 @@ var allTests = require( "./test-all.js" );
 
 var tests = allTests.get(
 
-  function getDbAndDbDriverAndJRS( done ) {
+  function getDbAndDbLayerAndJRS( done ) {
 
    try {
      require('fs').mkdirSync('/tmp/tests');
@@ -25,9 +25,9 @@ var tests = allTests.get(
 
     var db = new Db('/tmp/tests', {});
 
-    var DbDriver = declare( [ SimpleDbLayer, TingoMixin ], { db: db } );
-    var JRS = declare( J, { DbDriver: DbDriver } );
-    done( null, db, DbDriver, JRS );
+    var DbLayer = declare( [ SimpleDbLayer, TingoMixin ], { db: db } );
+    var JRS = declare( J, { DbLayer: DbLayer } );
+    done( null, db, DbLayer, JRS );
   },
 
   function closeDb( db, done ) {

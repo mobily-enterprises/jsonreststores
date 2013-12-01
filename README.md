@@ -138,6 +138,7 @@ For example, a default Express application at the moment looks like this:
 Easy, plain and simple.
 This is how you would add a JSON REST store to it:
 
+**TODO**
 
 
 Here are three very common use-cases for JsonRest stores.

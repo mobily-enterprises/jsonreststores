@@ -17,15 +17,15 @@ var allTests = require( "./test-all.js" );
 
 var tests = allTests.get(
 
-  function getDbAndDbDriverAndJRS( done ) {
+  function getDbAndDbLayerAndJRS( done ) {
 
     mw.connect('mongodb://localhost/tests', {}, function( err, db ){
       if( err ){
         throw new Error("MongoDB connect: could not connect to database");
       } else {
-        var DbDriver = declare( [ SimpleDbLayer, MongoMixin ], { db: db } );
-        var JRS = declare( J, { DbDriver: DbDriver } );
-        done( null, db, DbDriver, JRS );
+        var DbLayer = declare( [ SimpleDbLayer, MongoMixin ], { db: db } );
+        var JRS = declare( J, { DbLayer: DbLayer } );
+        done( null, db, DbLayer, JRS );
       }
     });
   },

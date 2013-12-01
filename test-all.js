@@ -159,7 +159,7 @@ process.on('uncaughtException', function(err) {
 
 //Error.stackTraceLimit = Infinity;
 
-exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
+exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
   var tests;
   var g = {};
@@ -173,7 +173,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
     });
 
 
-    getDbAndDbDriverAndJRS( function( err, db, DbDriver, JRS ){
+    getDbAndDbLayerAndJRS( function( err, db, DbLayer, JRS ){
       if( err ){
         throw( new Error("Could not connect to db, aborting all tests") );
         process.exit();
@@ -181,7 +181,7 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
 
       // Set the important g.driver variables (db and DriverMixin)
       g.db = db;
-      g.DbDriver = DbDriver;
+      g.DbLayer = DbLayer;
       g.JRS = JRS;
 
       // Set the basic stores
@@ -247,8 +247,8 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
      
 
       // Clear people table
-        //g.dbPeople = new g.DbDriver( 'people', {  name: true, surname: true, age: false, id: true }  ); 
-        g.dbPeople = new g.People().dbDriver;
+        //g.dbPeople = new g.DbLayer( 'people', {  name: true, surname: true, age: false, id: true }  ); 
+        g.dbPeople = new g.People().dbLayer;
         g.dbPeople.delete( { }, { multi: true }, function( err ){
           if( err ){
             throw( new Error("Could not empty people database, giving up") );
@@ -256,8 +256,8 @@ exports.get = function( getDbAndDbDriverAndJRS, closeDb ){
           } else {
    
             // Clear people table
-            //g.dbPeople = new g.DbDriver( 'people', {  name: true, surname: true, age: false, id: true }  ); 
-            g.dbWsPeople = new g.WsPeople().dbDriver;
+            //g.dbPeople = new g.DbLayer( 'people', {  name: true, surname: true, age: false, id: true }  ); 
+            g.dbWsPeople = new g.WsPeople().dbLayer;
             g.dbWsPeople.delete( { }, { multi: true }, function( err ){
               if( err ){
                 throw( new Error("Could not empty wsPeople database, giving up") );
