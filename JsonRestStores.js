@@ -194,8 +194,14 @@ var Store = declare( null,  {
     }
     for( var i = 0, l  = self.paramIds.length; i <  l; i ++ ) fields[ self.paramIds[ i ] ] = true;
 
-    // Create the dbLayer object, ready to accept queries
+    // Create the dbLayer object, ready to accept insert/delete/select/update operations
+    // on that specific collection
     self.dbLayer = new self.DbLayer( self.collectionName, fields );
+
+    // Set the DB's hard limit on queries. DB-specific implementations will
+    // set this to `true` if the query is not cursor-based (this will prevent
+    // a million results from being returned)
+    self.dbLayer.hardLimitOnQueries = self.hardLimitOnQueries;
   },
 
 
