@@ -91,14 +91,22 @@ To understand stores and client interaction, you can read [Dojo's JsonRest store
 
 Note that all of these modules are fully unit-tested, and are written and maintained by me.
 
-
-# Quick start
-
-## Starting with a basic ExpressJS application
+# Quickstart
 
 Jsonreststores is a module that creates managed routes for you, and integrates very easily with existing ExpressJS applications.
 
-For example, a default Express application at the moment looks like this (if you ignore the extra couple of lines):
+## Database-specific classes
+
+In order to use JsonRestStores with MongoDb for example you will need to:
+
+* Create a database connection
+* Extend SimpleDbLayer with database-specific functionalities
+* Extend SimpleSchema with database-specific functionalities (so that it can deal with the DB's id fields, for example)
+* Create stores and get JsonRestStores to set routes in your `app` variable
+
+The first three points are very much db-specific, whereas the last one would stay the same regardless of the database picked. The best thing to do is to enapsulate all of the db-specific functionality in their own module.
+
+Here is how you would change a stock `app.js` file if you used MongoDb:
 
     /**
      * Module dependencies.
@@ -110,179 +118,20 @@ For example, a default Express application at the moment looks like this (if you
     var http = require('http');
     var path = require('path');
 
-    var app = express();
-
-    // all environments
-    app.set('port', process.env.PORT || 3000);
-    app.set('views', __dirname + '/views');
-    app.set('view engine', 'jade');
-    app.use(express.favicon());
-    app.use(express.logger('dev'));
-    app.use(express.bodyParser());
-    app.use(express.methodOverride());
-    app.use(app.router);
-    app.use(express.static(path.join(__dirname, 'public')));
-
-    // Uncomment this later
-    // var storesRoutes = require('./storesRoutes.js');
-    // storesRoutes( app );
-
-    // development only
-    if ('development' == app.get('env')) {
-      app.use(express.errorHandler());
-    }
-
-    app.get('/', routes.index);
-    app.get('/users', user.list);
-
-    http.createServer(app).listen(app.get('port'), function(){
-      console.log('Express server listening on port ' + app.get('port'));
-    });
-
-Easy, plain and simple.
-
-The only extra lines are the ones that require `storesRoutes.js` and run it: that's the file that will create the store and add the necessary routes. Its code is very simple.
-
-For TingoDB, `storeRoutes` would be:
-
-    // Requiring important modules
-    var tingo = require("tingodb")({}); // TingoDB
-   
-    var declare = require('simpledeclare'); // Declare module
-
-    var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
-
-    var SimpleSchema = require('simpleschema');  // The schema module
-    var SimpleSchemaTingo = require('simpleschema-tingo'); // Tingo-specific functions for the schema module
-
-    var SimpleDbLayer = require('simpledblayer'); // The DB layer
-    var SimpleDbLayerTingo = require('simpledblayer-tingo'); // Tingo-specific functions for the DB layer
-
-
-    // Db Object from Tingo
-    var db = new tingo.Db('/tmp/tests', {} );
-    
-    exports = module.exports = function( app ){
-    
-      // Layer class: mixin of the base SimpleDbLayer and SimpleDbLayerTingo, with `db` property set
-      var DbLayer = declare( [ SimpleDbLayer, SimpleDbLayerTingo ], { db: db } );
-    
-      // JsonRestStore class, created with the DbLayer we just created
-      var JRS = declare( JsonRestStores, { DbLayer: DbLayer } );
-    
-      // Schema class: mixin of the base SimpleSchema class and SimpleSchemaTingo
-      var Schema = declare( [ SimpleSchema, SimpleSchemaTingo ] );
-    
-      var People = declare( JRS, {
-    
-        schema: new Schema({
-          id     : { type: 'id' },
-          name   : { type: 'string', trim: 60 },
-          surname: { type: 'string', trim: 60 },
-        }),
-    
-        paramIds: [ 'id' ],
-        storeName: 'People',
-    
-        handlePut: true,
-        handlePost: true,
-        handleGet: true,
-        handleGetQuery: true,
-        handleDelete: true,
-    
-        hardLimitOnQueries: 50,
-      });
-    
-      People.onlineAll( app, '/people/', ':id' );
-    }
-
-
-This is the same example, using MongoDB:
-
-
-    // Requiring important modules
-    var mongo = require("mongodb"); // MongoDB
-    
-    var declare = require('simpledeclare'); // Declare module
-    
-    var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
-    
-    var SimpleSchema = require('simpleschema');  // The schema module
-    var SimpleSchemaMongo = require('simpleschema-mongo'); // Mongo-specific functions for the schema module
-    
-    var SimpleDbLayer = require('simpledblayer'); // The DB layer
-    var SimpleDbLayerMongo = require('simpledblayer-mongo'); // Mongo-specific functions for the DB layer
-   
-    
-    exports = module.exports = function( app ){
-   
-      // Db Object from Mongo
-      mongo.MongoClient.connect( 'mongodb://localhost/hotplate', {}, function( err, db ){
-
-        // Layer class: mixin of the base SimpleDbLayer and SimpleDbLayerMongo, with `db` property set
-        var DbLayer = declare( [ SimpleDbLayer, SimpleDbLayerMongo ], { db: db } );
-    
-        // JsonRestStore class, created with the DbLayer we just created
-        var JRS = declare( JsonRestStores, { DbLayer: DbLayer } );
-    
-        // Schema class: mixin of the base SimpleSchema class and SimpleSchemaMongo
-        var Schema = declare( [ SimpleSchema, SimpleSchemaMongo ] );
-    
-        var People = declare( JRS, {
-    
-          schema: new Schema({
-            id     : { type: 'id' },
-            name   : { type: 'string', trim: 60 },
-            surname: { type: 'string', trim: 60 },
-          }),
-    
-          paramIds: [ 'id' ],
-          storeName: 'People',
-    
-          handlePut: true,
-          handlePost: true,
-          handleGet: true,
-          handleGetQuery: true,
-          handleDelete: true,
-    
-          hardLimitOnQueries: 50,
-        });
-    
-        People.onlineAll( app, '/people/', ':id' );
-      });
-    }
-
-## Sharing the DB variable in an ExpressJS application
-
-In many cases, you want to be able to define routes in different modules within your application. What you need to do in this case is:
-
-1) Write a simple module that connects to the database for you
-2) `require()` that module, which will have a `db` property attached to it
-
-Most databases will return a `db` object after an async call. So, this is what your app.js would look like:
-
-    /**
-     * Module dependencies.
-     */
-
-    var express = require('express');
-    var routes = require('./routes');
-    var user = require('./routes/user');
-    var http = require('http');
-    var path = require('path');
-    var mongoConnect = require('./mongoConnect.js');
+    var dbSpecific = require('./dbSpecific-mongo.js'); // ADDED
+    var storesRoutes = require('./storesRoutes.js'); // ADDED
    
     var app = express();
     
+    // ADDED 8 lines:
     // The whole app will be wrapped around the connecton
-    mongoConnect.connect( 'mongodb://localhost/hotplate', {}, function( err, db ){
+    dbSpecific.connect( 'mongodb://localhost/tests', {}, function( err ){
       if( err ){
         console.error("Could not connect to the database server");
         process.exit(1);
       } else {
-
-        // From this point on, mongoConnect.db will be available to anybody
-        // requiring `mongoConnect.js`
+        // From this point on, dbConnect.db will be available to anybody
+        // requiring `dbConnect.js`
 
         // all environments
         app.set('port', process.env.PORT || 3000);
@@ -296,8 +145,7 @@ Most databases will return a `db` object after an async call. So, this is what y
         app.use(express.static(path.join(__dirname, 'public')));
     
         // Set JsonRestStore routes for REST stores
-        var storesRoutes = require('./storesRoutes-mongo-async.js');
-        storesRoutes( app );
+        storesRoutes( app ); // ADDED
     
         // development only
         if ('development' == app.get('env')) {
@@ -314,51 +162,127 @@ Most databases will return a `db` object after an async call. So, this is what y
     });
 
 
-Your `mongoConnect.js` file would look like this:
+Your `dbSpecific-mongo.js` file would look like this:
 
-    // Requiring important modules
+    // Generic modules
+    var declare = require('simpledeclare'); // Declare module
+    var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
+    var SimpleSchema = require('simpleschema');  // The main schema module
+    var SimpleDbLayer = require('simpledblayer'); // The main DB layer module
+
+    // Mongo-specific modules
     var mongo = require("mongodb"); // MongoDB
-
+    var SimpleSchemaMongo = require('simpleschema-mongo'); // Mongo-specific functions for the schema module
+    var SimpleDbLayerMongo = require('simpledblayer-mongo'); // Mongo-specific functions for the DB layer
+    
     exports.db = null
+    exports.DbLayer = null;
+    exports.Schema = null;
+    exports.JRS = null;
 
     exports.connect = function( url, options, cb ){
-      mongo.MongoClient.connect( 'mongodb://localhost/hotplate', {}, function( err, db ){
+      mongo.MongoClient.connect( url, options, function( err, db ){
         if( err ){
           cb( err );
         } else {
           exports.db = db;
-          cb( null, db );
+          exports.Schema = declare( [ SimpleSchema, SimpleSchemaMongo ] );
+          exports.DbLayer = declare( [ SimpleDbLayer, SimpleDbLayerMongo ], { db: db } );
+          exports.JRS = declare( JsonRestStores, { DbLayer: exports.DbLayer } );
+
+          cb( null );
         }
       });
-    }
+    }    
 
-It's basically just a module that exports `db` (the database connection) and `connect` (the function to connect asynchronously).
 
-Your `storesRoutes-mongo-async.js` file will then use `mongoConnect.js`:
+It's basically just a module that exports all of the db-specific constructor, and a `connect()` function that will assign something meaningul to those variable.
 
-    var mongoConnect = require('./mongoConnect.js');
+* `JsonRestStores` need a DbLayer to work. The DbLayer is the `SimpleDbLayer` class, extended with the MongoDB-specific `SimpleDbLayerMongo` class (which will allow it to _acutally_ access the MongoDB database)
+* `JsonRestStores` stores are always defined with a Schema. The `SimpleSchema` class is extended with the MongoDB-specific `SimpleSchemaMongo` class (which allows it to understand and cast Mongo's ID fields property)
+
+Your `storesRoutes.js` file will then use `dbSpecific-mongo.js` to get the those variables:
 
     var declare = require('simpledeclare'); // Declare module
 
-    var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
-
-    var SimpleSchema = require('simpleschema');  // The schema module
-    var SimpleSchemaMongo = require('simpleschema-mongo'); // Mongo-specific functions for the schema module
-
-    var SimpleDbLayer = require('simpledblayer'); // The DB layer
-    var SimpleDbLayerMongo = require('simpledblayer-mongo'); // Mongo-specific functions for the DB layer
-
+    var dbSpecific = require('./dbSpecific-tingo.js');
 
     exports = module.exports = function( app ){
 
-      // Layer class: mixin of the base SimpleDbLayer and SimpleDbLayerMongo, with `db` property set
-      var DbLayer = declare( [ SimpleDbLayer, SimpleDbLayerMongo ], { db: mongoConnect.db } );
+      var JRS = dbSpecific.JRS;
+      var Schema = dbSpecific.Schema;
+    
+      var People = declare( JRS, {
+    
+        schema: new Schema({
+          id     : { type: 'id' }, // This will be a MongoDB-specific id thanks to SimpleSchemaMongo
+          name   : { type: 'string', trim: 60 },
+          surname: { type: 'string', trim: 60 },
+        }),
+    
+        paramIds: [ 'id' ],
+        storeName: 'People',
+    
+        handlePut: true,
+        handlePost: true,
+        handleGet: true,
+        handleGetQuery: true,
+        handleDelete: true,
+    
+        hardLimitOnQueries: 50,
+      });
+    
+      People.onlineAll( app, '/people/', ':id' );
+    }
 
-      // JsonRestStore class, created with the DbLayer we just created
-      var JRS = declare( JsonRestStores, { DbLayer: DbLayer } );
 
-      // Schema class: mixin of the base SimpleSchema class and SimpleSchemaMongo
-      var Schema = declare( [ SimpleSchema, SimpleSchemaMongo ] );
+## TingoDB
+
+What if you want to use TingoDB instead? since everything is encapsulated, all you need to do is write `dbSpecific-tingo.js`, as follows:
+
+    // Generic modules
+    var declare = require('simpledeclare'); // Declare module
+    var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
+    var SimpleSchema = require('simpleschema');  // The main schema module
+    var SimpleDbLayer = require('simpledblayer'); // The main DB layer module
+
+    // Tingo-specific modules
+    var tingo = require("tingodb")({}); // TingoDB
+    var SimpleSchemaTingo = require('simpleschema-tingo'); // Tingo-specific functions for the schema module
+    var SimpleDbLayerTingo = require('simpledblayer-tingo'); // Tingo-specific functions for the DB layer
+    
+    exports.db = null
+    exports.DbLayer = null;
+    exports.Schema = null;
+    exports.JRS = null;
+
+    exports.connect = function( url, options, cb ){
+      try {
+        exports.db = new tingo.Db(url, options );
+      } catch( e ){
+        return cb( e );
+      }
+      exports.Schema = declare( [ SimpleSchema, SimpleSchemaTingo ] );
+      exports.DbLayer = declare( [ SimpleDbLayer, SimpleDbLayerTingo ], { db: exports.db } );
+      exports.JRS = declare( JsonRestStores, { DbLayer: exports.DbLayer } );
+
+      cb( null );
+    }    
+
+At this point you are basically good to go:
+
+* In `storesRoutes.js` and `app.js`, change `require('./dbSpecific-mongo.js');` into `require('./dbSpecific-tingo.js');`
+* In `app.js`, change the connection string into `dbSpecific.connect( '/tmp/tests', {}, function( err ){`
+
+In the rest of the documentation, I will assume that your `db`, `JRS` and `Schema` variables are set and will focus on the code that actually creates the stores.
+
+# Store examples
+
+Here are three very common use-cases for JsonRest stores, fully explained: 
+
+## A basic store
+
+Here is how you make a fully compliant store:
 
       var People = declare( JRS, {
 
@@ -381,139 +305,39 @@ Your `storesRoutes-mongo-async.js` file will then use `mongoConnect.js`:
       });
 
       People.onlineAll( app, '/people/', ':id' );
-    }
-
-
-In the rest of the documentation, I will assume that your `db` variable is set.
-
-# DOCUMENTATION IS COMPLETELY OUT OF DATE FROM THIS POINT ON -- SORRY.
-
-**Documentation will be finished on the 2nd of Dec.**
-
-
-
-Here are three very common use-cases for JsonRest stores.
-
-## A basic store (no DB)
-
-Here is how you make a fully compliant store:
-
-    // The basic Store class
-    var Store = require('jsonreststores');
-    var Schema = require('simpleschema');
-
-    var Workspaces = declare( Store, {
-
-      schema: new Schema({
-        _id:           { type: 'id' },
-        workspaceName: { type: 'string', notEmpty: true, trim: 20, searchable: true, sortable: true  },
-      }),
-
-      storeName: 'workspaces',
-
-      handlePut: true,
-      handlePost: true,
-      handleGet: true,
-      handleGetQuery: true,
-      handleDelete: true,
-
-      paramIds: [ '_id' ],
-    });
-
-    // Create the right hooks to access the store
-    Workspaces.onlineAll( app, '/workspaces/', ':_id' );
+ 
 
 That's it: this is enough to make a full store which will handly properly all of the HTTP calls. Try it if you don't believe me!
 
-* `Workspace` is a new class that inherits from `Store`. Creating the derived class is the first step towards creating a store
-* `schema` is an object of type SimpleSchema. 
-* `storeName` needs to be a unique name for your store. It is mandatory to have one, as (when used with a database) it will define the name of the DB table/collection
+* `People` is a new class that inherits from `JRS`. Creating the derived class is the first step towards creating a store
+* `schema` (_mandatory_) is an object of type Schema. 
+* `paramIds` (_mandatory_) is an array of IDs, ***where the last one is the most important one***: the last item in `paramIds` (in this case it's also the only one: `_id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
+* `storeName` (_mandatory_) needs to be a unique name for your store. It is mandatory to have one, as (when used with a database) it will define the name of the DB table/collection
 * `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error
-* `paramIds` is an array of IDs, ***where the last one is the most important one***: the last item in `paramIds` (in this case it's also the only one: `_id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT, a GET and an "incremental" POST (all operations that require a specific ID to function).
 * `Workspaces.onlineAll()` creates the right Express routes to actually activate your stores. Specifically:
 
 .
 
     // get (specific ID)
     app.get(    url + idName,  function( req, res, next ){ /* ... */ } );
-    // getQuery (array of objects)
+    // getQuery (array of objects, no ID)
     app.get(    url,          function( req, res, next ){ /* ... */ } );
     // put (specific ID)
     app.put(    url + idName, function( req, res, next ){ /* ... */ } );
-    // post (new record)
+    // post (new record, no ID)
     app.post(   url,          function( req, res, next ){ /* ... */ } );
-    // postAppend (append to existing record)
-    app.post(   url + idName, function( req, res, next ){ /* ... */ } );
     // delete (specific ID)
     app.delete( url + idName, function( req, res, next ){ /* ... */ } );
 
 So, the following routes will be defined:
 
-    GET /workspaces/:id (returns a specific workspace)
-    GET /workspaces (returns a collection of elements)
-    PUT /workspaces/:id (writes over an existing workspace object)
-    POST /workspaces/ (creates a new workspace object)
-    POST /workspaces/:id  (appends to an existing workspace object)
-    DELETE /workspaces/:id (deletes a workspace)
+    GET /people/:id (returns a specific workspace)
+    GET /people (returns a collection of elements)
+    PUT /people/:id (writes over an existing workspace object)
+    POST /people/ (creates a new workspace object)
+    DELETE /people/:id (deletes a workspace)
 
-Note that this store is not actually hooked to any database server. So, it will actually send out dummy data.
-
-## A basic store using MongoDB
-
-Here is how you define a store that uses MongoDB as a backend.
-
-    // The basic Store classes
-    var Store = require('jsonreststores');
-    var MongoDriverMixin = require('jsonreststores/MongoDriverMixin.js');
-
-    // The basic Schema classes
-    var Schema = require('simpleschema');
-    var MongoSchemaMixin = require('simpleschema/MongoSchemaMixin.js');
-
-    // The mongoWrapper class, that will make it easier to get a "db" object
-    mongoWrapper = require('mongowrapper');
-
-    // The new MongoStore and MongoSchema classes, which use multiple
-    // inheritance to create MongoDB-specific classes
-    var MongoStore = declare( [ Store, MongoDriverMixin ] );
-    var MongoSchema = declare( [ Schema, MongoSchemaMixin ] );
-
-    mw.connect('mongodb://localhost/EXAMPLE', {}, function( err, db ){
-
-      // Check `err`, manage problems
-      // NOTE that from now on, mw.db also represents the connection
-
-      var Workspaces = declare( MongoStore, {
-
-        schema: new MongoSchema({
-          _id:           { type: 'id' },
-          workspaceName: { type: 'string', notEmpty: true, trim: 20, searchable: true, sortable: true  },
-          workgroup    : { type: 'string', notEmpty: true, trim: 20, searchable: true, sortable: true  },
-        }),
-
-        storeName: 'workspaces',
-
-        db: db,
-
-        handlePut: true,
-        handlePost: true,
-        handleGet: true,
-        handleGetQuery: true,
-        handleDelete: true,
-
-        paramIds: [ '_id' ],
-      });
-
-      // Create the right hooks to access the store
-      Workspaces.onlineAll( app, '/workspaces/', ':_id' );
-
-    }); // End of mw.connect
-
-As you can see, the only difference in the code is in the definition of the classes: a store created like this will actually create a collection called `workspaces` in your MongoDB server, and will allow clients to manipulate its contents via REST calls.
-
-Note that there is code to connect to your MongoDB server using [mongoWrapper - Github](https://github.com/mercmobily/mongoWrapper), a simple library to create a MongoDB connection. You don't have to necessarily use mongoWrapper! Anything that returns a Mongo `db` object will be fine. However, note that using mongoWrapper does make some things easier. You would normally run `mw.connect()` in your `server.js` file, and then simply use `db = require('mongoWrapper).db` in your files.
-
-**NOTE: From now on, in the documentation I will assume the definition of MongoSchema and MongoStores, and the presence of a `db` variable**
+This store is _actually_ fully live and working! It will manipulate your database and will respond to any HTTP requests appropriately.
 
 ## A nested store
 
@@ -573,7 +397,7 @@ It's important to be consistent in naming conventions while creating stores. In 
       collectionName: `workspaceUsers`
       // ...
     }
-    WorkspaceUsers.onlineAll( app, '/workspaces/:workspaceId/users', ':_id' );
+    WorkspaceUsers.onlineAll( app, '/workspaces/:workspaceId/users/', ':_id' );
 
 ## A store derived/inherited from another store
 
@@ -641,6 +465,9 @@ The last difference is what makes the stores truly uniques: in `WorkspaceUsers`,
 The beauty of it is that you only had to define the schema once; the two different variations can be as similar, or as different, to the "base" store as you like.
 
 Finally, note that the derived stores `WorkspaceUsers` and `UserWorkspaces` only allow `Post` (adding new entries), `GetQuery` and `Delete`.
+
+
+
 
 # Important methods and attributes you can override
 
@@ -917,8 +744,8 @@ The error objects are all pretty standard. However:
 .
 
     [
-      { field: 'nameOfFieldsWithProblems', message: 'Message to the user for this field', mustChange: true },
-      { field: 'nameOfAnotherField', message: 'Message to the user for this other field', mustChange: false },
+      { field: 'nameOfFieldsWithProblems', message: 'Message to the user for this field' },
+      { field: 'nameOfAnotherField', message: 'Message to the user for this other field' },
     ]
 
 
