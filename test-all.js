@@ -803,7 +803,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       'Put() REST Working test (new, existing)': function( test ){
         zap( function(){
   
-          var req = makeReq( { params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
+          var req = makeReq( { url: 'http://www.example.com/1234', params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
           (g.People.online.Put(g.People))(req, new RES( function( err, type, headers, status, data ){
             test.ifError( err );
             var res = this;
@@ -815,11 +815,11 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             test.equal( data.surname, 'Mobily' );
             test.ok( data.id );
   
-            var req = makeReq( { params: { id: 1234 }, body: { name: 'Tony2', surname: 'Mobily2' } } );
+            var req = makeReq( {  url: 'http://www.example.com/1234', params: { id: 1234 }, body: { name: 'Tony2', surname: 'Mobily2' } } );
             (g.People.online.Put(g.People))(req, new RES( function( err, type, headers, status, data ){
               test.ifError( err );
               var res = this;
-  
+ 
               test.equal( type, 'json' );
               test.equal( status, 200 );
               test.equal( headers.Location, 'http://www.example.com/1234' );
@@ -837,7 +837,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       'Put() REST Working test (overwrite)': function( test ){
         zap( function(){
   
-          var req = makeReq( { headers: { 'if-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
+          var req = makeReq( {  url: 'http://www.example.com/1234', headers: { 'if-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
           (g.People.online.Put(g.People))(req, new RES( function( err, type, headers, status, data ){
             test.ifError( err );
             var res = this;
@@ -849,7 +849,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
                   
             g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, function( err ){
   
-              var req = makeReq( { headers: { 'if-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
+              var req = makeReq( {  url: 'http://www.example.com/1234', headers: { 'if-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
               (g.People.online.Put(g.People))(req, new RES( function( err, type, headers, status, data ){
                 test.ifError( err );
                 var res = this;
@@ -863,7 +863,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
                 zap( function(){
   
-                  var req = makeReq( { headers: { 'if-none-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
+                  var req = makeReq( {  url: 'http://www.example.com/1234', headers: { 'if-none-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
                   (g.People.online.Put(g.People))(req, new RES( function( err, type, headers, status, data ){
                     test.ifError( err );
                     var res = this;
@@ -876,7 +876,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
                     test.ok( data.id );
   
   
-                    var req = makeReq( { headers: { 'if-none-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
+                    var req = makeReq( {  url: 'http://www.example.com/1234', headers: { 'if-none-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
                     (g.People.online.Put(g.People))(req, new RES( function( err, type, headers, status, data ){
                       test.ifError( err );
                       var res = this;
@@ -902,7 +902,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             handlePut: false,
           });
    
-          var req = makeReq( { params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
+          var req = makeReq( {  url: 'http://www.example.com/1234', params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
           (People2.online.Put(People2))(req, new RES( function( err, type, headers, status, data ){
             test.ifError( err );
   
@@ -918,7 +918,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       'Put() REST checkParamIds': function( test ){
         zap( function(){
   
-          var req = makeReq( { params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
+          var req = makeReq( {  url: 'http://www.example.com/1234', params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
           (g.WsPeople.online.Post(g.WsPeople))(req, new RES( function( err, type, headers, status, data ){
             test.ifError( err );
             var res = this;
@@ -938,7 +938,6 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
       },
   
-  
       'Put() APIh prepareBodyPut': function( test ){
         zap( function(){
   
@@ -948,22 +947,15 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
               done( null, body );
             }
           });
-   
-          var req = makeReq( { params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
-          (People2.online.Put(People2))(req, new RES( function( err, type, headers, status, data ){
+
+          var p = { id: 1234, name: 'Tony', surname: "Mobily", age: 37 };
+          People2.Put( null, p, function( err, person ){
             test.ifError( err );
-  
-            var res = this;
-  
-            test.equal( type, 'json' );
-            test.equal( status, 201 );
-            test.equal( headers.Location, 'http://www.example.com/1234' );
-            test.equal( data.name, 'TONY' );
-            test.equal( data.surname, 'Mobily' );
-            test.ok( data.id );
-  
+            test.equal( person.name, "TONY" );
+            test.equal( person.surname, "Mobily" );
+
             test.done();
-          }))
+          });
         });
       },
   
@@ -1140,7 +1132,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             }
           });
   
-          var req = makeReq( { params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
+          var req = makeReq( {  url: 'http://www.example.com/1234', params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
           (People2.online.Put(People2))(req, new RES( function( err, type, headers, status, data ){
             test.ifError( err );
   
@@ -1412,7 +1404,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
               }
             });
   
-            var req = makeReq( { params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
+            var req = makeReq( {  url: 'http://www.example.com/1234', params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
             (People2.online.Put(People2))(req, new RES( function( err, type, headers, status, data ){
               test.ifError( err );
   
