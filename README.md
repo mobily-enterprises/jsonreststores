@@ -3,7 +3,7 @@ JsonRestStores
 
 # STATUS
 
-**This module is finished. I have just fixed a few small problems with dependencies etc. and am rewriting the documentation. Documentation will be fully finished on Sunday the 1st of December. The new documentation explains how to create stores from a standard Express server, and will use TingoDB in the examples**
+**This module is finished. I have just fixed a few small problems with dependencies etc. and am rewriting the documentation. Documentation will be fully finished on Sunday the 3rd of December. The new documentation explains how to create stores from a standard Express server, and will use TingoDB in the examples**
 
 JsonRestStores is a one-stop module that allows you to create fully functional, configurable Json REST stores using NodeJS. A store can be inherited from another store, and can define all sorts of hooks to configure how it behaves and what it does (including permissions). It's also very easy to create "nested" stores (`http://www.example.com/bookings/1234/users` for example).
 
