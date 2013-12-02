@@ -11,36 +11,41 @@ Database access is done using [simpledblayer](https://github.com/mercmobily/simp
 
 * MongoDb
 * TingoDb
+* ...more coming soon
 
 It's really simple to develop more layers (e.g. MariaDb, Postgresql, CouchDb, etc.);
 
 And don't worry, after an overly long introduction, I do have a [quickstart](https://github.com/mercmobily/JsonRestStores#quick-start)!
 
-# The problem it solves
+# Introduction to (JSON) REST stores
+
+Here is an introduction on REST, JSON REST, and this module. If you are a veteran of REST stores, you can probably just skim through this.
+
+## Implementing REST stores
 
 Imagine that you have a web application with bookings, and users connected to each booking, and that you want to make this information available via a JSON Rest API. You would have to define the following route in your application:
 
-* `GET /bookings`
+* `GET /bookings/`
 * `GET /bookings/:bookingId`
 * `PUT /bookings/:bookingId`
-* `POST /bookings`
+* `POST /bookings/`
 * `DELETE /bookings:/bookingId`
 
 And then to access users for that booking:
 
-* `GET /bookings/:bookingId/users`
+* `GET /bookings/:bookingId/users/`
 * `GET /bookings/:bookingId/users/:userId`
 * `PUT /bookings/:bookingId/users/:userId`
-* `POST /bookings/:bookingId/users`
+* `POST /bookings/:bookingId/users/`
 * `DELETE /bookings/:bookingId/users/:userId`
 
 It sounds simple enough (although it's only two tables and it already looks rather boring). It gets tricky when you consider that:
 
 * You need to make sure that permissions are always carefully checked. For example, only users within booking 1234 can `GET /bookings/:bookingId/users`
 * You need to make sure you behave correctly in your `PUT` calls, as data might already be there
-* When implementing `GET /bookings`, you need to make sure people can filter and order by the right fields by parsing the URL correctly. When you do that, you need to keep in mind that different parameters will need to trigger different filters on the database (for example, `GET /bookings?dateFrom=1976-01-10&name=Tony` will need to filter, on the database, all bookings made after the 10th of January 1976 by Tony).
-* When implementing `GET /bookings`, you need to return the right `Content-Range` HTTP headers in your results
-* When implementing `GET /bookings`, you also need to make sure you take into account any `Range` header set by the client, who might only want to receive a subset of the data
+* When implementing `GET /bookings/`, you need to make sure people can filter and order by the right fields by parsing the URL correctly. When you do that, you need to keep in mind that different parameters will need to trigger different filters on the database (for example, `GET /bookings?dateFrom=1976-01-10&name=Tony` will need to filter, on the database, all bookings made after the 10th of January 1976 by Tony).
+* When implementing `GET /bookings/`, you need to return the right `Content-Range` HTTP headers in your results
+* When implementing `GET /bookings/`, you also need to make sure you take into account any `Range` header set by the client, who might only want to receive a subset of the data
 * With `POST` and `PUT`, you need to make sure that data is validated against some kind of schema, and return the appropriate errors if it's not.
 * With `PUT`, you need to consider the HTTP headersd `If-match` and `If-none-match` to see if you can/should/must overwrite existing records
 * You must remember to get your filters right: when implementing `GET /bookings/:bookingId/users/:userId`, you must make sure that you are making queries to the database without forgetting `:bookingId`. This sounds pretty obvious with only 2 stores...
@@ -50,7 +55,21 @@ This is only a short list of obvious things. There are many more to consider.
 
 With JsonRestStores, you can create JSON REST stores without ever worrying about any one of those things. You can concentrate on what _really_ matters: your application and your application's logic.
 
-# Features
+## Understand a little about REST stores
+
+If you are new to REST and web stores, you will probably benefit by reading a couple of important articles. Understanding the concepts behind REST stores will make your life easier.
+
+I suggest you read [John Calcote's article about REST, PUT, POST, etc.](http://jcalcote.wordpress.com/2008/10/16/put-or-post-the-rest-of-the-story/). (It's a fantastic read, and I realised that it was written by John, who is a long term colleague and friend, only much later!).
+
+You should also read my small summary of [what a REST store actually provides](https://github.com/mercmobily/JsonRestStores/blob/master/jsonrest.md).
+
+To understand stores and client interaction, you can read [Dojo's JsonRest stores documentation](http://dojotoolkit.org/reference-guide/1.8/dojo/store/JsonRest.html), because the stores created using this module are 100% compliant with what Dojo's basic JsonRest module sends to servers.
+
+# Welcome to JsonRestStores
+
+If you don't want to reinvent the wheel every time there is a connection, then JsonRestStores is the module for you.
+
+## Features
 
 * Follows the KISS principle: everything is kept as simple as possible.
 
@@ -68,18 +87,13 @@ With JsonRestStores, you can create JSON REST stores without ever worrying about
 
 * It's highly addictive. You will never want to write an API call by hand again.
 
-# Understand a little about REST stores
+# Quickstart
 
-If you are new to REST and web stores, you will probably benefit by reading a couple of important articles. Understanding the concepts behind REST stores will make your life easier.
+Jsonreststores is a module that creates managed routes for you, and integrates very easily with existing ExpressJS applications.
 
-I suggest you read [John Calcote's article about REST, PUT, POST, etc.](http://jcalcote.wordpress.com/2008/10/16/put-or-post-the-rest-of-the-story/). (It's a fantastic read, and I realised that it was written by John, who is a long term colleague and friend, only much later!).
+## Modules used by JsonRestStores
 
-You should also read my small summary of [what a REST store actually provides](https://github.com/mercmobily/JsonRestStores/blob/master/jsonrest.md).
-
-To understand stores and client interaction, you can read [Dojo's JsonRest stores documentation](http://dojotoolkit.org/reference-guide/1.8/dojo/store/JsonRest.html), because the stores created using this module are 100% compliant with what Dojo's basic JsonRest module sends to servers.
-
-
-## Modules used by JSON rest stores
+Here is a list of modules used by JsonRestStores. You should be at least slightly familiar with them.
 
 * [SimpleDeclare - Github](https://github.com/mercmobily/SimpleDeclare). This module makes creation of constructor functions/classes a breeze. Using SimpleDeclare is a must when using JsonRestStores -- unless you want to drown in unreadable code
 
@@ -91,11 +105,7 @@ To understand stores and client interaction, you can read [Dojo's JsonRest store
 
 Note that all of these modules are fully unit-tested, and are written and maintained by me.
 
-# Quickstart
-
-Jsonreststores is a module that creates managed routes for you, and integrates very easily with existing ExpressJS applications.
-
-## Database-specific classes
+## Using JsonRestStores in your ExpressJS app
 
 In order to use JsonRestStores with MongoDb for example you will need to:
 
@@ -161,7 +171,6 @@ Here is how you would change a stock `app.js` file if you used MongoDb:
       }
     });
 
-
 Your `dbSpecific-mongo.js` file would look like this:
 
     // Generic modules
@@ -212,16 +221,16 @@ Your `storesRoutes.js` file will then use `dbSpecific-mongo.js` to get the those
       var JRS = dbSpecific.JRS;
       var Schema = dbSpecific.Schema;
     
-      var People = declare( JRS, {
+      var Managers = declare( JRS, {
     
         schema: new Schema({
-          id     : { type: 'id' }, // This will be a MongoDB-specific id thanks to SimpleSchemaMongo
+          id     : { type: 'id', required: true }, // This will be a MongoDB-specific id thanks to SimpleSchemaMongo
           name   : { type: 'string', trim: 60 },
           surname: { type: 'string', trim: 60 },
         }),
     
         paramIds: [ 'id' ],
-        storeName: 'People',
+        storeName: 'managers',
     
         handlePut: true,
         handlePost: true,
@@ -232,9 +241,8 @@ Your `storesRoutes.js` file will then use `dbSpecific-mongo.js` to get the those
         hardLimitOnQueries: 50,
       });
     
-      People.onlineAll( app, '/people/', ':id' );
+      Managers.onlineAll( app, '/managers/', ':id' );
     }
-
 
 ## TingoDB
 
@@ -269,7 +277,7 @@ What if you want to use TingoDB instead? since everything is encapsulated, all y
       cb( null );
     }    
 
-At this point you are basically good to go:
+At this point you are nearly good to go; you only need some minor modifications:
 
 * In `storesRoutes.js` and `app.js`, change `require('./dbSpecific-mongo.js');` into `require('./dbSpecific-tingo.js');`
 * In `app.js`, change the connection string into `dbSpecific.connect( '/tmp/tests', {}, function( err ){`
@@ -284,16 +292,16 @@ Here are three very common use-cases for JsonRest stores, fully explained:
 
 Here is how you make a fully compliant store:
 
-      var People = declare( JRS, {
+      var Managers = declare( JRS, {
 
         schema: new Schema({
-          id     : { type: 'id' },
+          id     : { type: 'id', required: true },
           name   : { type: 'string', trim: 60 },
           surname: { type: 'string', trim: 60 },
         }),
 
         paramIds: [ 'id' ],
-        storeName: 'People',
+        storeName: 'Managers',
 
         handlePut: true,
         handlePost: true,
@@ -304,12 +312,12 @@ Here is how you make a fully compliant store:
         hardLimitOnQueries: 50,
       });
 
-      People.onlineAll( app, '/people/', ':id' );
+      Managers.onlineAll( app, '/managers/', ':id' );
  
 
 That's it: this is enough to make a full store which will handly properly all of the HTTP calls. Try it if you don't believe me!
 
-* `People` is a new class that inherits from `JRS`. Creating the derived class is the first step towards creating a store
+* `Managers` is a new class that inherits from `JRS`. Creating the derived class is the first step towards creating a store
 * `schema` (_mandatory_) is an object of type Schema. 
 * `paramIds` (_mandatory_) is an array of IDs, ***where the last one is the most important one***: the last item in `paramIds` (in this case it's also the only one: `_id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
 * `storeName` (_mandatory_) needs to be a unique name for your store. It is mandatory to have one, as (when used with a database) it will define the name of the DB table/collection
@@ -331,49 +339,171 @@ That's it: this is enough to make a full store which will handly properly all of
 
 So, the following routes will be defined:
 
-    GET /people/:id (returns a specific workspace)
-    GET /people (returns a collection of elements)
-    PUT /people/:id (writes over an existing workspace object)
-    POST /people/ (creates a new workspace object)
-    DELETE /people/:id (deletes a workspace)
+    GET /managers/:id (returns a specific workspace)
+    GET /managers/ (returns a collection of elements)
+    PUT /managers/:id (writes over an existing workspace object)
+    POST /managers/ (creates a new workspace object)
+    DELETE /managers/:id (deletes a workspace)
 
 This store is _actually_ fully live and working! It will manipulate your database and will respond to any HTTP requests appropriately.
+
+A bit of testing with `curl`:
+
+    $ curl -i -XGET  http://localhost:3000/managers/
+    HTTP/1.1 200 OK
+    X-Powered-By: Express
+    Content-Type: application/json; charset=utf-8
+    Content-Length: 2
+    ETag: "223132457"
+    Date: Mon, 02 Dec 2013 02:20:21 GMT
+    Connection: keep-alive
+
+    []
+
+    curl -i -X POST -d "name=Tony&surname=Mobily"  http://localhost:3000/managers/
+    HTTP/1.1 201 Created
+    X-Powered-By: Express
+    Location: /managers/2
+    Content-Type: application/json; charset=utf-8
+    Content-Length: 54
+    Date: Mon, 02 Dec 2013 02:21:17 GMT
+    Connection: keep-alive
+
+    {
+      "id": 2,
+      "name": "Tony",
+      "surname": "Mobily"
+    }
+
+    curl -i -X POST -d "name=Chiara&surname=Mobily"  http://localhost:3000/managers/
+    HTTP/1.1 201 Created
+    X-Powered-By: Express
+    Location: /managers/4
+    Content-Type: application/json; charset=utf-8
+    Content-Length: 54
+    Date: Mon, 02 Dec 2013 02:21:17 GMT
+    Connection: keep-alive
+
+    {
+      "id": 4,
+      "name": "Chiara",
+      "surname": "Mobily"
+    }
+
+    $ curl -i -GET"  http://localhost:3000/managers/
+    HTTP/1.1 200 OK
+    X-Powered-By: Express
+    Content-Type: application/json; charset=utf-8
+    Content-Length: 136
+    ETag: "1058662527"
+    Date: Mon, 02 Dec 2013 02:22:29 GMT
+    Connection: keep-alive
+
+    [
+      {
+        "id": 2,
+        "name": "Tony",
+        "surname": "Mobily"
+      },
+      {
+        "id": 4,
+        "name": "Chiara",
+        "surname": "Mobily"
+      }
+    ]
+
+    $ curl -i -X PUT -d "name=Merc&surname=Mobily"  http://localhost:3000/managers/2
+    HTTP/1.1 200 OK
+    X-Powered-By: Express
+    Location: /managers/2
+    Content-Type: application/json; charset=utf-8
+    Content-Length: 54
+    Date: Mon, 02 Dec 2013 02:23:29 GMT
+    Connection: keep-alive
+
+    {
+      "id": 2,
+      "name": "Merc",
+      "surname": "Mobily"
+    }
+
+    $ curl -i -XGET  http://localhost:3000/managers/2
+    HTTP/1.1 200 OK
+    X-Powered-By: Express
+    Content-Type: application/json; charset=utf-8
+    Content-Length: 54
+    ETag: "-264833935"
+    Date: Mon, 02 Dec 2013 02:24:58 GMT
+    Connection: keep-alive
+
+    {
+      "id": 2,
+      "name": "Merc",
+      "surname": "Mobily"
+    }
+
+It all works!
 
 ## A nested store
 
 Stores are never "flat" as such: you have workspaces, and then you have users who "belong" to a workspace. Here is how you create a "nested" store:
+      var Managers= declare( JRS, {
 
-    // The basic schema for the WorkspaceUsers table
-    var WorkspaceUsers = declare( MongoStore, {
+        schema: new Schema({
+          id     : { type: 'id', required: true },
+          name   : { type: 'string', trim: 60 },
+          surname: { type: 'string', trim: 60 },
+        }),
 
-      schema: new MongoSchema({
-        workspaceId: { type: 'id' },
-        _id:         { type: 'id' },
-        email     :  { type: 'string', trim: 128, searchable: true, sortable: true  },
-        name      :  { type: 'string', trim: 60, searchable: true, sortable: true  },
-      }),
+        paramIds: [ 'id' ],
+        storeName: 'Managers',
 
-      storeName:  'workspaceUsers',
-      db: db,
+        handlePut: true,
+        handlePost: true,
+        handleGet: true,
+        handleGetQuery: true,
+        handleDelete: true,
 
-      handlePut: true,
-      handlePost: true,
-      handleGet: true,
-      handleGetQuery: true,
-      handleDelete: true,
+        hardLimitOnQueries: 50,
+      });
 
-      paramIds: [ 'workspaceId', '_id' ],
-    });
+      Managers.onlineAll( app, '/managers/', ':id' );
+ 
 
-    WorkspaceUsers.onlineAll( app, '/workspaces/:workspaceId/users', ':_id' );
+      var ManagersCars = declare( JRS, {
 
-This is enough to create a store that will respond to `GET /workspace/2222/users/3333` (to fetch user 3333 from workspace 2222), `GET /workspace/2222/users` (to get all users of workspace 2222), and so on.
+        schema: new Schema({
 
-* Queries will _always_ honour the filter on `workspaceId`, both in queries and single-record operations.
-* Fields listed in `paramIds` need to be also listed in the store's schema
-* The second parameter of `onlineAll()` needs to include all `paramIds` except the last one
-* The third parameter of `onlineAll()` needs to include the field that will be used as unique ID
-* The third parameter actually needs to identify unique records in the table
+          id       : { type: 'id', required: true },
+          managerId: { type: 'id', required: true },
+          make     : { type: 'string', trim: 60 },
+          model    : { type: 'string', trim: 60 },
+        }),
+
+        paramIds: [ 'managerId', 'id' ],
+        storeName: 'ManagersCars',
+
+        handlePut: true,
+        handlePost: true,
+        handleGet: true,
+        handleGetQuery: true,
+        handleDelete: true,
+
+        hardLimitOnQueries: 50,
+      });
+
+      ManagersCars.onlineAll( app, '/managers/:managerId/cars/', ':id' );
+ 
+
+You have two stores: one is the simple `Managers` store with a list of names and surname; the other one is the `ManagersCars` store: note how the URL for `ManagersCars` includes `managerId`, which is also listed in `paramIds`.
+
+The ManagersCars store will will respond to `GET /managers/2222/cars/3333` (to fetch car 3333 of manager 2222), `GET /workspace/2222/users` (to get all cars of manager 2222), and so on.
+
+Remember that in `ManagersCars`:
+* Queries will _always_ honour the filter on `managerId`, both in queries and single-record operations.
+* Fields listed in `paramIds` are also defined in the store's schema, and marked as `required`
+* The second parameter of `onlineAll()` included all `paramIds` except the last one
+* The third parameter of `onlineAll()` includes the field that will be used as unique ID for the store (`id`): this id will be used to identify unique records in the table
 
 ### On naming conventions
 
@@ -381,91 +511,121 @@ It's important to be consistent in naming conventions while creating stores. In 
 
 #### Simple stores
 
-    var Workspaces = declare( Store, { 
+    var Managers = declare( JRS, { 
+
+      schema: new Schema({
+        id: { type: 'id', required: true },
+        // ...
+      });
+
       // ...
-      storeName: `workspaces`
-      collectionName: `workspaces`
+      storeName: `Managers`
       // ...
     }
-    Workspaces.onlineAll( app, '/workspaces/', ':_id' );
+    Workspaces.onlineAll( app, '/managers/', ':id' );
 
-#### Nested stores        
 
-    var WorkspaceUsers = declare( Store, { 
+
+    var People = declare( JRS, { 
+
+      schema: new Schema({
+        id: { type: 'id', required: true },
+        // ...
+      });
+
       // ...
-      storeName: `workspaceUsers`
-      collectionName: `workspaceUsers`
+      storeName: `People`
       // ...
     }
-    WorkspaceUsers.onlineAll( app, '/workspaces/:workspaceId/users/', ':_id' );
+    Workspaces.onlineAll( app, '/people/', ':id' );
+
+* Store name is plural
+* Irregulars (Person => People) is a fact of life
+* Store name variable in capital letters (it's a constructor)
+* storeName attribute in capital letters (follows the store name)
+* URL in small letters (Capitalised/Urls/Are/Lame)
+
+#### Nested stores    
+
+
+    var Cars = declare( JRS, { 
+
+      schema: new Schema({
+        id: { type: 'id', required: true },
+        // ...
+      });
+
+      // ...
+      storeName: `managers`
+      // ...
+    }
+    Workspaces.onlineAll( app, '/managers/', ':id' );
+
+
+    var ManagersCars = declare( Store, { 
+
+      schema: new Schema({
+        managerId: { type: 'id', required: true }
+        id: { type: 'id', required: true },
+        // ...
+      });
+
+      // ...
+      storeName: `ManagerCars`
+      // ...
+    }
+    ManagersCars.onlineAll( app, '/managers/:managerId/cars/', ':id' );
+
+    var PeopleCars = declare( Store, { 
+
+      schema: new Schema({
+        personId: { type: 'id', required: true }
+        id: { type: 'id', required: true },
+        // ...
+      });
+ 
+      // ...
+      storeName: `PeopleCars`
+      // ...
+    }
+    PeopleCars.onlineAll( app, '/people/:personId/cars/', ':id' );
+
+* Nested store's name a combination of IDs
+* storeName attribute still the same as the store name
+* URL in small letters, starting with URL of parent store
+* parent store's ID in schema first, singular
 
 ## A store derived/inherited from another store
 
-Sometimes, you need to create a basic store that interfaces with a specific database table, and then create different ways to "view" that table.
-For example, you might have a store that can access users and workspaces:
+Sometimes, you need to create a basic store that interfaces with a specific database table/collection, and then create different ways to "view" that table as a store.
 
-    // The basic schema for the WorkspaceUsers table
-    var WorkspacesUsersBase = declare( Store, {
+    var PeopleCars = declare( Store, { 
 
       schema: new Schema({
-        userId:      { type: 'id' },
-        workspaceId: { type: 'id' },
-        _id:         { type: 'id' },
-      }),
-
-      db: db,
-
-      storeName: 'workspacesUsersBase',
-      collectionName: 'workspaceUsers',
-
-      paramIds: [ '_id' ],
-    });
-
-The main difference is that we defined the collection name explicitly. So, the MongoDB driver will actually manipulate the collection `workspaceUsers`, whereas this store's name is `workspaceUsersBase`.
-
-You cannot really do very much with this store: it doesn't handle any HTTP requests, and in fact it doesn't even have a route managed!
-However, imagine that you want two stores: one that lists all workspaces belonging to a specific user, and another one that lists all users that are part of a workspace.
-
-You can do that by creating two stores derived from this base one:
-
-    var WorkspaceUsers = declare( WorkspacesUsersBase, {
-
-      handlePut: false,
-      handlePost: true,
-      handleGet: false,
+        personId: { type: 'id', required: true }
+        id: { type: 'id', required: true },
+        // ...
+      });
+ 
+      // ...
+      storeName: `PeopleCars`
+      handleGet: true,
       handleGetQuery: true,
-      handleDelete: true,
+      handlePut: true
+      // ...
+    }
+    PeopleCars.onlineAll( app, '/people/:personId/cars/', ':id' );
 
-      storeName:  'workspaceUsers',
-      paramIds: [ 'workspaceId', '_id' ],
-    });
-    WorkspaceUsers.onlineAll( app, '/workspaces/:workspaceId/users/', ':_id' );
-
-    var UserWorkspaces = declare( WorkspacesUsersBase, {
-
-      handlePut: false,
-      handlePost: true,
+    var PeopleCarsList = declare( PeopleCars, { 
       handleGet: false,
-      handleGetQuery: true,
-      handleDelete: true,
+      handlePut: false 
+    }
+    PeopleCarsList.onlineAll( app, '/people/:personId/carslist/', ':id' );
 
-      storeName:  'userWorkspaces',
-      paramIds: [ 'userId', '_id' ],
-    });
-    UserWorkspaces.onlineAll( app, '/users/:userId/workspaces/', '_id' );
 
-That's it! You didn't have to re-define the schema again. Both stores inherit from `WorkspacesUsersBase`, but mark some differences:
+The store PeopleCarsList is nearly exactly the same as PeopleCars: the only difference is that it doesn't allow anything except GetQuery (that is, `GET /people/1234/carslist/` ).
 
-* `handleXXX` entries are different.
-* `storeName` is different . Each store needs to have a unique name.
-* `paramIds` elements, as well as route strings, are different
-
-The last difference is what makes the stores truly uniques: in `WorkspaceUsers`, when querying for example `GET /workspace/2222/users/`, JsonRestStores will filter the results so that only records where `workspaceId` is `2222` will be returned; in `UserWorkspaces`, when querying for example `GET /user/3333/workspaces`, only records where `userId` is `3333` will be returned.
-
-The beauty of it is that you only had to define the schema once; the two different variations can be as similar, or as different, to the "base" store as you like.
-
-Finally, note that the derived stores `WorkspaceUsers` and `UserWorkspaces` only allow `Post` (adding new entries), `GetQuery` and `Delete`.
-
+You might even create a basic store _without_ running `onlineAll()` for it, and then derive several stores from it, each with a slightly different URL and (most likely) different permissions.
 
 
 
@@ -479,17 +639,41 @@ The basic `Store` class uses a rather long list of stock methods to complete req
 
 In the documentation and the code, you will often see that two versions of the object are passed: `doc` and `fullDoc`. This is because JsonRestStores allows you to define a method, `extrapolateDoc()`, which will extrapolate the information you actually want to read. Basically, `extrapolateDoc()` is run every time a record is fetched from the database.
 
-You can use this method if you want a store to only fetch a partial amount of information.
+You can use this method to manipulate your data every time it's fetched from the database. However, the resulting data _must still conform with the schema after manipulation _, or JsonRestStore will get into an error.
 
-Note that permission functions have both `doc` and `fullDoc` so that they can easily make an "informed" decision on granting or denying access.
+Note that permission functions have both `doc` and `fullDoc` so that they can easily make an "informed" decision on granting or denying access regardless of how the data was manipulated by `extrapolateDoc()`.
 
 The method's signature is:
 
-    extrapolateDoc( params, body, options, fullDoc, cb )`
+    extrapolateDoc( params, body, options, fullDoc, cb( err, doc ) )`
+
+It's important that you create a copy of `fullDoc` rather than changing it directly. E.g.:
+
+...this is wrong:
+    
+    extrapolateDoc: function( params, body, options, fullDoc, cb){
+      // WRONG!!! This will effectively change fullDoc, which IS a side-effect
+      doc = fullDoc;
+      doc.name = doc.name.toUpperCase();
+      cb( null, name );
+    }
+
+...this is correct:
+
+    extrapolateDoc: function( params, body, options, fullDoc, cb){
+      // CORRECT! This will create a copy of fullDoc, and THEN manipulate it
+      var doc = {};
+      for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+      doc.name = doc.name.toUpperCase();
+      cb( null, name );
+    }
+
 
 ### `prepareBeforeSend( doc, cb )`(
 
-The method `prepareBeforeSend()` does exactly what it says: it will manipulate `doc` just before it's sent over to the client who requested it. This is especialy useful if you want to apply last minute changes to the data you send. _The changes only apply to data that is sent over the network!_ If you use a store via its API, this function will not be run.
+The method `prepareBeforeSend()` does exactly what it says: it will manipulate `doc` just before it's sent over to the client who requested it. This is especialy useful if you want to apply last minute changes to the data you send.
+
+An important difference between `prepareBeforeSend()` and `extrapolateDoc()` is that the data in `prepareBeforeSend()` does __not__ have to conform to the schema at all. This is the right time to add _anything_ you want to it without worrying about breaking the schema.
 
 The method's signature is:
 
@@ -499,7 +683,7 @@ The method's signature is:
 
 ### `hardLimitOnQueries`
 
-This is the limit of the number of elements that can be returned by a query. The default is 50.
+This is the limit of the number of elements that can be returned by a query without ID (GetQuery). The default is 50. 
 
 ## Permissions
 
@@ -521,17 +705,16 @@ Here are the functions:
 Here is an example of a store only allowing deletion only to specific admin users:
 
     // The basic schema for the WorkspaceUsers table
-    var WorkspaceUsers = declare( MongoStore, {
+    var WorkspaceUsers = declare( JRS, {
 
-      schema: new MongoSchema({
+      schema: new Schema({
         workspaceId: { type: 'id' },
-        _id:         { type: 'id' },
+        id:          { type: 'id' },
         email     :  { type: 'string', trim: 128, searchable: true, sortable: true  },
         name      :  { type: 'string', trim: 60, searchable: true, sortable: true  },
       }),
 
-      storeName:  'workspaceUsers',
-      db: db,
+      storeName:  'WorkspaceUsers',
 
       handlePut: true,
       handlePost: true,
@@ -545,7 +728,7 @@ Here is an example of a store only allowing deletion only to specific admin user
       checkPermissionsDelete: function( params, body, options, doc, fullDoc, cb ){
 
         // User is logged in: all good
-        if( req.session.user != 0 ){
+        if( this._req.session.user ){
           cb( null, true );
 
         // User is not logged in: fail!
@@ -567,12 +750,12 @@ Note that if your store is derived from another one, and you want to preserve yo
 
         this.inheritedAsync( arguments, function( err, granted ) {
 
-          // In case of error of permission problems, that's it
+          // In case of error of permission problems from parent, that's it
           if( err ) return cb( err, false );
           if( ! granted) return cb( null, false );
 
-          // User is logged in: all good
-          if( req.session.user != 0 ){
+          // User is admin (id: 1 )
+          if( this._req.session.user === 1){
             cb( null, true );
 
           // User is not logged in: fail!
@@ -582,7 +765,8 @@ Note that if your store is derived from another one, and you want to preserve yo
        }
      },
  
-This will ensure that the inherited `checkPermissionsDelete()` method is called, and 
+This will ensure that the inherited `checkPermissionsDelete()` method is called and followed, and _then_ further checks are carried on.
+
 
 ## "After" hooks
 
@@ -593,11 +777,15 @@ You can redefine them as you wish.
  * `afterPutNew( params, body, options, doc, fullDoc, overwrite, cb )` (Called after a new record is PUT)
  * `afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb )` (After a record is overwritten with PUT)
  * `afterPost( params, body, options, doc, fullDoc, cb )` (After a new record is POSTed)
- * `afterPostAppend( params, body, options, doc, fullDoc, docAfter, fullDocAfter, cb )` (After an existing record is POST-appended to)
  * `afterDelete( params, body, options, doc, fullDoc, cb )` (After a record is deleted)
  * `afterGet( params, body, options, doc, fullDoc, cb  )` (After a record is retrieved)
 
 Note that these hooks are run **after** data has been written to the database, but **before** a response is provided to the user.
+
+# TODO: UP TO HERE WITH DOCUMENTATION
+
+Need to change filterType in JsonRestStores to `searchable`, and finish documenting this
+
 
 # Searching in queries
 
@@ -805,10 +993,9 @@ All normal hooks are called when using these functions. However:
 
 * The `paramIds` array is shortened so that it only has its last element. This means that you are free to query a store without any pre-set automatic filtering imposed by `paramIds`
 * All `request.handleXXX` are set to `true`
-* You can search and sort by any fields (`searchable` and `sortable` are no longer necessary)
+* ??? Still true??? You can search and sort by any fields (`searchable` and `sortable` are no longer necessary)
 * The `request.remote` variable is set to false
-
-The last item is especially important: when developing your own permission model, you will probably want to make sure you have different permissions for local requests and remote ones (or, more often, have no restrictions for local ones since you are the one initiating them).
+* Permissions are always granted
 
 When using the API, the `options` object is especially important, as it defines how the API will work.
 
@@ -820,7 +1007,6 @@ When a request comes from a remote operation, the `options` object is populated 
 * `sortBy` for `GetQuery` requests (if used as remote store, taken from URL)
 * `ranges` for `GetQuery` requests; (if used as remote store, taken from URL)
 * `filters` for `GetQuery` requests; (if used as remote store, taken from URL)
-* `searchPartial` for `GetQuery` requests; (if used as remote store, taken from Schema definition)
 * `queryFilterType` for `GetQuery` requests; (if used as remote store, taken from Class)
 
 When querying from the API, can pass `overwrite`, `sortBy`, `ranges`, `filters` (as there is no HTTP request to take this information from) and _can_, if you want, override `searchPartial` (by default, set by the schema definition) and `queryFilterType` (by default, set in the Class definition).
