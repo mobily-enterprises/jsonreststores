@@ -1001,7 +1001,7 @@ var Store = declare( null,  {
                                             if( self.remote ){
             
                                               // Set the Location header if it was a remote request
-                                              self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
+                                              self._res.setHeader( 'Location', self._req.originalUrl );
                                               if( self.echoAfterPutNew ){
             
                                                 self.prepareBeforeSend( doc, function( err, doc ){
@@ -1096,7 +1096,7 @@ var Store = declare( null,  {
                                                     if( self.remote ){
                 
                                                       // Set the Location header if it was a remote request
-                                                      self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
+                                                      self._res.setHeader( 'Location', self._req.originalUrl );
                 
                                                       if( self.echoAfterPutExisting ){
                 
