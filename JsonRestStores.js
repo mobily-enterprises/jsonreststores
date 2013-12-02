@@ -9,14 +9,16 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 */
 
 
-/* Out of curiosity, bugs found after VERY thorough unit testing:
+/*
+
+Out of curiosity, bugs found after VERY thorough unit testing:
 
 * afterPutExisting wasn't called for LOCAL API requests
 * on a PUT UPDATE, the record returned via remote call (as a JSON string) was the object BEFORE extrapolateDoc()
 * prepareBodyPut was split in prepareBodyPutNew and prepareBodyPutExisting, which is logically wrong (prepareBody needed to happen at the very beginning)
 * handleDelete was not taken into consideration at all
 
-
+Funnily enough, it didn't catch a bug as big as the sky with the Range headers returning the wrong information (partial counts of objects) and not dealing with an important special case (zero results) 
 
 */
 
@@ -64,7 +66,7 @@ var Store = declare( null,  {
 
   chainErrors: 'none',  // can be 'none', 'all', 'nonhttp'
 
-  hardLimitOnQueries: 50, // FIXME: Add this constraint to module
+  hardLimitOnQueries: 50,
 
 
   // ****************************************************
