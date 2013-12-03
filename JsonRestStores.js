@@ -83,6 +83,7 @@ var Store = declare( null,  {
   afterPost: function( params, body, options, doc, fullDoc, cb){ cb( null ); },
   afterDelete: function( params, body, options, doc, fullDoc, cb ){ cb( null ); },
   afterGet: function( params, body, options, doc, fullDoc, cb ) { cb( null ); },
+  afterGetQuery: function( params, body, options, queryDocs, cb ) { cb( null ); },
 
   // Permission stock functions
   checkPermissionsPost: function( params, body, options, cb ){ cb( null, true ); },
@@ -111,7 +112,7 @@ var Store = declare( null,  {
   // in a subordinate store. So, if a developer wants this to work,
   // he will need to reimplement makePostAppend so that it
   // runs the right PUT onto the right store... by hand.
-  makePostAppend: function( params, body, options, next ){
+  _makePostAppend: function( params, body, options, next ){
 
     var self = this;
     var body;
@@ -707,7 +708,7 @@ var Store = declare( null,  {
       } else {
         // There was a problem: return the errors
         if( errors.length ){
-          next( new self.BadRequestError( { errors: errors } ) );
+          next( new self.UnprocessableEntityError( { errors: errors } ) );
         } else {
           next( null, doc );
         }
@@ -880,7 +881,7 @@ var Store = declare( null,  {
                                               self.afterPost( params, body, options, doc, fullDoc, function( err ){
                                                 self._sendErrorOnErr( err, next, function(){
             
-                                                  next( null, doc, self.idProperty );
+                                                  next( null, doc );
             
                                                 });
                                               });
@@ -1037,7 +1038,7 @@ var Store = declare( null,  {
                                                   self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
                                                     self._sendErrorOnErr( err, next, function(){
             
-                                                      next( null, doc, self.idProperty );
+                                                      next( null, doc );
             
                                                     });
                                                   });
@@ -1138,7 +1139,7 @@ var Store = declare( null,  {
                                                           self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite, function( err ) {
                                                             self._sendErrorOnErr( err, next, function(){
  
-                                                              next( null, docAfter, self.idProperty );
+                                                              next( null, docAfter );
 
                                                             });
                                                           });
@@ -1210,7 +1211,6 @@ var Store = declare( null,  {
 
     // Check the IDs. If there is a problem, it means an ID is broken:
     // return a BadRequestError
-    // Check the IDs
     self._checkParamIds( params, body, true, function( err ){  
       self._sendErrorOnErr( err, next, function(){
     
@@ -1238,21 +1238,27 @@ var Store = declare( null,  {
                         self._extrapolateDocAnd_castDocAndprepareBeforeSendAll( params, body, options, queryDocs, function( err ){
                           self._sendErrorOnErr( err, next, function(){
         
-                            // Remote request: set headers, and send the doc back (if echo is on)
-                            if( self.remote ){
+                            self.afterGetQuery( params, body, options, queryDocs, function( err ) {
+                              self._sendErrorOnErr( err, next, function(){
 
-                              if( options.ranges ){
-                                var from, to, of;
-                                from = total ? options.ranges.from : 0;
-                                to = total ? options.ranges.from + total - 1 : 0 ;
-                                of = grandTotal;
-                                self._res.setHeader('Content-Range', 'items ' + from + '-' + to + '/' + of );
-                              }
-                              self._res.json( 200, queryDocs );
-                            // Local request: simply return the doc to the asking function
-                            } else {
-                              next( null, queryDocs, self.idProperty );
-                            }
+                                // Remote request: set headers, and send the doc back (if echo is on)
+                                if( self.remote ){
+
+                                  if( options.ranges ){
+                                    var from, to, of;
+                                    from = total ? options.ranges.from : 0;
+                                    to = total ? options.ranges.from + total - 1 : 0 ;
+                                    of = grandTotal;
+                                    self._res.setHeader('Content-Range', 'items ' + from + '-' + to + '/' + of );
+                                  }
+                                  self._res.json( 200, queryDocs );
+                                // Local request: simply return the doc to the asking function
+                                } else {
+                                  next( null, queryDocs );
+                                }
+
+                              });
+                            });
           
                           });
                         });
@@ -1332,7 +1338,7 @@ var Store = declare( null,  {
         
                                     // Local request: simply return the doc to the asking function
                                      } else {
-                                       next( null, doc, self.idProperty );
+                                       next( null, doc );
                                      }
         
         
@@ -1417,7 +1423,7 @@ var Store = declare( null,  {
         
                                     // Local request: simply return the doc's ID to the asking function
                                     } else {
-                                      next( null, doc, self.idProperty );
+                                      next( null, doc );
                                     }
         
                                   });
