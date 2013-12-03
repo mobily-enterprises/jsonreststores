@@ -311,10 +311,10 @@ That's it: this is enough to make a full store which will handly properly all of
 
 * `Managers` is a new class that inherits from `JRS`. Creating the derived class is the first step towards creating a store
 * `schema` (_mandatory_) is an object of type Schema. 
-* `paramIds` (_mandatory_) is an array of IDs, ***where the last one is the most important one***: the last item in `paramIds` (in this case it's also the only one: `_id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
+* `paramIds` (_mandatory_) is an array of IDs, ***where the last one is the most important one***: the last item in `paramIds` (in this case it's also the only one: `id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
 * `storeName` (_mandatory_) needs to be a unique name for your store. It is mandatory to have one, as (when used with a database) it will define the name of the DB table/collection
 * `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error
-* `Workspaces.onlineAll()` creates the right Express routes to actually activate your stores. Specifically:
+* `Managers.onlineAll()` creates the right Express routes to actually activate your stores. Specifically:
 
 .
 
@@ -515,7 +515,7 @@ It's important to be consistent in naming conventions while creating stores. In 
       storeName: `Managers`
       // ...
     }
-    Workspaces.onlineAll( app, '/managers/', ':id' );
+    Managers.onlineAll( app, '/managers/', ':id' );
 
 
 
@@ -530,7 +530,7 @@ It's important to be consistent in naming conventions while creating stores. In 
       storeName: `People`
       // ...
     }
-    Workspaces.onlineAll( app, '/people/', ':id' );
+    People.onlineAll( app, '/people/', ':id' );
 
 * Store name is plural
 * Irregulars (Person => People) is a fact of life
@@ -552,7 +552,7 @@ It's important to be consistent in naming conventions while creating stores. In 
       storeName: `managers`
       // ...
     }
-    Workspaces.onlineAll( app, '/managers/', ':id' );
+    Cars.onlineAll( app, '/managers/', ':id' );
 
 
     var ManagersCars = declare( Store, { 
@@ -712,7 +712,7 @@ Here is an example of a store only allowing deletion only to specific admin user
       handleGetQuery: true,
       handleDelete: true,
 
-      paramIds: [ 'workspaceId', '_id' ],
+      paramIds: [ 'workspaceId', 'id' ],
 
       
       checkPermissionsDelete: function( params, body, options, doc, fullDoc, cb ){
@@ -730,7 +730,7 @@ Here is an example of a store only allowing deletion only to specific admin user
 
     });
 
-    WorkspaceUsers.onlineAll( app, '/workspaces/:workspaceId/users', ':_id' );
+    WorkspaceUsers.onlineAll( app, '/workspaces/:workspaceId/users', ':id' );
 
 Permission checking can be as simple, or as complex, as you need it to be.
 
@@ -774,7 +774,7 @@ Note that these hooks are run **after** data has been written to the database, b
 
 # Searching in queries
 
-`GetQuery` is the only method that allows searches, and that returns an array of objects (rather than a specific one). `GetQuery` is called whenever the route is called without specifying the object ID in the URL. So, if `GET /users/1` will return the JSON representation of the user with `_id` `1`, `GET /users` will return an array of all users that satisfy the filter specified in the `GET` request (in this case, there is no filter).
+`GetQuery` is the only method that allows searches, and that returns an array of objects (rather than a specific one). `GetQuery` is called whenever the route is called without specifying the object ID in the URL. So, if `GET /users/1` will return the JSON representation of the user with `id` `1`, `GET /users` will return an array of all users that satisfy the filter specified in the `GET` request (in this case, there is no filter).
 
 ## Searchable fields
 
@@ -1064,7 +1064,7 @@ This is the list of functions that actually do the work behind the scenes:
 
 When you write:
 
-    Workspaces.onlineAll( app, '/workspaces/', ':_id' );
+    Workspaces.onlineAll( app, '/workspaces/', ':id' );
 
 You are actually running:
 
