@@ -874,7 +874,7 @@ Consider this example:
       People.onlineAll( app, '/people/', ':id' );
 
 
-This is neat! Basically, you are still bound to the limitations of HTTP GET requests (you can only specify a bunch of key/values in th GET); but, you can easily decide how each key/value pair will affect your search. For example, requesting `GET /people?nameContains=ony&surname=mobily` will match all records where the name _contains_ `ony` and the surname _is_ `mobily.
+This is neat! Basically, you are still bound to the limitations of HTTP GET requests (you can only specify a bunch of key/values in th GET); but, you can easily decide how each key/value pair will affect your search. For example, requesting `GET /people?nameContains=ony&surname=mobily` will match all records where the name _contains_ `ony` and the surname _is_ `mobily`.
 
 This is achieved thanks to the `field` attribute in `searchable`, which allows you to specify which field the filter will apply to.
 
@@ -962,14 +962,14 @@ Whenever an error happens, JsonRestStore will run `self.logError()`. This happen
 JsonRestStores allows you to run methods from within your programs, rather than accessing them via URL. This is very helpful if you need to query a store within your own programs.
 This is achieved with the following class functions:
 
-* `Store.Get( id, options, next( err, doc, idProperty ) {})`
-* `Store.GetQuery( options, next( err, queryDocs, idProperty ){} )`
-* `Store.Put( id, body, options, next( err, doc, idProperty ){} )`. __Note: `id` can be set as null if body contains it__
-* `Store.Post( body, options, next( err, doc, idProperty ){} )`
-* `Store.PostAppend( id, body, options, next( err, doc, idProperty ){} )`
-* `Store.Delete( id, options, next( err, doc, idProperty ){} )`
+* `Store.Get( id, options, next( err, doc ) {})`
+* `Store.GetQuery( options, next( err, queryDocs ){} )`
+* `Store.Put( id, body, options, next( err, doc ){} )`. __Note: `id` can be set as null if body contains it__
+* `Store.Post( body, options, next( err, doc ){} )`
+* `Store.PostAppend( id, body, options, next( err, doc ){} )`
+* `Store.Delete( id, options, next( err, doc ){} )`
 
-The `next()` call is the callback called at the end. Note that `idProperty` is also passed, although it will likely be redundant as you are supposed to know in advance the fields in the table you are querying.
+The `next()` call is the callback called at the end. 
 
 All normal hooks are called when using these functions. However:
 
@@ -985,11 +985,11 @@ When a request comes from a remote operation, the `options` object is populated 
 (If you are curious, when a remote connection is established the function `_initOptionsFromReq()` is the one responsible of getting headers and URL, and populating `options` before running the appropriate function).
 
 * `overwrite` for `Put` requests; (if used as remote store, taken from HTTP headers)
-* `sortBy` for `GetQuery` requests (if used as remote store, taken from URL)
-* `ranges` for `GetQuery` requests; (if used as remote store, taken from HTTP headers)
 * `filters` for `GetQuery` requests; (if used as remote store, taken from URL)
+* `ranges` for `GetQuery` requests; (if used as remote store, taken from HTTP headers)
+* `sort` for `GetQuery` requests (if used as remote store, taken from URL)
 
-When querying from the API, can pass `overwrite`, `sortBy`, `ranges`, `filters` (as there is no HTTP request to take this information from) and _can_.
+When querying from the API, can pass `overwrite`, `sort`, `ranges`, `filters`.
 
 Here is a detailed explanation of these options:
 
@@ -1009,38 +1009,6 @@ Example:
 
 For non-API calls, this option is set by the headers 'if-match' and 'if-none-match'.
 
-## sortBy
-
-This option is an object where each key is the key you want to sort by, and that key's value is either `1` (ascending order) or `-1` (descending order).
-
-For example:
-
-    // Will return records with workspaceName starting with "Boo" and workGroup equals to "Full match"
-    Workspaces.GetQuery( {
-      filters: { workspaceName: 'Boo' },
-      sortBy: { workspaceName: 1, score: -1 },
-    } , function( err, doc ) {
-      // ...
-    });
-
-For non-API calls, this option is set by the query string in the URL. E.g. `/workspaces/?workspaceName=something&sortBy=+workspaceName,-score`.
-
-## ranges
-
-Ranges are important as they allow you to define a limit on the number of records returned.
-
-It represents an objects with the keys `rangeFrom`, `rangeTo`, `limit`. E.g.:
-
-    // Will return records with workspaceName starting with "Boo" 
-    Workspaces.GetQuery( { 
-      filters: { workspaceName: 'Boo' }, searchPartial: { workspaceName: true } 
-      ranges: { rangeFrom: 0, rangeTo: 24 }
-    } , function( err, doc ) {
-      // ...
-    });
-
-For non-API calls, ranges are set by the 'range' headers. For example `Range: items=0-24`. Note that the server will also return, after a range query, a header that will detail the range returned. For example `Content-Range: items 0-24/66`
-
 # filters
 
 This option applies to GetQuery calls: it's a simple object, where the keys are the field names, and their respective values are the filters. For example:
@@ -1054,6 +1022,38 @@ A typical example could be:
 
 For non-API calls, this option is set by the query string in the URL.
 
+## ranges
+
+Ranges are important as they allow you to define a limit on the number of records returned.
+
+It represents an objects with the keys `rangeFrom`, `rangeTo`, `limit`. E.g.:
+
+    // Will return records with workspaceName starting with "Boo" 
+    Workspaces.GetQuery( { 
+      filters: { workspaceNameStartsWith: 'Boo' }, 
+      ranges: { from: 0, to: 24 }
+    } , function( err, doc ) {
+      // ...
+    });
+
+For non-API calls, ranges are set by the 'range' headers. For example `Range: items=0-24`. Note that the server will also return, after a range query, a header that will detail the range returned. For example `Content-Range: items 0-24/66`
+
+## sort
+
+This option is an object where each key is the key you want to sort by, and that key's value is either `1` (ascending order) or `-1` (descending order).
+
+For example:
+
+    // Will return records with workspaceName starting with "Boo" and workGroup equals to "Full match"
+    Workspaces.GetQuery( {
+      filters: { workspaceNameStartsWith: 'Boo' },
+      sort: { workspaceName: 1, score: -1 },
+    } , function( err, doc ) {
+      // ...
+    });
+
+For non-API calls, this option is set by the query string in the URL. E.g. `/workspaces/?workspaceName=something&sortBy=+workspaceName,-score`.
+
 # Behind the scenes
 
 Understanding what happens behind the scenes is important to understand how the library works.
@@ -1063,7 +1063,7 @@ This is the list of functions that actually do the work behind the scenes:
  * `_makeGetQuery()` (implements GET for a collection, no ID passed)
  * `_makePut()` (implements PUT for a collection)
  * `_makePost()` (implements POST for a collection)
- * `_makePostAppend()` (implements POST for a collection, when ID is present)
+ * `_makePostAppend()` (implements POST for a collection, when ID is present -- to be implemented by the developer)
  * `_makeDelete()` (implements DELETE for a collection)
 
 When you write:
@@ -1116,7 +1116,7 @@ After that, the object variables `remote`, `_req` and `_res` are set. `remote` w
 
 At that point, `req.params` and `req.body` are cloned into two variables with the same names.
 
-Then, something interesting happens: the function `_initOptionsFromReq()` is run. `_initOptionsFromReq()` basically analyses the request and returns the right `options` depending on browser headers. For example, the `overwrite` attribute will depend on the browser headers `if-match` and `if-none-match` (for `Put`) whereas `sortBy `, `ranges` and `filters` will be set depending on the requested URL (for `GetQuery`).
+Then, something interesting happens: the function `_initOptionsFromReq()` is run. `_initOptionsFromReq()` basically analyses the request and returns the right `options` depending on browser headers. For example, the `overwrite` attribute will depend on the browser headers `if-match` and `if-none-match` (for `Put`) whereas `sort `, `ranges` and `filters` will be set depending on the requested URL (for `GetQuery`).
 
 Finally, `request._makePut()` is run, passing it `params`, `body`, `options` and `next`. `request._makePut()` is where the real magic actually happens: it will run the correct hooks, eventually performing the requested `PUT`.
 
@@ -1126,56 +1126,39 @@ It's important to understand what happens in each request, so that you know exac
 
 JsonRestStores does all of the boring stuff for you -- the kind things that you would write over and over and over again while developing a server store. However, it's important to know "how" the boring stuff is done.
 
-
-## `_makePut()` (for PUT requests)
-
-
-This is what happens in `_makePut()`. Once you understand this, it's actually quite trivial to see the code of the module to figure out what the others do too:
-
-* **Checks that `self.handlePut` is true** If not, the method is not actually allowed.
-
-* **Runs `self._checkParamIds( params, body, errors )`**. This will cast `params` so that each field listed in the `paramIds` array is cast and checked fully. Since elements in `paramIds` are the ones in the URL, it's important that this check is done beforehand.
-
-* **Runs `self.driverAllDbFetch()**. The record is fetched. It's important that the _whole_ record is fetched by this function.
-
-* **Checks the `options.overwrite` parameter**. The PUT will fail if the record already exists and `options.overwrite` is false.
-
-* **Checks if record exists or not**. The calls made will differ depending whether the record is already there or not. Note that in the actual module's code, the code at this point actually splits.
-
-* **Runs `self.checkPermissionsPutNew()/self.checkPermissionsPutExisting()`** This is obviously the function that will check permissions
-
-* **Cleans up the schema**. All fields with parameter `doNotSave` in the schema are deleted from the object about to be saved
-
-* **Runs `self.driverPutDbInsert()/self.driverPutDbUpdate()`**. The field is actually written to the database.
-
-* **Runs `self.extrapolateDoc()`**. This is important as in some cases you only want a sub-section of the fetched record (for example, only a bunch of fields or the result of `JSON.parse()` of a specific field, etc. Basically, this turns whatever was fetched from the DB into whatever you want returned.
-
-* **Runs `self.afterPutNew()/self.afterPutExisting()`**. This is a hook called "after" everything is done in terms of sending. However, it's called *before* sending the response to the client. So, it can still make things fail if needed.
-
-* **Runs `self.prepareBeforeSend()`**. This is a "preparation" function: a function that can manipulate the item just before sending it
-
-* **SEND item to client** This will only happen if `self.echoAfterPutNew()` is `true`, and it's actually a remote call.
-
+(When you read these, think about all of the boring work JsonRestStores is doing for you for every store you define!)
 
 ### `_makeGet()`
 
-This is what happens in `_makeGet()`. Once you understand this, it's actually quite trivial to see the code of the module to figure out what the others do too:
+* (ATTR) self.handleGet is checked. If false, send `NotImplementedError`
+* incoming paramIds are checked against schema. If fail, send `BadRequestError`
+* record is fetched from DB. If fail, send `NotFoundError`
+* (HOOK) `self.extrapolateDoc( doc )` is run against the record just fetched
+* Data is cast against the schema. If fail, send `BadRequestError`
+* (HOOK) `self.checkPermissionsGet( params, body, options, doc, fullDoc )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.prepareBeforeSend( doc )` is run.
+* (HOOK) `self.afterGet( params, body, options, doc, fullDoc )` is run
+* Data is sent (status: 200)/returned. Party!
 
-* **Checks that `self.handleGet` is true** If not, the method is not actually allowed.
+### `_makeDelete()` (for DELETE requests)
 
-* **Runs `self._checkParamIds( params, body, errors )`**. This will cast `params` so that each field listed in the `paramIds` array is cast and checked fully. Since elements in `paramIds` are the ones in the URL, it's important that this check is done beforehand.
+* (ATTR) self.handleDelete is checked. If false, send `NotImplementedError`
+* incoming paramIds are checked against schema. If fail, send `BadRequestError`
+* record is fetched from DB. If fail, send `NotFoundError`
+* (HOOK) `self.extrapolateDoc( doc )` is run against the record just fetched
+* Data is cast against the schema. If fail, send `BadRequestError`
+* (HOOK) `self.checkPermissionsDelete( params, body, options, doc, fullDoc )` is run. If fail, send `ForbiddenError`
+* Record is deleted!
+* (HOOK) `self.afterDelete( params, body, options, doc, fullDoc )` is run
+* Empty result s sent (status: 204)/returned. Party!
 
-* **Runs `self.driverAllDbFetch()**. The record is fetched. It's important that the _whole_ record is fetched by this function.
-
-* **Runs `self.extrapolateDoc()`**. This is important as in some cases you only want a sub-section of the fetched record (for example, only a bunch of fields or the result of `JSON.parse()` of a specific field, etc. Basically, this turns whatever was fetched from the DB into whatever you want returned.
-
-* **Runs `self.checkPermissionsGet()`** This is obviously the function that will check permissions
-
-* **Runs `self.afterGet()`**. This is a hook called "after" everything is done in terms of sending. However, it's called *before* sending the response to the client. So, it can still make things fail if needed.
-
-* **Runs `self.prepareBeforeSend()`**. This is a "preparation" function: a function that can manipulate the item just before sending it
-
-* **SEND item to client**
+### `_makeGetQuery()` (for GET requests, no ID)
 
 
+
+## `_makePost()` (for POST requests)
+
+## `_makePut()` (for PUT requests)
+
+## `_makePostAppend()` (for PUT requests)
 
