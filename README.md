@@ -1123,7 +1123,7 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 
 (When you read these, think about all of the boring work JsonRestStores is doing for you for every store you define!)
 
-### `_makeGet()`
+### `_makeGet()` (for `GET` requests, with ID)
 
 * (ATTR) `self.handleGet` is checked. If false, send `NotImplementedError`
 * incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
@@ -1134,18 +1134,6 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
 * (HOOK) `self.afterGet( params, body, options, doc, fullDoc )` is run
 * `doc` is sent (status: 200)/returned. Party!
-
-### `_makeDelete()` (for DELETE requests)
-
-* (ATTR) `self.handleDelete` is checked. If false, send `NotImplementedError`
-* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* `fullDoc` is fetched from DB. If fail, send `NotFoundError`
-* (HOOK) `self.extrapolateDoc( doc )` is run against the record just fetched -> `doc`
-* `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.checkPermissionsDelete( params, body, options, doc, fullDoc )` is run. If fail, send `ForbiddenError`
-* Record is deleted!
-* (HOOK) `self.afterDelete( params, body, options, doc, fullDoc )` is run
-* Empty result is sent (status: 204)/data is returned. Party!
 
 ### `_makeGetQuery()` (for GET requests, no ID)
 
@@ -1160,6 +1148,18 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
  * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
 * (HOOK) `self.afterGetQueries( params, body, options, queryDocs )` is run
 * `queryDocs` is sent as array (status: 200)/returned as array. Party!
+
+### `_makeDelete()` (for DELETE requests)
+
+* (ATTR) `self.handleDelete` is checked. If false, send `NotImplementedError`
+* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* `fullDoc` is fetched from DB. If fail, send `NotFoundError`
+* (HOOK) `self.extrapolateDoc( doc )` is run against the record just fetched -> `doc`
+* `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
+* (HOOK) `self.checkPermissionsDelete( params, body, options, doc, fullDoc )` is run. If fail, send `ForbiddenError`
+* Record is deleted!
+* (HOOK) `self.afterDelete( params, body, options, doc, fullDoc )` is run
+* Empty result is sent (status: 204)/data is returned. Party!
 
 ### `_makePost()` (for POST requests)
 
@@ -1182,7 +1182,7 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
   * (HOOK) `self.afterPost( params, body, options, doc, fullDoc )` is run
   * Empty result is sent (status: 200)/data is returned. Party!
 
-### `_makePut()`
+### `_makePut()` (for PUT requests)
 
 * (ATTR) `self.handlePut` is checked. If false, send `NotImplementedError`
 * incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
