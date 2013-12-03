@@ -1755,8 +1755,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
               g.People.Get( person.id, function( err, personGet ){
                 test.deepEqual( err.errors, [ { field: 'surname', message: 'Field is too long: surname' } ] );
-                test.deepEqual( err.message, 'Bad Request' );
-                test.deepEqual( err.httpError, 400 );
+                test.deepEqual( err.message, 'Unprocessable Entity' );
+                test.deepEqual( err.httpError, 422 );
    
                 test.done();
               });
