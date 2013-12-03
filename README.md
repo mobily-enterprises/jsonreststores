@@ -3,8 +3,6 @@ JsonRestStores
 
 # STATUS
 
-**This module is finished. I have just fixed a few small problems with dependencies etc. and am rewriting the documentation. Documentation will be fully finished on Sunday the 3rd of December. The new documentation explains how to create stores from a standard Express server, and will use TingoDB in the examples**
-
 JsonRestStores is a one-stop module that allows you to create fully functional, configurable Json REST stores using NodeJS. A store can be inherited from another store, and can define all sorts of hooks to configure how it behaves and what it does (including permissions). It's also very easy to create "nested" stores (`http://www.example.com/bookings/1234/users` for example).
 
 Database access is done using [simpledblayer](https://github.com/mercmobily/simpledblayer), which at the moment supports:
@@ -65,11 +63,7 @@ You should also read my small summary of [what a REST store actually provides](h
 
 To understand stores and client interaction, you can read [Dojo's JsonRest stores documentation](http://dojotoolkit.org/reference-guide/1.8/dojo/store/JsonRest.html), because the stores created using this module are 100% compliant with what Dojo's basic JsonRest module sends to servers.
 
-# Welcome to JsonRestStores
-
-If you don't want to reinvent the wheel every time there is a connection, then JsonRestStores is the module for you.
-
-## Features
+## JsonRestStores' features
 
 * Follows the KISS principle: everything is kept as simple as possible.
 
@@ -694,10 +688,8 @@ Each permission function needs to call the callback: if everything went fine, `c
 Here are the functions:
 
  * `checkPermissionsPost( params, body, options, cb )` 
- * `checkPermissionsPostAppend( params, body, options, doc, fullDoc, cb )`
  * `checkPermissionsPutNew( params, body, options, cb )`
  * `checkPermissionsPutExisting( params, body, options, doc, fullDoc, cb )`
- * `checkPermissionsGet( params, body, options, doc, fullDoc, cb )`
  * `checkPermissionsGet( params, body, options, doc, fullDoc, cb )`
  * `checkPermissionsGetQuery( params, body, options, cb )`
  * `checkPermissionsDelete( params, body, options, doc, fullDoc, cb )`
@@ -782,38 +774,28 @@ You can redefine them as you wish.
 
 Note that these hooks are run **after** data has been written to the database, but **before** a response is provided to the user.
 
-# TODO: UP TO HERE WITH DOCUMENTATION
-
-Need to change filterType in JsonRestStores to `searchable`, and finish documenting this
-
-
 # Searching in queries
 
-The only method that allows searches, and that returns an array of objects, is `GetQuery`. `GetQuery` is called whenever the route is called without specifying the object ID in the URL. So, if `GET /users/1` will return the JSON representation of the user with `_id` `1`, `GET /users` will return an array of all users that satisfy the filter specified in the `GET` request (in this case, there is no filter).
+`GetQuery` is the only method that allows searches, and that returns an array of objects (rather than a specific one). `GetQuery` is called whenever the route is called without specifying the object ID in the URL. So, if `GET /users/1` will return the JSON representation of the user with `_id` `1`, `GET /users` will return an array of all users that satisfy the filter specified in the `GET` request (in this case, there is no filter).
 
-## Filter types
+## Searchable fields
 
-In GetQuery, When querying a store you are able to specify a list of field/value pairs via URL. You are not able to decide on complex queries like `(a == b AND ( c == d OR e == f )`. However, you are able to decide the filter type, which can be `and` (all fields must match) or `or` (any one field matching will be satisfactory).
-
+When querying a store you are able to specify a list of field/value pairs via URL.
 A typical URL would be:
 
-    GET /workspaces?workspaceName=something&workgroup=owners
+    GET /people?name=tony&surname=mobily
 
-If your store specifies `queryFilterType` as `and`, all conditions must be met.
+JsonRestStores allows you to decide how to query the database depending on what was passed by the user. For example, a basic usage would be:
 
-For example this store will have `and` set:
+      var People = declare( Store, {
 
-      var Workspaces = declare( MongoStore, {
-
-        schema: new MongoSchema({
-          _id:           { type: 'id' },
-          workspaceName: { type: 'string', notEmpty: true, trim: 20, searchable: true, sortable: true  },
-          workgroup    : { type: 'string', notEmpty: true, trim: 20, searchable: true, sortable: true  },
+        schema: new Schema({
+          id     : { type: 'id' },
+          name   : { type: 'string', trim: 20, searchable: true },
+          surname: { type: 'string', trim: 20, searchable: true },
         }),
 
-        storeName: 'workspaces',
-
-        db: db,
+        storeName: 'People',
 
         handlePut: true,
         handlePost: true,
@@ -821,53 +803,80 @@ For example this store will have `and` set:
         handleGetQuery: true,
         handleDelete: true,
 
-        paramIds: [ '_id' ],
-
-        queryFilterType: 'and',
-
+        paramIds: [ 'id' ],
       });
 
       // Create the right hooks to access the store
-      Workspaces.onlineAll( app, '/workspaces/', ':_id' );
+      People.onlineAll( app, '/people/', ':id' );
+
+So, for a query like `GET /people?name=tony&surname=mobily`, only records where `name` _and_ `surname` match will be returned as an array.
+
+You can decide to apply a different type of filter by defining `searchable` as an object:
+
+        schema: new Schema({
+          id     : { type: 'id' },
+          name   : { type: 'string', trim: 20, searchable: { type: 'eq' } },
+          surname: { type: 'string', trim: 20, searchable: { type: 'startsWith' } },
+        }),
+
+In such a case, the request `GET /people?name=tony&surname=mob` will return all records where `name` is `Tony`, and surname starts with `mob`. ere, `type` can be any one condition allowed in simpledblayer: `is` `eq` `lt` `lte` `gt` `gte` `startWith` `startsWith` `contain` `contains` `endsWith` `endWith`.
+
+## `and` and `or` in queries
+
+You can decide if you want to apply `or` or `and` when filter searchable fields by setting the `condition` attribute in `searchable`. For example:
+
+        schema: new Schema({
+          id     : { type: 'id' },
+          age    : { type: 'number', max: 130, searchable: { type: 'eq' },
+          name   : { type: 'string', trim: 20, searchable: { type: 'startsWith', condition: 'or' } },
+          surname: { type: 'string', trim: 20, searchable: { type: 'startsWith', condition: 'or' } },
+        }),
+
+In such a case, _the `or` conditions will be grouped together_; so, the request `GET /people?age=37&name=ton&surname=mob` will return all records where `age` is `37`, and then _either_ the name starts with `ton`, _or_ the surname starts with `mob`.  This is probably an uncommon scenario, but there might be cases where `or` is actually useful.
+
+## Search schema
+
+Specifying `searchable` straight into the schema limits you to decide how each field will be searched; so, there is a 1:1 correspondence between a field and how it's searched.
+
+To overcome this limitation, JsonRestStores allows you to define an additional schema, called `searchSchema`, which gives you a lot more power.
+
+Consider this example:
+
+      var People = declare( Store, {
+
+        schema: new Schema({
+          id     : { type: 'id' },
+          name   : { type: 'string', trim: 20 },
+          surname: { type: 'string', trim: 20 },
+        }),
+
+        searchSchema: new Schema({
+          id               : { type: 'id' },
+          name             : { type: 'string', trim: 20, searchable: { type: 'is' } },
+          surname          : { type: 'string', trim: 20, searchable: { type: 'is' } },
+          nameContains     : { type: 'string', trim: 4, searchable:  { type: 'contains',   field: 'name' } },
+          surnameContains  : { type: 'string', trim: 4, searchable:  { type: 'contains',   field: 'surname' } },
+          surnameStartsWith: { type: 'string', trim: 4, searchable:  { type: 'startsWith', field: 'surname' } },
+        }),
+
+        storeName: 'People',
+
+        handlePut: true,
+        handlePost: true,
+        handleGet: true,
+        handleGetQuery: true,
+        handleDelete: true,
+
+        paramIds: [ 'id' ],
+      });
+
+      // Create the right hooks to access the store
+      People.onlineAll( app, '/people/', ':id' );
 
 
-## Schema attribute `searchPartial`
+This is neat! Basically, you are still bound to the limitations of HTTP GET requests (you can only specify a bunch of key/values in th GET); but, you can easily decide how each key/value pair will affect your search. For example, requesting `GET /people?nameContains=ony&surname=mobily` will match all records where the name _contains_ `ony` and the surname _is_ `mobily.
 
-Some fields will need to be searched incrementally by the users. This means that if the user asks for `GET /users?workspaceName=some`, the query will have to return workspaces with names matching `some`, `something`, `somewhat`, and anything starting with `same`.
-
-This is achieved by the attribute `searchPartial` in your schema.
-
-So, to achieve this you would have a schema like this:
-
-    // ...
-    schema: new MongoSchema({
-      _id:           { type: 'id' },
-      workspaceName: { type: 'string', searchPartial: true, notEmpty: true, trim: 20, searchable: true, sortable: true  },
-      workgroup    : { type: 'string', notEmpty: true, trim: 20, searchable: true, sortable: true  },
-    }),
-    // ...
-
-
-## Schema attribute `searchable`
-
-If you want a field to be searchable, you need to define the `searchable` attribute for it in your schema.
-
-If you have:
-
-    // ...
-    schema: new MongoSchema({
-      _id:           { type: 'id' },
-      workspaceName: { type: 'string', searchPartial: true, notEmpty: true, trim: 20, searchable: true, sortable: true  },
-      workgroup    : { type: 'string', notEmpty: true, trim: 20, searchable: true, sortable: true  },
-    }),
-    // ...
-
-
-As you can see, `workspaceName` has `searchable`, whereas `workgroup` doesn't. This means that if you have an URL like this:
-
-    GET /users?workspaceName=something&workgroup=owners
-
-The parameter `workgroup` will be completely ignored: the filter will only apply to `workspaceName`.
+This is achieved thanks to the `field` attribute in `searchable`, which allows you to specify which field the filter will apply to.
 
 ## Schema attribute `sortable`
 
@@ -878,31 +887,6 @@ If a field is marked as `searchable`, then it may or may not be sortable too. Th
 The field `sorBy` is interpreted by the GetQuery function: it's a list of comma-separated fields, each one starting with a `+` or with a `-`. If those fields are marked as `sortable` in the schema, then they will be sorted accordingly.
 
 ***NOTE TO DOJO USERS***: while using these stores with Dojo, you will _need_ to define them like so: `var store = new JsonRest( { target: "/workspaces/", sortParam: "sortBy" });`. The `sortParam` element is mandatory, as it needs to be `sortBy`. At this stage, JsonRestStores is _not_ able to interpret correctly URLs such as `/workspaces/?workspaceName=something&sort(+workspaceName,-workgroup)` (which is what Dojo will request if you do not specify `sortParam`).
-
-## Search schema
-
-Sometimes, you might decide to use a different schema for searches. For example, you might decide to only allow a search when a field is at least 4 characters long.
-
-In this case, you can define a "search schema": a schema that will be applied to the fields before searching.
-
-Here is an example:
-
-    // ...
-    schema: new MongoSchema({
-      _id:           { type: 'id' },
-      workspaceName: { type: 'string', notEmpty: true, trim: 20 },
-      workgroup    : { type: 'string', notEmpty: true, trim: 20 },
-    }),
-
-    searchSchema: new MongoSchema({
-      _id:           { type: 'id' },
-      workspaceName: { type: 'string', searchPartial: true, min: 4, searchable: true, sortable: true  },
-      workgroup    : { type: 'string', min: 2, searchable: true, sortable: true  },
-    }),
-    // ...
-
-
-Another bonus point of using search schemas is that you can keep the search-specific parameters (`searchable`, `sortable` and `searchPartial`) out of the "main" schema.
 
 # Errors returned and error management
 
@@ -939,11 +923,11 @@ The error objects are all pretty standard. However:
 
 JsonRestStores only ever throws (generic) Javascript errors if the class constructor was called incorrectly, or if an element in `paramIds` is not found within the schema. So, it will only ever happen if you use the module incorrectly. Any other case is chained through.
 
-
 ## Error management
 
 At some point in your program, one of your callbacks might have the dreaded `err` first parameter set to an error rather than null. This might happen  with your database driver (for example your MongoDB process dies), or within your own module (validation after a `PUT` fails).
 
+JsonRestStores allows you to decide what to do when this happens.
 
 ### `chainErrors`
 
@@ -955,13 +939,13 @@ If you have `chainErrors: all` in your class definition: JsonRestStores will sim
 
 #### `none`
 
-If you have `chainErrors: none` in your class definition: if there is a problem, JsonRestStores will _not_ call the `next()` callback at all: it will respond to the client directly, after formatting it with the object's `self.formatErrorResponse()` method.
+If you have `chainErrors: none` in your class definition: if there is a problem, JsonRestStores will _not_ call the `next()` callback at all: it will respond to the client directly, after formatting it with the object's `self.formatErrorResponse()` method (see below).
 
-Do this if you basically want to make absolute sure that every single request will end right there, whether it went well or not. If you do this, you will need to define your own `self.formatErrorResponse()` method for your store classes, so that output is what you want.
+Do this if you basically want to make absolute sure that every single request will end right there, whether it went well or not. If you do this, you might want to define your own `self.formatErrorResponse()` method for your store classes, so that the output is what you want it to be.
 
 #### `nonhttp`
 
-If you have `chainErrors: nonhttp` in your class definition: JsonRestStores will only call `next( err ) ` if one of the errors above happen -- any other problem (like your MongoDB server going down) will be handled by the next Express error management middleware. Use this if you want the server to respond directly in case of an HTTP problem (again using `self.formatErrorResponse()` to send a response to the client), but then you want to manage other problems (for example a MongoDB problem) with Express.
+If you have `chainErrors: nonhttp` in your class definition, JsonRestStores will only call `next( err ) ` for non-HTTP errors --  any other problem (like your MongoDB server going down) will be handled by the next Express error management middleware. Use this if you want the server to respond directly in case of an HTTP problem (again using `self.formatErrorResponse()` to send a response to the client), but then you want to manage other problems (for example a MongoDB problem) with Express.
 
 ### `self.formatErrorResponse()`
 
@@ -969,11 +953,9 @@ In those cases where you decide to send a response to the client directly (with 
 
 The stock `self.formatErrorResponse()` method will simply return a Json representation of the error message and, if present, the `errors` array within the error.
 
-
 ### `self.logError()`
 
 Whenever an error happens, JsonRestStore will run `self.logError()`. This happens regardless of what `self.chainErrors` contains (that is, whether the error is chained up to Express or it's managed internally). Note that there is no `callback` parameter to this method: since it's only a logging method, if it fails, it fails.
-
 
 # Store APIs
 
@@ -981,35 +963,33 @@ JsonRestStores allows you to run methods from within your programs, rather than 
 This is achieved with the following class functions:
 
 * `Store.Get( id, options, next( err, doc, idProperty ) {})`
-* `Store.GetQuery( options, next( err, queryDocs, idProperty){} )`
-* `Store.Put( id, body, options, next( err, doc, idProperty){} )`. __Note: `id` can be set as null if body contains it__
+* `Store.GetQuery( options, next( err, queryDocs, idProperty ){} )`
+* `Store.Put( id, body, options, next( err, doc, idProperty ){} )`. __Note: `id` can be set as null if body contains it__
 * `Store.Post( body, options, next( err, doc, idProperty ){} )`
-* `Store.PostAppend( id, body, options, next( err, docAfter, idProperty){}  )`
+* `Store.PostAppend( id, body, options, next( err, doc, idProperty ){} )`
 * `Store.Delete( id, options, next( err, doc, idProperty ){} )`
 
-Note: the `next()` call is the callback called at the end. Note that `idProperty` is also passed, although it will likely be redundant as you are supposed to know in advance the fields in the table you are querying.
+The `next()` call is the callback called at the end. Note that `idProperty` is also passed, although it will likely be redundant as you are supposed to know in advance the fields in the table you are querying.
 
 All normal hooks are called when using these functions. However:
 
 * The `paramIds` array is shortened so that it only has its last element. This means that you are free to query a store without any pre-set automatic filtering imposed by `paramIds`
 * All `request.handleXXX` are set to `true`
-* ??? Still true??? You can search and sort by any fields (`searchable` and `sortable` are no longer necessary)
 * The `request.remote` variable is set to false
 * Permissions are always granted
 
 When using the API, the `options` object is especially important, as it defines how the API will work.
 
-When a request comes from a remote operation, the `options` object is populated depending on the parameters passed (`overwrite`, `sortBy`, `ranges`, `filters`) or the class' defaults (`searchPartial`, `queryFilterType`). When using the API, you need to popuate `options` manually in order to obtain what you desire. `options` is especially important while querying, as that's where you define what you filter and order the results by.
+When a request comes from a remote operation, the `options` object is populated depending on the requested URL and headers. When using the API, you need to popuate `options` manually in order to obtain what you desire. `options` is especially important while querying, as that's where you define what you filter and order the results by.
 
 (If you are curious, when a remote connection is established the function `_initOptionsFromReq()` is the one responsible of getting headers and URL, and populating `options` before running the appropriate function).
 
-* `overwrite` for `Put` requests; (if used as remote store, taken from URL)
+* `overwrite` for `Put` requests; (if used as remote store, taken from HTTP headers)
 * `sortBy` for `GetQuery` requests (if used as remote store, taken from URL)
-* `ranges` for `GetQuery` requests; (if used as remote store, taken from URL)
+* `ranges` for `GetQuery` requests; (if used as remote store, taken from HTTP headers)
 * `filters` for `GetQuery` requests; (if used as remote store, taken from URL)
-* `queryFilterType` for `GetQuery` requests; (if used as remote store, taken from Class)
 
-When querying from the API, can pass `overwrite`, `sortBy`, `ranges`, `filters` (as there is no HTTP request to take this information from) and _can_, if you want, override `searchPartial` (by default, set by the schema definition) and `queryFilterType` (by default, set in the Class definition).
+When querying from the API, can pass `overwrite`, `sortBy`, `ranges`, `filters` (as there is no HTTP request to take this information from) and _can_.
 
 Here is a detailed explanation of these options:
 
@@ -1029,43 +1009,6 @@ Example:
 
 For non-API calls, this option is set by the headers 'if-match' and 'if-none-match'.
 
-# filters
-
-This option applies to GetQuery calls: it's a simple object, where the keys are the field names, and their respective values are the filters. For example:
-
-    { workspaceName: "Booker" }
-
-A typical example could be:
-
-    Workspaces.GetQuery( { filters: { workspaceName: 'Booker'} }, function( err, doc ) {
-    })
-
-For non-API calls, this option is set by the query string in the URL.
-
-## searchPartial
-
-This option is an associative array where each key is the field that must allow partial results. This means that filtering by `Boo` should return `Book`, `Booker`, and anything starting with `Boo`. For example:
-
-    // Will return records with workspaceName starting with "Boo" and workGroup equals to "Full match"
-    Workspaces.GetQuery( { 
-      filters: { workspaceName: 'Boo', workGroup: 'Full match' },
-      searchPartial: { workspaceName: true } 
-    } , function( err, doc ) {
-      // ...
-    });
-
-If `searchPartial` is not specified, then the `searchPartial` attribute of each record in the schema will be used instead.
-
-For non-API calls, this option is set by the schema's value.
-
-## queryFilterType
-
-The option `queryFilterType` can be either `and` (all elements in filters need to match) or `or` (one of them matching is enough). 
-
-If it's not specified, then the class' own `queryFilterType` attribute is used.
-
-For non-API calls, this option is set by the schema's value.
-
 ## sortBy
 
 This option is an object where each key is the key you want to sort by, and that key's value is either `1` (ascending order) or `-1` (descending order).
@@ -1080,7 +1023,7 @@ For example:
       // ...
     });
 
-For non-API calls, this option is set by the query string in the URL. E.g. `/workspaces/?workspaceName=something&sortBy=+workspaceName,-workGroup`.
+For non-API calls, this option is set by the query string in the URL. E.g. `/workspaces/?workspaceName=something&sortBy=+workspaceName,-score`.
 
 ## ranges
 
@@ -1097,6 +1040,19 @@ It represents an objects with the keys `rangeFrom`, `rangeTo`, `limit`. E.g.:
     });
 
 For non-API calls, ranges are set by the 'range' headers. For example `Range: items=0-24`. Note that the server will also return, after a range query, a header that will detail the range returned. For example `Content-Range: items 0-24/66`
+
+# filters
+
+This option applies to GetQuery calls: it's a simple object, where the keys are the field names, and their respective values are the filters. For example:
+
+    { workspaceName: "Booker" }
+
+A typical example could be:
+
+    Workspaces.GetQuery( { filters: { workspaceName: 'Booker'} }, function( err, doc ) {
+    })
+
+For non-API calls, this option is set by the query string in the URL.
 
 # Behind the scenes
 
@@ -1164,9 +1120,15 @@ Then, something interesting happens: the function `_initOptionsFromReq()` is run
 
 Finally, `request._makePut()` is run, passing it `params`, `body`, `options` and `next`. `request._makePut()` is where the real magic actually happens: it will run the correct hooks, eventually performing the requested `PUT`.
 
-## Analysis of a inner function: `_makePut()`
+# What happens exactly in each request
 
-JsonRestStores does all of the boring stuff for you -- the kind things that you would write over and over and over again while developing a server store.
+It's important to understand what happens in each request, so that you know exactly what you know when your hooks are called in the request's life cycle.
+
+JsonRestStores does all of the boring stuff for you -- the kind things that you would write over and over and over again while developing a server store. However, it's important to know "how" the boring stuff is done.
+
+
+## `_makePut()` (for PUT requests)
+
 
 This is what happens in `_makePut()`. Once you understand this, it's actually quite trivial to see the code of the module to figure out what the others do too:
 
@@ -1195,7 +1157,7 @@ This is what happens in `_makePut()`. Once you understand this, it's actually qu
 * **SEND item to client** This will only happen if `self.echoAfterPutNew()` is `true`, and it's actually a remote call.
 
 
-## Analysis of a inner function: `_makeGet()`
+### `_makeGet()`
 
 This is what happens in `_makeGet()`. Once you understand this, it's actually quite trivial to see the code of the module to figure out what the others do too:
 
