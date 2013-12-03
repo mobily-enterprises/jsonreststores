@@ -108,27 +108,6 @@ var Store = declare( null,  {
     }
   },
 
-  // postAppend (a POST call with an ID at the end) is actually a PUT
-  // in a subordinate store. So, if a developer wants this to work,
-  // he will need to reimplement makePostAppend so that it
-  // runs the right PUT onto the right store... by hand.
-  _makePostAppend: function( params, body, options, next ){
-
-    var self = this;
-    var body;
-
-    if( typeof( next ) !== 'function' ) next = function(){};
-
-    // Check the IDs
-    self._checkParamIds( params, body, true, function( err ){  
-      self._sendErrorOnErr( err, next, function(){
-
-        self._sendError( next, new self.NotImplementedError( ) );
-
-      });
-    });
-
-  },
 
   // **************************************************************************
   // *** END OF FUNCTIONS/ATTRIBUTES THAT NEED/CAN BE OVERRIDDEN BY DEVELOPERS
@@ -1464,7 +1443,7 @@ var Store = declare( null,  {
 Store.online = {};
 
 // Make Store.makeGet(Class), Store.makeGetQuery(Class), etc.
-[ 'Get', 'GetQuery', 'Put', 'Post', 'PostAppend', 'Delete' ].forEach( function(mn){
+[ 'Get', 'GetQuery', 'Put', 'Post', 'Delete' ].forEach( function(mn){
   Store.online[mn] = function( Class ){
     return function( req, res, next ){
 
@@ -1506,7 +1485,6 @@ Store.onlineAll = function( app, url, idName, Class ){
   app.get(      url,          Store.online.GetQuery( Class ) );
   app.put(      url + idName, Store.online.Put( Class ) );
   app.post(     url,          Store.online.Post( Class ) );
-  app.post(     url + idName, Store.online.PostAppend( Class ) );
   app.delete(   url + idName, Store.online.Delete( Class ) );
 }
 
@@ -1631,36 +1609,6 @@ Store.Post = function( body, options, next ){
 
   // Actually run the request
   request._makePost( {}, body, options, next );
-}
-
-// Here only for consistency, it will never work as makePostAppend will always
-// call next() with an NotImplemented error
-Store.PostAppend = function( id, body, options, next ){
-
-  var Class = this;
-
-  // Make `options` argument optional
-  var len =  arguments.length;
-  if( len == 3 ) { next = options; options = {}; };
-
-  // Make up the request
-  var request = new Class();
-
-  // Fix it for the API
-  fixRequestForApi( request );
-
-  // Make up "params" to be passed to the _makeGet function
-  var params = {};
-  params[ request._lastParamId() ] = id;
-
-  // Turn off permissions etc.
-  request.checkPermissionsPostAppend = function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); };
-
-  // Clone 'body' as _make calls are destructive
-  //var bodyClone = {}; for( var k in body) bodyClone[ k ] = body[ k ];
-
-  // Actually run the request
-  request.makePostAppend( params, body, options, next );
 }
 
 Store.Delete = function( id, options, next ){

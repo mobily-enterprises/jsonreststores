@@ -772,10 +772,6 @@ You can redefine them as you wish.
 
 Note that these hooks are run **after** data has been written to the database, but **before** a response is provided to the user.
 
-# _makePostAppend(i params, body, options, next )
-
-
-
 # Searching in queries
 
 `GetQuery` is the only method that allows searches, and that returns an array of objects (rather than a specific one). `GetQuery` is called whenever the route is called without specifying the object ID in the URL. So, if `GET /users/1` will return the JSON representation of the user with `_id` `1`, `GET /users` will return an array of all users that satisfy the filter specified in the `GET` request (in this case, there is no filter).
@@ -968,7 +964,6 @@ This is achieved with the following class functions:
 * `Store.GetQuery( options, next( err, queryDocs ){} )`
 * `Store.Put( id, body, options, next( err, doc ){} )`. __Note: `id` can be set as null if body contains it__
 * `Store.Post( body, options, next( err, doc ){} )`
-* `Store.PostAppend( id, body, options, next( err, doc ){} )`
 * `Store.Delete( id, options, next( err, doc ){} )`
 
 The `next()` call is the callback called at the end. 
@@ -1065,7 +1060,6 @@ This is the list of functions that actually do the work behind the scenes:
  * `_makeGetQuery()` (implements GET for a collection, no ID passed)
  * `_makePut()` (implements PUT for a collection)
  * `_makePost()` (implements POST for a collection)
- * `_makePostAppend()` (implements POST for a collection, when ID is present -- to be implemented by the developer)
  * `_makeDelete()` (implements DELETE for a collection)
 
 When you write:
@@ -1080,7 +1074,6 @@ You are actually running:
     app.get(      url,          Store.online.GetQuery( Class ) );
     app.put(      url + idName, Store.online.Put( Class ) );
     app.post(     url,          Store.online.Post( Class ) );
-    app.post(     url + idName, Store.online.PostAppend( Class ) );
     app.delete(   url + idName, Store.online.Delete( Class ) );
 
 Note that "Class" is the constructor class (in this case `Workspaces`).
@@ -1235,13 +1228,3 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
   * Empty result is sent (status: 200)/data is returned. Party!
 
 
-### `_makePostAppend()` (for PUT requests)
-
-* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* Send `NotImplementedError`
-
-Note that `_makePostAppend()` is a meta-method: it's up to the user to create it, as it -- by definition -- will add records to a different store -- one that is "logically" contained by this one.
-
-So, `_makePostAppend()` will likely use the API to add a record to a sub-store.
-
-I recommend against implementing it. It's here because I wanted to make sure JsonRestStores covered all possible angles in terms if a REST API
