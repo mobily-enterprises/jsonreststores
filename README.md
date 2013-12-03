@@ -621,7 +621,6 @@ The store PeopleCarsList is nearly exactly the same as PeopleCars: the only diff
 You might even create a basic store _without_ running `onlineAll()` for it, and then derive several stores from it, each with a slightly different URL and (most likely) different permissions.
 
 
-
 # Important methods and attributes you can override
 
 The basic `Store` class uses a rather long list of stock methods to complete requests. Some of them are there so that you can override them.
@@ -772,6 +771,10 @@ You can redefine them as you wish.
  * `afterGet( params, body, options, doc, fullDoc, cb  )` (After a record is retrieved)
 
 Note that these hooks are run **after** data has been written to the database, but **before** a response is provided to the user.
+
+# _makePostAppend(i params, body, options, next )
+
+
 
 # Searching in queries
 
@@ -1159,8 +1162,8 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * Search terms (from GET data) are cast against the searchSchema. If fail, send `BadRequestError`
 * docs are fetched from DB.
 * FOR EACH RECORD -> `queryDocs`
- * (HOOK) `self.extrapolateDoc( doc )` is run against each `doc`
- * `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
+ * (HOOK) `self.extrapolateDoc( fulldoc )` is run against each `fullDoc` -> `doc`
+ * Each `doc` is cast against the schema. If ONE fails, everything fails: send `UnprocessableEntityError`
  * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
 * (HOOK) `self.afterGetQueries( params, body, options, queryDocs )` is run
 * `queryDocs` is sent as array (status: 200)/returned as array. Party!
