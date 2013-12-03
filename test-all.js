@@ -196,11 +196,11 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         }),
 
         searchSchema: new Schema({
-          name:     { type: 'string', filterType: { type: 'eq' }  },
-          surname:  { type: 'string', max: 20, filterType: { type: 'eq'  } },
-          age:      { type: 'number', max: 99, filterType: { type: 'eq' } },
-          ageGt:    { type: 'number', max: 99, filterType: { field: 'age', type: 'gt' } },
-          nameSt:   { type: 'string', filterType: { field: 'surname', type: 'startsWith' } },
+          name:     { type: 'string', searchable: { type: 'eq' }  },
+          surname:  { type: 'string', max: 20, searchable: { type: 'eq'  } },
+          age:      { type: 'number', max: 99, searchable: { type: 'eq' } },
+          ageGt:    { type: 'number', max: 99, searchable: { field: 'age', type: 'gt' } },
+          nameSt:   { type: 'string', searchable: { field: 'surname', type: 'startsWith' } },
         }),
 
         storeName: 'people',
@@ -227,11 +227,11 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         }),
 
         searchSchema: new Schema({
-          name:     { type: 'string', filterType: { type: 'eq' }  },
-          surname:  { type: 'string', max: 20, filterType: { type: 'eq'  } },
-          age:      { type: 'number', max: 99, filterType: { type: 'eq' } },
-          ageGt:    { type: 'number', max: 99, filterType: { field: 'age', type: 'gt' } },
-          nameSt:   { type: 'string', filterType: { field: 'surname', type: 'startsWith' } },
+          name:     { type: 'string', searchable: { type: 'eq' }  },
+          surname:  { type: 'string', max: 20, searchable: { type: 'eq'  } },
+          age:      { type: 'number', max: 99, searchable: { type: 'eq' } },
+          ageGt:    { type: 'number', max: 99, searchable: { field: 'age', type: 'gt' } },
+          nameSt:   { type: 'string', searchable: { field: 'surname', type: 'startsWith' } },
         }),
 
         storeName: 'wsPeople',
@@ -1774,7 +1774,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
             schema: new Schema({
               name:     { type: 'string' },
-              surname:  { type: 'string', max: 20, filterType: { type: 'eq'  } },
+              surname:  { type: 'string', max: 20, searchable: { type: 'eq'  } },
               age:      { type: 'number', max: 99 },
             }),
   
