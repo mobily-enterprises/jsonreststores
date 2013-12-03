@@ -216,7 +216,7 @@ Your `storesRoutes.js` file will then use `dbSpecific-mongo.js` to get the those
       var Managers = declare( JRS, {
     
         schema: new Schema({
-          id     : { type: 'id', required: true }, // This will be a MongoDB-specific id thanks to SimpleSchemaMongo
+          id     : { type: 'id', required: true },
           name   : { type: 'string', trim: 60 },
           surname: { type: 'string', trim: 60 },
         }),
@@ -439,6 +439,7 @@ It all works!
 ## A nested store
 
 Stores are never "flat" as such: you have workspaces, and then you have users who "belong" to a workspace. Here is how you create a "nested" store:
+
       var Managers= declare( JRS, {
 
         schema: new Schema({
@@ -1128,35 +1129,116 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 
 ### `_makeGet()`
 
-* (ATTR) self.handleGet is checked. If false, send `NotImplementedError`
-* incoming paramIds are checked against schema. If fail, send `BadRequestError`
-* record is fetched from DB. If fail, send `NotFoundError`
-* (HOOK) `self.extrapolateDoc( doc )` is run against the record just fetched
-* Data is cast against the schema. If fail, send `BadRequestError`
+* (ATTR) `self.handleGet` is checked. If false, send `NotImplementedError`
+* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* record is fetched from DB. If fail, send `NotFoundError` -> `fullDoc`
+* (HOOK) `self.extrapolateDoc( fullDoc )` is run against the record just fetched -> `doc`
+* `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
 * (HOOK) `self.checkPermissionsGet( params, body, options, doc, fullDoc )` is run. If fail, send `ForbiddenError`
-* (HOOK) `self.prepareBeforeSend( doc )` is run.
+* (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
 * (HOOK) `self.afterGet( params, body, options, doc, fullDoc )` is run
-* Data is sent (status: 200)/returned. Party!
+* `doc` is sent (status: 200)/returned. Party!
 
 ### `_makeDelete()` (for DELETE requests)
 
-* (ATTR) self.handleDelete is checked. If false, send `NotImplementedError`
-* incoming paramIds are checked against schema. If fail, send `BadRequestError`
-* record is fetched from DB. If fail, send `NotFoundError`
-* (HOOK) `self.extrapolateDoc( doc )` is run against the record just fetched
-* Data is cast against the schema. If fail, send `BadRequestError`
+* (ATTR) `self.handleDelete` is checked. If false, send `NotImplementedError`
+* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* `fullDoc` is fetched from DB. If fail, send `NotFoundError`
+* (HOOK) `self.extrapolateDoc( doc )` is run against the record just fetched -> `doc`
+* `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
 * (HOOK) `self.checkPermissionsDelete( params, body, options, doc, fullDoc )` is run. If fail, send `ForbiddenError`
 * Record is deleted!
 * (HOOK) `self.afterDelete( params, body, options, doc, fullDoc )` is run
-* Empty result s sent (status: 204)/returned. Party!
+* Empty result is sent (status: 204)/data is returned. Party!
 
 ### `_makeGetQuery()` (for GET requests, no ID)
 
+* (ATTR) `self.handleGetQuery` is checked. If false, send `NotImplementedError`
+* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* (HOOK) `self.checkPermissionsGetQuery( params, body, options )` is run. If fail, send `ForbiddenError`
+* Search terms (from GET data) are cast against the searchSchema. If fail, send `BadRequestError`
+* docs are fetched from DB.
+* FOR EACH RECORD -> `queryDocs`
+ * (HOOK) `self.extrapolateDoc( doc )` is run against each `doc`
+ * `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
+ * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
+* (HOOK) `self.afterGetQueries( params, body, options, queryDocs )` is run
+* `queryDocs` is sent as array (status: 200)/returned as array. Party!
+
+### `_makePost()` (for POST requests)
+
+* (ATTR) `self.handlePost` is checked. If false, send `NotImplementedError`
+* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* (HOOK) `self.prepareBodyPost( body )` is run against the record just fetched
+* Body is cast against the schema. If fail, send `UnprocessableEntityError`
+* (HOOK) `self.checkPermissionsPost( params, body, options )` is run. If fail, send `ForbiddenError`
+* Body is cleaned up of fields with `doNotSave: true` in schema
+* record is written to the DB.
+* record is re-fetched from DB -> `fullDoc`
+* (HOOK) `self.extrapolateDoc( fullDoc )` is run against the record just fetched -> `doc`
+* `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
+* Set the `Location:` header
+* IF `self.echoAfterPost`:
+  * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
+  * (HOOK) `self.afterPost( params, body, options, doc, fullDoc )` is run
+  * `doc` is sent (status: 200)/returned. Party!
+* ELSE:
+  * (HOOK) `self.afterPost( params, body, options, doc, fullDoc )` is run
+  * Empty result is sent (status: 200)/data is returned. Party!
+
+### `_makePut()`
+
+* (ATTR) `self.handlePut` is checked. If false, send `NotImplementedError`
+* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* (HOOK) `self.prepareBodyPut( body )` is run against the record just fetched
+* Body is cast against the schema. If fail, send `UnprocessableEntityError`
+* record is fetched from DB (ATTEMPT) -> `fullDoc`
+* `options.overwrite` is checked: if true & record not there, or false and record there, send `PreconditionFailedError`
+
+#### ...and then, for NEW records (fetching failed)
+
+* (HOOK) `self.checkPermissionsPutNew( params, body, options )` is run. If fail, send `ForbiddenError`
+* `body` is cleaned up of fields with `doNotSave: true` in schema
+* record is written to the DB.
+* record is re-fetched from DB -> `fullDoc`
+* (HOOK) `self.extrapolateDoc( fullDoc )` is run against the record just fetched -> `doc`
+* `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
+* Set the `Location:` header
+* IF `self.echoAfterPut`:
+  * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
+  * (HOOK) `self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite )` is run
+  * `doc` is sent (status: 200)/returned. Party!
+* ELSE:
+  * (HOOK) `self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite )` is run
+  * Empty result is sent (status: 200)/data is returned. Party!
+
+#### ...or then, for EXISTING records (fetching worked)
+
+* (HOOK) `self.extrapolateDoc( fullDoc )` is run against the record just fetched -> `doc`
+* `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
+* (HOOK) `self.checkPermissionsPutExisting( params, body, options, doc, fullDoc )` is run. If fail, send `ForbiddenError`
+* `doc` is cleaned up of fields with `doNotSave: true` in schema
+* record is updated to the DB.
+* record is re-fetched from DB. If fail, send `NotFoundError` -> fullDocAfter
+* (HOOK) `self.extrapolateDoc( docAfter )` is run against the record just fetched
+* Doc is cast against the schema. If fail, send `UnprocessableEntityError`
+* Set the `Location:` header
+* IF `self.echoAfterPut`:
+  * (HOOK) `self.prepareBeforeSend( docAfter )` is run.
+  * (HOOK) `self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite )` is run
+  * `docAfter` is sent (status: 200)/returned. Party!
+* ELSE:
+  * (HOOK) `self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite )` is run
+  * Empty result is sent (status: 200)/data is returned. Party!
 
 
-## `_makePost()` (for POST requests)
+### `_makePostAppend()` (for PUT requests)
 
-## `_makePut()` (for PUT requests)
+* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* Send `NotImplementedError`
 
-## `_makePostAppend()` (for PUT requests)
+Note that `_makePostAppend()` is a meta-method: it's up to the user to create it, as it -- by definition -- will add records to a different store -- one that is "logically" contained by this one.
 
+So, `_makePostAppend()` will likely use the API to add a record to a sub-store.
+
+I recommend against implementing it. It's here because I wanted to make sure JsonRestStores covered all possible angles in terms if a REST API
