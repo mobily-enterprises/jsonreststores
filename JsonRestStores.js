@@ -186,13 +186,13 @@ var Store = declare( null,  {
 
     // Set `fields`, which will need to conform DbLayer's format: every key defined is in the schema, and keys
     // with `true` values are also searchable.
-    // In this case, all fields with a `filterType` in the searchSchema are indeed searchable. PLUS, any
+    // In this case, all fields with a `searchable` in the searchSchema are indeed searchable. PLUS, any
     // fields in paramIds are also searchable
     // 
     var fields = {};
     for( var k in self.schema.structure ) fields[ k ] = false;
     for( var k in self.searchSchema.structure ){
-      if( self.searchSchema.structure[ k ].filterType ) fields[ k ] = true;
+      if( self.searchSchema.structure[ k ].searchable ) fields[ k ] = true;
     }
     for( var i = 0, l  = self.paramIds.length; i <  l; i ++ ) fields[ self.paramIds[ i ] ] = true;
 
@@ -403,17 +403,21 @@ var Store = declare( null,  {
 
       var filterValue = filters[ filterField ];
 
-      if( self.searchSchema.structure[ filterField ].filterType ){
-        var filterType= self.searchSchema.structure[ filterField ].filterType;
+      if( self.searchSchema.structure[ filterField ].searchable ){
+        var searchable = self.searchSchema.structure[ filterField ].searchable;
+
+        // This allows you to specify, as shorthand, `searchable: true` in your schema
+        // which will be the same as `searchable: { type: 'eq' } `
+        if( typeof( searchable ) !== 'object' ) searchable = { type: 'eq' };
 
         // Double check that the referenced field exists
-        if( filterType.field && typeof( self.searchSchema.structure[ filterType.field ] ) === 'undefined' ){
-          throw( new Error('"field" option in filter type is undefined: ' + filterType.field  ) );
+        if( searchable.field && typeof( self.searchSchema.structure[ searchable.field ] ) === 'undefined' ){
+          throw( new Error('"field" option in filter type is undefined: ' + searchable.field  ) );
         }
-        var dbField = filterType.field || filterField;
-        var condition = self.searchSchema.structure[ filterField ].filterCondition || 'and';
+        var dbField = searchable.field || filterField;
+        var condition = searchable.condition || 'and';
 
-        conditions[ condition ].push( { field: dbField, type: filterType.type, value: filters[ filterField ] } );
+        conditions[ condition ].push( { field: dbField, type: searchable.type, value: filters[ filterField ] } );
       }
     }
 
@@ -540,8 +544,8 @@ var Store = declare( null,  {
         tokenRight = tokens[1];
 
         // Only add it to the filter if it's in the schema AND if it's searchable
-        //if( tokenLeft != 'sort' && ( ! self.remote || ( self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].filterType )) ) {
-        if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].filterType  ) {
+        //if( tokenLeft != 'sort' && ( ! self.remote || ( self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].searchable )) ) {
+        if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].searchable  ) {
 
           result[ tokenLeft ] = tokenRight;
 
