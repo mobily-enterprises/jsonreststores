@@ -1,8 +1,6 @@
 JsonRestStores
 ==============
 
-# STATUS
-
 JsonRestStores is a one-stop module that allows you to create fully functional, configurable Json REST stores using NodeJS. A store can be inherited from another store, and can define all sorts of hooks to configure how it behaves and what it does (including permissions). It's also very easy to create "nested" stores (`http://www.example.com/bookings/1234/users` for example).
 
 Database access is done using [simpledblayer](https://github.com/mercmobily/simpledblayer), which at the moment supports:
