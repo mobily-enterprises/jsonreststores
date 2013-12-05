@@ -67,7 +67,7 @@ var Store = declare( null,  {
   chainErrors: 'none',  // can be 'none', 'all', 'nonhttp'
 
   hardLimitOnQueries: 50,
-
+  deleteAfterGetQuery: false,
 
   // ****************************************************
   // *** FUNCTIONS THAT CAN BE OVERRIDDEN BY DEVELOPERS
@@ -139,7 +139,7 @@ var Store = declare( null,  {
     
     // The db driver must be defined
     if( typeof( self.DbLayer ) === 'undefined' || self.DbLayer == null ){
-      throw( new Error("You must define a db driver, via constructor or via prototype") );
+      throw( new Error("You must define a db driver, via constructor or via prototype (creating " + self.storeName + ')' ));
     }
 
     this.collectionName = this.collectionName ? this.collectionName : this.storeName;
@@ -166,15 +166,66 @@ var Store = declare( null,  {
 
     // Set `fields`, which will need to conform DbLayer's format: every key defined is in the schema, and keys
     // with `true` values are also searchable.
-    // In this case, all fields with a `searchable` in the searchSchema are indeed searchable. PLUS, any
-    // fields in paramIds are also searchable
-    // 
+
     var fields = {};
+
+    // Easy one: all fields in the schema are allowed, and are not searchable
     for( var k in self.schema.structure ) fields[ k ] = false;
+
+
+    // The quest to decide which fields are searchable begins here. It's
+    // trickier than you'd think, as:
+    // * If `searchSchema` !== `schema`, anything in searchSchema must be searchable, even without `searchable` set
+    // * `searchable` might contain a `field` attribute, which will reference ANOTHER field
+    var specificSearchSchema = self.searchSchema !== self.Schema;
     for( var k in self.searchSchema.structure ){
-      if( self.searchSchema.structure[ k ].searchable ) fields[ k ] = true;
+
+      var searchable = self.searchSchema.structure[ k ].searchable;
+
+      // It has a specific search schema, no `searchable` attribute: just
+      // make that particular field searchable, end of story
+      if( specificSearchSchema && ( typeof( searchable ) !== 'object' || searchable === null ) ){
+        fields[ k ] = true;
+      } else {
+
+        // Field is marked as "searchable". However, `searchable` might have a `field`
+        // attribute -- if it does, then the searchable one is another field
+        var searchable = self.searchSchema.structure[ k ].searchable;
+
+        // Searchable is `true`: the searchable field is obviously `k`
+        if( searchable  === true ){
+          fields[ k ] = true;
+
+        // Searchable is an object: the searchable field might be `k`, or
+        // -- if searchable defines a `field` it will be that `field`
+        } else if( typeof( searchable ) === 'object' && searchable !== null ){
+
+          if( typeof( searchable.field ) === 'undefined' ){
+            fields[ k ] = true;
+          } else {
+
+            // Will make the referenced field searchable. IF field points to an unset field,
+            // throw an error
+            if( typeof( fields[ searchable.field ] ) === 'undefined' ){
+              throw( new Error("Illegal `field` attribute in searchable: " + searchable.field + ", field " + k + ", store " + self.storeName ));
+            } else {
+              fields[ searchable.field ] = true;
+            }
+          }
+            
+        } else throw( new Error("Error in searchable attribute " + k + ", store " + self.storeName ) );
+      }
     }
-    for( var i = 0, l  = self.paramIds.length; i <  l; i ++ ) fields[ self.paramIds[ i ] ] = true;
+
+    // `paramIds` are searchable by default. This also has the side effects of checking that
+    // anything in `paramIds` is an actual field
+    for( var i = 0, l  = self.paramIds.length; i <  l; i ++ ){
+      if( typeof( fields[ self.paramIds[ i ] ] ) === 'undefined' ){
+        throw( new Error("Illegal `field` attribute in searchable: " + self.paramIds[ i ] + ", store " + self.storeName ));
+      } else {
+        fields[ self.paramIds[ i ] ] = true;
+      }
+    }
 
     // Create the dbLayer object, ready to accept insert/delete/select/update operations
     // on that specific collection
@@ -369,9 +420,11 @@ var Store = declare( null,  {
     self.dbLayer.delete( selector, { multi: false }, cb );
   },
 
-  _queryMakeSelector: function( filters, sort, ranges ){
+  _queryMakeSelector: function( filters, sort, ranges, cb ){
 
     var self = this;
+    var errors = [];
+    var field, type, condition;
 
     // Define and set the conditions variable, which will be returned
     var conditions = {};
@@ -383,32 +436,42 @@ var Store = declare( null,  {
 
       var filterValue = filters[ filterField ];
 
-      if( self.searchSchema.structure[ filterField ].searchable ){
-        var searchable = self.searchSchema.structure[ filterField ].searchable;
+      var searchable = self.searchSchema.structure[ filterField ].searchable;
 
-        // This allows you to specify, as shorthand, `searchable: true` in your schema
-        // which will be the same as `searchable: { type: 'eq' } `
-        if( typeof( searchable ) !== 'object' ) searchable = { type: 'eq' };
+      // Searchable is not an object/is null: just set conditions as defaults
+      if( typeof( searchable ) !== 'object' || searchable === null ){
+        field = filterField;
+        type = 'eq';
+        condition = 'and';
+      // Searchable is an object: try to get values from it
+      } else {
+        field = searchable.field || filterField;
+        type = searchable.type || 'eq';
+        condition = searchable.condition || 'and';
+      }
 
-        // Double check that the referenced field exists
-        if( searchable.field && typeof( self.searchSchema.structure[ searchable.field ] ) === 'undefined' ){
-          throw( new Error('"field" option in filter type is undefined: ' + searchable.field  ) );
-        }
-        var dbField = searchable.field || filterField;
-        var condition = searchable.condition || 'and';
-
-        conditions[ condition ].push( { field: dbField, type: searchable.type, value: filters[ filterField ] } );
+      if( ! self.dbLayer.fields ){
+        errors.push( { field: field, message: 'Field not allowed in search: ' + filter + ' in ' + self.storeName } );
+      } else {
+        conditions[ condition ].push( { field: field, type: type, value: filters[ filterField ] } );
       }
     }
 
-    if( conditions.and.length === 0 ) delete conditions.and;
-    if( conditions.or.length === 0 ) delete conditions.or;
+    // Call the callback with an error, or with the selector (containing conditions, ranges, sort)
+    if( errors.length ){
+      cb( new self.UnprocessableEntityError( { errors: errors } ) );
+    } else {
 
-    return {
-      conditions: conditions,
-      ranges: ranges,
-      sort: sort,
-    };
+      if( conditions.and.length === 0 ) delete conditions.and;
+      if( conditions.or.length === 0 ) delete conditions.or;
+
+      cb( null, {
+        conditions: conditions,
+        ranges: ranges,
+        sort: sort,
+      } );
+    }
+
   },
 
 
@@ -445,6 +508,7 @@ var Store = declare( null,  {
       options.sort = parseSortBy( req );
       options.ranges = parseRangeHeaders( req );
       options.filters = parseFilters( req );
+
     }
 
     return options;
@@ -543,17 +607,26 @@ var Store = declare( null,  {
 
     var self = this;
     var cursor;
-    //console.log("options: ", options);
+    var dbLayerOptions = {};
 
-    var selector = self._queryMakeSelector( options.filters, options.sort, options.ranges );
-    //console.log("selector1 : ", selector);
-    //console.log("params : ", params);
+    // If options.delete was on or if it's set at store-level
+    // pass {delete: true } to the db layer
+    if( options.delete || self.deleteAfterGetQuery ){
+      dbLayerOptions.delete = true;
+    }
 
-    self._enrichSelectorWithParams( selector, params );
-    //console.log("selector2: ", selector);
+    self._queryMakeSelector( options.filters, options.sort, options.ranges, function( err, selector ){
+      if( err ){
+        next( err );
+      } else {
 
-    // Run the select based on the passed parameters
-    self.dbLayer.select( selector, next );
+        self._enrichSelectorWithParams( selector, params );
+
+        // Run the select based on the passed parameters
+        self.dbLayer.select( selector, dbLayerOptions, next );
+      }
+    });
+
   },
 
 
@@ -681,7 +754,7 @@ var Store = declare( null,  {
 
     // Cast the values. This is a relaxed check: if a field is missing, it won't
     // complain. This way, applications won't start failing when adding fields
-    self.schema.validate( doc, { onlyObjectValues: true }, function( err, doc, errors ) {
+    self.schema.validate( doc, { onlyObjectValues: true, deserialize: true }, function( err, doc, errors ) {
       if( err ){
         next( err );
       } else {
@@ -775,7 +848,6 @@ var Store = declare( null,  {
       return;
     }
 
-
     // Check the IDs
     self._checkParamIds( params, body, true, function( err ){  
       self._sendErrorOnErr( err, next, function(){
@@ -843,7 +915,8 @@ var Store = declare( null,  {
             
                                             self.afterPost( params, body, options, doc, fullDoc, function( err ){
                                               self._sendErrorOnErr( err, next, function(){
-            
+
+                                                //self._res.send( 204, '' );
                                                 self._res.send( 201, '' );
             
                                               });
@@ -1103,7 +1176,7 @@ var Store = declare( null,  {
                                                           self._sendErrorOnErr( err, next, function(){
                 
                                                             self._res.send( 200, '' );
-                                                            //res.send( 204, 'OK' );
+                                                            //res.send( 204, '' );
                 
                                                           });
                                                         });
@@ -1172,6 +1245,8 @@ var Store = declare( null,  {
     var self = this;
     var sort, range, filters;
 
+    //console.log("OPTIONS:");
+    //console.log( options );
 
     if( typeof( next ) !== 'function' ) next = function(){};
 
@@ -1181,13 +1256,6 @@ var Store = declare( null,  {
       return;
     }
   
-    // The schema must be defined for queries. It's too important, as it defines
-    // what's searchable and what's sortable
-    if( self.searchSchema == null ){
-      self._sendError( next, new Error('Query attempted on schema-less store' ) );
-      return;
-    }
-
     // Check the IDs. If there is a problem, it means an ID is broken:
     // return a BadRequestError
     self._checkParamIds( params, body, true, function( err ){  
@@ -1447,7 +1515,6 @@ Store.online = {};
   Store.online[mn] = function( Class ){
     return function( req, res, next ){
 
-
       var request = new Class();
    
       // It's definitely remote
@@ -1464,6 +1531,11 @@ Store.online = {};
       // Since it's an online request, options are set by "req"
       // This will set things like ranges, sort options, etc.
       var options = request._initOptionsFromReq( mn, req );
+
+      // The "delete" option can apply to GetQuery
+      if( mn === 'GetQuery' ){
+        options.delete = !!request.deleteAfterGetQuery;
+      }
 
       // Actually run the request
       request['_make' + mn ]( params, body, options, next );
@@ -1577,9 +1649,6 @@ Store.Put = function( id, body, options, next ){
   request.checkPermissionsPutExisting = function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); };
   request.checkPermissionsPutNew = function(  params, body, options, cb ){ cb( null, true ); };
 
-  // Clone 'body' as _make calls are destructive
-  // var bodyClone = {}; for( var k in body) bodyClone[ k ] = body[ k ];
-
   // Actually run the request
   request._makePut( params, body, options, next );
 }
@@ -1604,9 +1673,6 @@ Store.Post = function( body, options, next ){
   // Turn off permissions etc.
   request.checkPermissionsPost = function( params, body, options, cb ){ cb( null, true ); };
 
-  // Clone 'body' as _make calls are destructive
-  //var bodyClone = {}; for( var k in body) bodyClone[ k ] = body[ k ];
-
   // Actually run the request
   request._makePost( {}, body, options, next );
 }
@@ -1625,7 +1691,7 @@ Store.Delete = function( id, options, next ){
   // Fix it for the API
   fixRequestForApi( request );
 
-  // Make up "params" to be passed to the _makeGet function
+  // Make up "params" to be passed to the _makeDelete function
   var params = {};
   params[ request._lastParamId() ] = id;
 

@@ -673,6 +673,10 @@ The method's signature is:
 
 ## Queries
 
+### `deleteAfterGetQuery`
+
+If set to `true`, any "get query" method will have the side effect of deleting the fetched records from the database. Whatever is set here will be used as the default for `GetQuery` calls from the API.
+
 ### `hardLimitOnQueries`
 
 This is the limit of the number of elements that can be returned by a query without ID (GetQuery). The default is 50. 
@@ -992,7 +996,7 @@ Here is a detailed explanation of these options:
 
 ## overwrite
 
-This option is only valid in a PUT context:
+This option applies to Put calls.
 
 * if `options.overwrite` is not set, the `Put` request will happily overwrite an existing record, or create a new one.
 * if `options.overwrite` is set:
@@ -1006,9 +1010,21 @@ Example:
 
 For non-API calls, this option is set by the headers 'if-match' and 'if-none-match'.
 
+# delete
+
+This options applies to GetQuery calls.
+
+If `delete` is set to true, then the fetched records will be deleted after fetching. Whatever is returned by GetQuery will no longer be available on the database.
+
+The deletion is more of an "attempt" to delete them. If deletion fails, GetQuery will still return the fetched values and deletion will fail silently.
+
+If `delete` is not passed, then the store's default, set by `deleteAfterGetQuery`, will be used.
+
 # filters
 
-This option applies to GetQuery calls: it's a simple object, where the keys are the field names, and their respective values are the filters. For example:
+This option applies to GetQuery calls.
+
+It's a simple object, where the keys are the field names, and their respective values are the filters. For example:
 
     { workspaceName: "Booker" }
 

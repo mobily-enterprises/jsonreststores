@@ -13,8 +13,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
   TODO:
 Tests for:
-  logError: function( error ){  },
-  formatErrorResponse: function( error ){
+  * self.deleteAfterGetQuery 
+  * { delete: true } in GetQuery
 */
 
 var 
