@@ -2367,50 +2367,60 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
          var people = new g.People();
   
-         var selector = people._queryMakeSelector( { name: 'Tony', surname: 'Mobily' } );
-         test.deepEqual( selector,
+         people._queryMakeSelector( { name: 'Tony', surname: 'Mobily' }, {}, {}, function( err, selector ){
+
+           test.ifError( err );
+           test.deepEqual( selector,
   
   { conditions: 
      { and: 
         [ { field: 'name', type: 'eq', value: 'Tony' },
           { field: 'surname', type: 'eq', value: 'Mobily' } ] },
-    ranges: undefined,
-    sort: undefined }
-         );
+    ranges: {},
+    sort: {}  }
+           );
         
-         var selector = people._queryMakeSelector( { nameSt: 'Mob', ageGt: 20 } );
-  
-         test.deepEqual( selector,
+           people._queryMakeSelector( { nameSt: 'Mob', ageGt: 20 }, {}, {}, function( err, selector) {
+
+             test.ifError( err );
+             test.deepEqual( selector,
   
   { conditions: 
      { and: 
         [ { field: 'surname', type: 'startsWith', value: 'Mob' },
           { field: 'age', type: 'gt', value: 20 } ] },
-    ranges: undefined,
-    sort: undefined }
+    ranges: {},
+    sort: {}  }
   
-         );
+             );
   
-         var selector = people._queryMakeSelector( { name: 'Tony' }, { name: -1, surname: 1 }  );
+             people._queryMakeSelector( { name: 'Tony' }, { name: -1, surname: 1 }, {}, function( err, selector ){
   
-         test.deepEqual( selector, 
+               test.ifError( err );
+               test.deepEqual( selector, 
   
   { conditions: { and: [ { field: 'name', type: 'eq', value: 'Tony' } ] },
-    ranges: undefined,
+    ranges: {},
     sort: { name: -1, surname: 1 } }
   
-         );
+               );
   
-         var selector = people._queryMakeSelector( { name: 'Tony' }, { name: -1, surname: 1 }, { from: 0, to: 10, limit: 5}  );
+               var selector = people._queryMakeSelector( { name: 'Tony' }, { name: -1, surname: 1 }, { from: 0, to: 10, limit: 5}, function( err, selector ){
   
-         test.deepEqual( selector, 
+                 test.ifError( err );
+                 test.deepEqual( selector, 
   
   { conditions: { and: [ { field: 'name', type: 'eq', value: 'Tony' } ] },
     ranges: { from: 0, to: 10, limit: 5 },
     sort: { name: -1, surname: 1 } }
   
-         );
-  
+                 );
+ 
+               });
+             });
+           });
+         });
+ 
          test.done();
       },
   

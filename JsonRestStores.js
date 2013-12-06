@@ -1739,7 +1739,10 @@ function _checkThatParamIdsArePresent( body, paramIds, skipLast ){
   for( var i = 0; i < l; i ++){
      k = paramIds[ i ];
     if( typeof( body[ k ] ) === 'undefined' ){
-      errors.push( { field: k, message: 'Field required in the URL (API): ' + k } );
+
+      if( !skipLast && k !== paramIds[ l - 1 ] ){
+        errors.push( { field: k, message: 'Field required in the URL (API): ' + k } );
+      }
     } 
   };
 
