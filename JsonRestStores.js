@@ -1734,12 +1734,20 @@ function _fixRequestForApi( request ){
 function _checkThatParamIdsArePresent( body, paramIds, skipLast ){
   var errors = [], k;
 
+  // Check all of them except the last skipLast (this will be set to 1 for Post()
+  // as in Post() the ID won't be in the body
   var l = paramIds.length - skipLast;
 
   for( var i = 0; i < l; i ++){
      k = paramIds[ i ];
+
+    // Suspicion starts: the body is undefined!
     if( typeof( body[ k ] ) === 'undefined' ){
 
+      // Last escape: it might be a Put() and we might be checking
+      // for the ID (the last item in paramIds): in this case, it WON'T
+      // add the error as you can do Store.Put( 10, { name: 'Tony', surname: 'Mobily' } ) without
+      // the ID in the body
       if( !skipLast && k !== paramIds[ l - 1 ] ){
         errors.push( { field: k, message: 'Field required in the URL (API): ' + k } );
       }
