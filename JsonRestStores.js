@@ -760,7 +760,7 @@ var Store = declare( null,  {
       } else {
         // There was a problem: return the errors
         if( errors.length ){
-          next( new self.UnprocessableEntityError( { errors: errors } ) );
+          next( new self.UnprocessableEntityError( { errors: errors, whileRefetching: true } ) );
         } else {
           next( null, doc );
         }
@@ -1579,7 +1579,7 @@ Store.Get = function( id, options, next ){
   var request = new Class();
 
   // Fix it for the API
-  fixRequestForApi( request );
+  _fixRequestForApi( request );
 
   // Make up "params" to be passed to the _makeGet function
   var params = {};
@@ -1602,7 +1602,7 @@ Store.GetQuery = function( options, next ){
   var request = new Class();
 
   // Fix it for the API
-  fixRequestForApi( request );
+  _fixRequestForApi( request );
 
   // Turn off permissions etc.
   request.checkPermissionsGetQuery = function( params, body, options, cb ){ cb( null, true ); };
@@ -1624,8 +1624,13 @@ Store.Put = function( id, body, options, next ){
   // Make up the request
   var request = new Class();
 
-  // Fix it for the API
-  fixRequestForApi( request );
+  // Make sure all paramIds ARE in body (normal checks
+  // in _makePut will not work as paramIds will get zapped
+  var errors = _checkThatParamIdsArePresent( body, request.paramIds, 0 );
+  if( errors.length ) return next( new request.BadRequestError( { errors: errors } ) );
+
+  // Fix it for the API (will also zap request.paramIds)
+  _fixRequestForApi( request );
 
   // Make up "params" to be passed to the _makeGet function
   var params = {};
@@ -1664,8 +1669,13 @@ Store.Post = function( body, options, next ){
   // Make up the request
   var request = new Class();
 
-  // Fix it for the API
-  fixRequestForApi( request );
+  // Make sure all paramIds ARE in body (normal checks
+  // in _makePost will not work as paramIds will get zapped in a second
+  var errors = _checkThatParamIdsArePresent( body, request.paramIds, 1 );
+  if( errors.length ) return next( new request.BadRequestError( { errors: errors } ) );
+
+  // Fix it for the API (will also zap request.paramIds)
+  _fixRequestForApi( request );
 
   // Enrich `options` with `queryFilterType` and `searchConditions`
   // request._enrichOptionsFromClassDefaults( options );
@@ -1689,7 +1699,7 @@ Store.Delete = function( id, options, next ){
   var request = new Class();
 
   // Fix it for the API
-  fixRequestForApi( request );
+  _fixRequestForApi( request );
 
   // Make up "params" to be passed to the _makeDelete function
   var params = {};
@@ -1703,7 +1713,7 @@ Store.Delete = function( id, options, next ){
 }
 
 
-function fixRequestForApi( request ){
+function _fixRequestForApi( request ){
 
     // Strip all of the paramIds dictated by the original
     // definition, just leaves the last one
@@ -1720,6 +1730,21 @@ function fixRequestForApi( request ){
     request.remote = false;   
 }
 
+
+function _checkThatParamIdsArePresent( body, paramIds, skipLast ){
+  var errors = [], k;
+
+  var l = paramIds.length - skipLast;
+
+  for( var i = 0; i < l; i ++){
+     k = paramIds[ i ];
+    if( typeof( body[ k ] ) === 'undefined' ){
+      errors.push( { field: k, message: 'Field required in the URL (API): ' + k } );
+    } 
+  };
+
+  return errors;
+}
 
 
 exports = module.exports = Store;
