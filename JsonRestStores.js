@@ -339,26 +339,24 @@ var Store = declare( null,  {
   execPutDbUpdate: function( params, body, options, doc, fullDoc, cb ){
 
     var self = this;
-    //var updateObject = {};
+    var updateObject = {};
 
     // Make up the filter, based on the store's IDs (used as filters).
     var selector = {};
 
     self._enrichSelectorWithParams( selector, params );
 
-    // Simply copy values over except self.idProperty (which mustn't be
-    // overwritten)
-    // FIXME: ALL of the idProperties should be left alone and not
-    // get overwritten, not just the last one
-    //for( var i in body ){
-      // if( i != self.idProperty ) updateObject[ i ] = body[ i ];
-    //  updateObject[ i ] = body[ i ];
-    //}
-    
-    //    console.log( "SELECTOR:");
-    //    console.log( require('util').inspect( selector, { depth: 10 } ) );
+    // Make up the `updateObject` variable, based on the passed `body`
+    for( var i in body ) updateObject[ i ] = body[ i ];
 
-    self.dbLayer.update( selector, body, { deleteUnsetFields: true, multi: false }, function( err, howMany ){
+    // Add param IDs to the record that is being updated
+    self.paramIds.forEach( function( paramId ){
+      if( typeof( params[ paramId ] ) !== 'undefined' ){
+        updateObject[ paramId ] = params[ paramId ];
+      }
+    });
+
+    self.dbLayer.update( selector, updateObject, { deleteUnsetFields: true, multi: false }, function( err, howMany ){
       if( err ){
         cb( err );
       } else {
