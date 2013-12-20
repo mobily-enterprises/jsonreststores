@@ -16,6 +16,8 @@ Tests for:
   * self.deleteAfterGetQuery 
   * { delete: true } in GetQuery
   * Missing paramId in API Post or Put
+  * Check that paramId have priority over body for putExisting, putNew, post
+  * Check that indexing works
 */
 
 var 

@@ -69,6 +69,8 @@ var Store = declare( null,  {
   hardLimitOnQueries: 50,
   deleteAfterGetQuery: false,
 
+  indexStyle: "simple",
+
   // ****************************************************
   // *** FUNCTIONS THAT CAN BE OVERRIDDEN BY DEVELOPERS
   // ****************************************************
@@ -113,7 +115,6 @@ var Store = declare( null,  {
   // *** END OF FUNCTIONS/ATTRIBUTES THAT NEED/CAN BE OVERRIDDEN BY DEVELOPERS
   // **************************************************************************
 
-
   idProperty: null, // Calculated by constructor: last item of paramIds
 
   // Default error objects which might be used by this module.
@@ -126,6 +127,98 @@ var Store = declare( null,  {
   NotImplementedError: e.NotImplementedError,
   ServiceUnavailableError: e.ServiceUnavailableError,
 
+
+
+  // Make all indexes based on the schema
+  makeIndexes: function( options ){
+
+    // THANK YOU http://stackoverflow.com/questions/9960908/permutations-in-javascript
+    // Permutation function
+    function permute( input ) {
+      var permArr = [],
+      usedChars = [];
+      function main( input ){
+        var i, ch;
+        for (i = 0; i < input.length; i++) {
+          ch = input.splice(i, 1)[0];
+          usedChars.push(ch);
+          if (input.length == 0) {
+            permArr.push( usedChars.slice() );
+          }
+          main( input );
+          input.splice( i, 0, ch );
+          usedChars.pop();
+        }
+        return permArr;
+      }
+      return main(input);
+    }
+
+    var self = this;
+    var idsHash = {};
+    var style;
+
+    // Set options to a sane default
+    if( typeof( options ) !== 'object' || options === null ) options = {};
+    if( typeof( options.style ) !== 'string'  ){
+      style = self.indexStyle;
+    } else if( options.style === 'simple' || options.style === 'permute' ){
+      style = options.style;
+    } else {
+      style = self.indexStyle;
+    }
+
+    // Make idsHash, the common beginning of any indexing
+    self.paramIds.forEach( function( p ) {
+      idsHash[ p ] = 1;
+    });
+    self.dbLayer.makeIndex( idsHash );
+
+    // The type of indexing will depend on the style...
+    switch( style ){
+
+      case 'simple':
+
+        // Simple style: it will create one index per field,
+        // where each index starts with paramIds
+        Object.keys( self.fields ).forEach( function( field ){
+          var keys = {};
+          for( var k in idsHash ) keys[ k ] = idsHash[ k ];
+          if( typeof( idsHash[ field ] ) === 'undefined' ){
+            keys[ field ] = 1;
+            self.dbLayer.makeIndex( keys );
+          }
+        });
+
+      break;
+
+      case 'permute':
+       
+        // Complete style: it will create indexes for _all_ permutations
+        // of searchable fields, where each permutation will start with paramIds
+        var toPermute = [];
+        Object.keys( self.fields ).forEach( function( field ){
+          if( typeof( idsHash[ field ] ) === 'undefined' ) toPermute.push( field );
+        });
+
+        // Create index for each permutation
+        permute( toPermute ).forEach( function( combination ){
+          var keys = {};
+          for( var k in idsHash ) keys[ k ] = idsHash[ k ];
+
+          for( var i = 0; i < combination.length; i ++ ) keys[ combination[ i ]  ] = 1;
+          self.dbLayer.makeIndex( keys );
+        });
+        
+      break;
+
+      default:
+        throw( new Error("indexStyle needs to be 'simple' or 'permute'" ) );
+      break;
+
+    }
+ 
+  },
 
   constructor: function( DbLayer ){
 
@@ -235,6 +328,9 @@ var Store = declare( null,  {
     // set this to `true` if the query is not cursor-based (this will prevent
     // a million results from being returned)
     self.dbLayer.hardLimitOnQueries = self.hardLimitOnQueries;
+
+    // Sets the self.fields variable, which will be handy to know what's a field and searchable
+    self.fields = fields;
   },
 
 
@@ -448,7 +544,7 @@ var Store = declare( null,  {
         condition = searchable.condition || 'and';
       }
 
-      if( ! self.dbLayer.fields ){
+      if( ! self.fields ){
         errors.push( { field: field, message: 'Field not allowed in search: ' + filter + ' in ' + self.storeName } );
       } else {
         conditions[ condition ].push( { field: field, type: type, value: filters[ filterField ] } );
