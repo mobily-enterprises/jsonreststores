@@ -1,7 +1,7 @@
 JsonRestStores
 ==============
 
-JsonRestStores is a one-stop module that allows you to create fully functional, configurable Json REST stores using NodeJS. A store can be inherited from another store, and can define all sorts of hooks to configure how it behaves and what it does (including permissions). It's also very easy to create "nested" stores (`http://www.example.com/bookings/1234/users` for example).
+JsonRestStores is a one-stop module that allows you to create fully functional, configurable Json REST stores using NodeJS. A store can be inherited from another store, and can define all sorts of hooks to configure how it behaves and what it does (including permissions). It even creates the right indexes for you. It's also very easy to create "nested" stores (`http://www.example.com/bookings/1234/users` for example).
 
 Database access is done using [simpledblayer](https://github.com/mercmobily/simpledblayer), which at the moment supports:
 
@@ -37,15 +37,16 @@ And then to access users for that booking:
 
 It sounds simple enough (although it's only two tables and it already looks rather boring). It gets tricky when you consider that:
 
-* You need to make sure that permissions are always carefully checked. For example, only users within booking 1234 can `GET /bookings/:bookingId/users`
+* You need to make sure that permissions are always carefully checked. For example, only users that are part of booking `1234` can `GET /bookings/:bookingId/users`
 * You need to make sure you behave correctly in your `PUT` calls, as data might already be there
 * When implementing `GET /bookings/`, you need to make sure people can filter and order by the right fields by parsing the URL correctly. When you do that, you need to keep in mind that different parameters will need to trigger different filters on the database (for example, `GET /bookings?dateFrom=1976-01-10&name=Tony` will need to filter, on the database, all bookings made after the 10th of January 1976 by Tony).
 * When implementing `GET /bookings/`, you need to return the right `Content-Range` HTTP headers in your results
 * When implementing `GET /bookings/`, you also need to make sure you take into account any `Range` header set by the client, who might only want to receive a subset of the data
 * With `POST` and `PUT`, you need to make sure that data is validated against some kind of schema, and return the appropriate errors if it's not.
 * With `PUT`, you need to consider the HTTP headersd `If-match` and `If-none-match` to see if you can/should/must overwrite existing records
-* You must remember to get your filters right: when implementing `GET /bookings/:bookingId/users/:userId`, you must make sure that you are making queries to the database without forgetting `:bookingId`. This sounds pretty obvious with only 2 stores...
+* You must remember to get your filters right: when implementing `GET /bookings/:bookingId/users/:userId`, you must make sure that you are making queries to the database without forgetting `:bookingId`. This sounds pretty obvious with only 2 stores, gets tricky when you have a few dozens.
 * Don't forget about URL format validation: you need to make sure that anything submitted by the user is sanitised etc.
+* You need to create database indexes the right way, so that searches are not slow.
 
 This is only a short list of obvious things. There are many more to consider.
 
@@ -76,6 +77,8 @@ To understand stores and client interaction, you can read [Dojo's JsonRest store
 * All unimplemented methods will return a `501 Unimplemented Method` server response
 
 * It's able to manipulate only a subset of your DB data. If you have existing tables/collections, JsonRestStores will only ever touch the fields defined in your store's schema.
+
+* It will instruct the database layer to create indexes according to what's marked as `searchable` in the schema; this includes creating compound keys for the definind IDs (for example, a store providing `/bookings/1234/users/5678/products` will have `bookingId`, `userId` and `productId` as compound keys). You can decide the indexing style: `simple` (fewer indexes, but conplex queries won't be fully indexed) or compound (more indexes, and every query is guaranteed to be fully indexed).
 
 * It's highly addictive. You will never want to write an API call by hand again.
 
@@ -540,7 +543,6 @@ It's important to be consistent in naming conventions while creating stores. In 
 
 #### Nested stores    
 
-
     var Cars = declare( JRS, { 
 
       schema: new Schema({
@@ -672,6 +674,58 @@ The method's signature is:
     prepareBeforeSend( doc, cb )
 
 ## Queries
+
+### `indexStyle`
+
+This attribute can be `simple` (which is the class' default) or `permute`. It defines how indexes will be created when the method `makeIndexes()` is called.  (Note that indexes are never created automatically: you do need to call `makeIndexes()` to create them).
+
+To understand how indexes are created, take this example schema:
+
+    // ...
+    schema: new Schema({
+      personId  : { type: 'id' }
+      bookingId : { type: 'id' },
+
+      name      : { type: 'string', searchable: true },
+      surname   : { type: 'string', searchable: true },
+      age       : { type: 'string', searchable: true },
+      }),
+    paramIds: [ 'bookingId', 'personId' ],
+    
+    // ...
+ 
+This store could be reachable from `/bookings/:bookingId/people/:personId`.
+When calling `makeIndexes()`, the following indexes are always created:
+
+* `personId`. This, as the last item in paramIds, is created as an `unique` index.
+* `bookingId+personId`. Basically, a compound index that includes `bookingId` and `personId` contatenated
+
+However there are other searchable fields:  `name`, `surname` and `age` that need to be indexed. What yo udo know, is that this store will **always** look for records filtering _at least_ by `personId` and `bookingId`. So, when `indexStyle` is simple, the following compound indexes are created:
+
+* `bookingId+personId+name`
+* `bookingId+personId+surname`
+* `bookingId+personId+age`
+
+This means that when filtering by `name`, the query will be fully indexed. However, what if a very common use-case is to search by name, surname and age at the same time? Most database servers will perform reasonably well, but will only be able to use one of the three compound indexes (normally, the one with the most information).
+
+If you want to make absolute sure that every query will use indexes, you should set `indexStyle` as `permute`, which will create:
+
+* `bookingId+personId+name+surname+age`
+* `bookingId+personId+name+age+surname`
+* `bookingId+personId+surname+name+age`
+* `bookingId+personId+surname+age+name`
+* `bookingId+personId+age+name+surname`
+* `bookingId+personId+age+surname+name`
+
+It basically creates a compound index for every possible searching combination. Watch out! Increasing the number of fields will tend to blow out the number of indexes your database will need to keep up to date every time there is a write!
+
+### Partial permutations?
+
+If you have a situation where you have a lot of searchable fields, and only wish to permute some of them, you can:
+
+* Create the store with `indexStyle` set to `simple`
+* Create another store that inherits from the previous one, but sets `indexStyle` to permute and `searchSchema` to the list of fields you want to permute
+* Run `createIndexes()` on both stores
 
 ### `deleteAfterGetQuery`
 
