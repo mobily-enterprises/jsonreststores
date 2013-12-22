@@ -130,6 +130,9 @@ var Store = declare( null,  {
 
 
   // Make all indexes based on the schema
+  // Options can have:
+  //   `{ background: true }`, which will make sure makeIndex is called with { background: true }
+  //   `{ style: 'simple' | 'permute' }`, which will override the indexing style set by the store
   makeIndexes: function( options ){
 
     // THANK YOU http://stackoverflow.com/questions/9960908/permutations-in-javascript
@@ -157,9 +160,13 @@ var Store = declare( null,  {
     var self = this;
     var idsHash = {};
     var style;
+    var opt = {};
 
-    // Set options to a sane default
-    if( typeof( options ) !== 'object' || options === null ) options = {};
+    // Create `opt`, the options object passed to the db driver
+    if( typeof( options ) === 'undefined' || options === null ) options = {};
+    opt.background = !!options.background;
+
+    // Sanitise the `style` parameter to either 'simple' or 'permute'
     if( typeof( options.style ) !== 'string'  ){
       style = self.indexStyle;
     } else if( options.style === 'simple' || options.style === 'permute' ){
@@ -168,11 +175,20 @@ var Store = declare( null,  {
       style = self.indexStyle;
     }
 
-    // Make idsHash, the common beginning of any indexing
+    // Index this.idProperty as unique, as it must be
+    var uniqueIndexOpt = {};
+    uniqueIndexOpt.background = !! options.background;
+    uniqueIndexOpt.unique = true;
+    
+    self.dbLayer.makeIndex( this.idProperty, uniqueIndexOpt );
+
+    // Make idsHash, the common beginning of any indexing. It also creates an
+    // index with it. Not necessary in most DBs if there is at least one indexed field
+    // (partial indexes can be used), but good to have in case there aren't other fields.
     self.paramIds.forEach( function( p ) {
       idsHash[ p ] = 1;
     });
-    self.dbLayer.makeIndex( idsHash );
+    self.dbLayer.makeIndex( idsHash, opt );
 
     // The type of indexing will depend on the style...
     switch( style ){
@@ -186,7 +202,7 @@ var Store = declare( null,  {
           for( var k in idsHash ) keys[ k ] = idsHash[ k ];
           if( typeof( idsHash[ field ] ) === 'undefined' ){
             keys[ field ] = 1;
-            self.dbLayer.makeIndex( keys );
+            self.dbLayer.makeIndex( keys, opt );
           }
         });
 
@@ -207,7 +223,7 @@ var Store = declare( null,  {
           for( var k in idsHash ) keys[ k ] = idsHash[ k ];
 
           for( var i = 0; i < combination.length; i ++ ) keys[ combination[ i ]  ] = 1;
-          self.dbLayer.makeIndex( keys );
+          self.dbLayer.makeIndex( keys, opt );
         });
         
       break;
@@ -218,6 +234,10 @@ var Store = declare( null,  {
 
     }
  
+  },
+
+  dropAllIndexes: function( done ){
+    this.dbLayer.dropAllIndexes( done );
   },
 
   constructor: function( DbLayer ){
