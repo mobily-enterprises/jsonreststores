@@ -219,7 +219,7 @@ Your `storesRoutes.js` file will then use `dbSpecific-mongo.js` to get the those
       var Managers = declare( JRS, {
     
         schema: new Schema({
-          id     : { type: 'id', required: true },
+          id     : { type: 'id' },
           name   : { type: 'string', trim: 60 },
           surname: { type: 'string', trim: 60 },
         }),
@@ -290,7 +290,7 @@ Here is how you make a fully compliant store:
       var Managers = declare( JRS, {
 
         schema: new Schema({
-          id     : { type: 'id', required: true },
+          id     : { type: 'id' },
           name   : { type: 'string', trim: 60 },
           surname: { type: 'string', trim: 60 },
         }),
@@ -446,7 +446,7 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
       var Managers= declare( JRS, {
 
         schema: new Schema({
-          id     : { type: 'id', required: true },
+          id     : { type: 'id' },
           name   : { type: 'string', trim: 60 },
           surname: { type: 'string', trim: 60 },
         }),
@@ -470,10 +470,10 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
 
         schema: new Schema({
 
-          id       : { type: 'id', required: true },
-          managerId: { type: 'id', required: true },
-          make     : { type: 'string', trim: 60 },
-          model    : { type: 'string', trim: 60 },
+          id       : { type: 'id' },
+          managerId: { type: 'id' },
+          make     : { type: 'string', trim: 60, required: true },
+          model    : { type: 'string', trim: 60, required: true },
         }),
 
         paramIds: [ 'managerId', 'id' ],
@@ -496,8 +496,9 @@ You have two stores: one is the simple `Managers` store with a list of names and
 The ManagersCars store will will respond to `GET /managers/2222/cars/3333` (to fetch car 3333 of manager 2222), `GET /workspace/2222/users` (to get all cars of manager 2222), and so on.
 
 Remember that in `ManagersCars`:
+
 * Queries will _always_ honour the filter on `managerId`, both in queries and single-record operations.
-* Fields listed in `paramIds` are also defined in the store's schema, and marked as `required`
+* Fields listed in `paramIds` are also defined in the store's schema, but there is _no need_ to make them as `required`.
 * The second parameter of `onlineAll()` included all `paramIds` except the last one
 * The third parameter of `onlineAll()` includes the field that will be used as unique ID for the store (`id`): this id will be used to identify unique records in the table
 
@@ -510,7 +511,7 @@ It's important to be consistent in naming conventions while creating stores. In 
     var Managers = declare( JRS, { 
 
       schema: new Schema({
-        id: { type: 'id', required: true },
+        id: { type: 'id' },
         // ...
       });
 
@@ -525,7 +526,7 @@ It's important to be consistent in naming conventions while creating stores. In 
     var People = declare( JRS, { 
 
       schema: new Schema({
-        id: { type: 'id', required: true },
+        id: { type: 'id' },
         // ...
       });
 
@@ -546,7 +547,7 @@ It's important to be consistent in naming conventions while creating stores. In 
     var Cars = declare( JRS, { 
 
       schema: new Schema({
-        id: { type: 'id', required: true },
+        id: { type: 'id' },
         // ...
       });
 
@@ -560,8 +561,8 @@ It's important to be consistent in naming conventions while creating stores. In 
     var ManagersCars = declare( Store, { 
 
       schema: new Schema({
-        managerId: { type: 'id', required: true }
-        id: { type: 'id', required: true },
+        managerId: { type: 'id' }
+        id: { type: 'id' },
         // ...
       });
 
@@ -574,8 +575,8 @@ It's important to be consistent in naming conventions while creating stores. In 
     var PeopleCars = declare( Store, { 
 
       schema: new Schema({
-        personId: { type: 'id', required: true }
-        id: { type: 'id', required: true },
+        personId: { type: 'id' }
+        id: { type: 'id' },
         // ...
       });
  
@@ -597,8 +598,8 @@ Sometimes, you need to create a basic store that interfaces with a specific data
     var PeopleCars = declare( Store, { 
 
       schema: new Schema({
-        personId: { type: 'id', required: true }
-        id: { type: 'id', required: true },
+        personId: { type: 'id' }
+        id: { type: 'id' },
         // ...
       });
  
