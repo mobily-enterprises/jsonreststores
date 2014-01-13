@@ -624,6 +624,44 @@ The store PeopleCarsList is nearly exactly the same as PeopleCars: the only diff
 You might even create a basic store _without_ running `onlineAll()` for it, and then derive several stores from it, each with a slightly different URL and (most likely) different permissions.
 
 
+# Relocation and before
+
+Both `PUT` and `POST` calls will check for headers to see if an item is being relocated:
+
+* `X-rest-before`. If set, the item will be placed _before_ the one with the ID corresponding to the header value.
+* `X-rest-relocation`. If set, JsonRestStore will actually ignore the data, and will simply relocate the item as it was. This is useful if you want your client to trigger a relocation without re-submitting (useless) data to the server.
+
+Note that the way items are relocated is beyond the scope of JsonRestStores, which calls the DB layer's `_relocate` function. All you have to do to allow relocation is define a `positionField`:
+
+      var Managers= declare( JRS, {
+
+        schema: new Schema({
+          id     : { type: 'id' },
+          name   : { type: 'string', trim: 60 },
+          surname: { type: 'string', trim: 60 },
+        }),
+
+        positionField: 'order',
+
+        paramIds: [ 'id' ],
+        storeName: 'Managers',
+
+        handlePut: true,
+        handlePost: true,
+        handleGet: true,
+        handleGetQuery: true,
+        handleDelete: true,
+
+        hardLimitOnQueries: 50,
+      });
+
+Note that:
+
+* The field is not part of the schema, and therefore it cannot be fetched/recorded directly
+* You cannot search by `positionField`, nor order by it
+* JsoNRestStores will return items ordered by `positionField` when no sorting option is provided
+* The `positionField` will be indexed
+
 # Important methods and attributes you can override
 
 The basic `Store` class uses a rather long list of stock methods to complete requests. Some of them are there so that you can override them.
