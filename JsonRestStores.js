@@ -69,6 +69,8 @@ var Store = declare( null,  {
   hardLimitOnQueries: 50,
   deleteAfterGetQuery: false,
 
+  positionField: null,
+
   indexStyle: "simple",
 
   // ****************************************************
@@ -341,8 +343,12 @@ var Store = declare( null,  {
     }
 
     // Create the dbLayer object, ready to accept insert/delete/select/update operations
-    // on that specific collection
-    self.dbLayer = new self.DbLayer( self.collectionName, fields );
+    // on that specific collection . Add positonField as a db field if this.positionField is set
+
+    var dbFields = {};
+    for( var k in fields ) dbFields[ k ] = fields[ k ];
+    if( self.positionField ) dbFields[ self.positionField ] = null;
+    self.dbLayer = new self.DbLayer( self.collectionName, dbFields );
 
     // Set the DB's hard limit on queries. DB-specific implementations will
     // set this to `true` if the query is not cursor-based (this will prevent
@@ -612,8 +618,19 @@ var Store = declare( null,  {
         options.overwrite = true;
       if( req.headers[ 'if-none-match' ] === '*' )
         options.overwrite = false;
+
     }
 
+    // Put and Post can come with extra headers which will set
+    // options.beforeId and options.relocation
+    if( mn === 'Put' || mn === "Post" ){
+
+      if( typeof( req.headers[ 'x-hotplate-before' ] ) !== 'undefined' )
+        options.beforeId = req.headers[ 'x-hotplate-before' ];
+
+      if( typeof( req.headers[ 'x-hotplate-relocation' ] ) !== 'undefined' )
+        options.relocation = true;
+    }
 
     // Set the 'SortBy', 'ranges' and 'filters' in
     // the options, based on the passed headers
@@ -727,6 +744,13 @@ var Store = declare( null,  {
     // pass {delete: true } to the db layer
     if( options.delete || self.deleteAfterGetQuery ){
       dbLayerOptions.delete = true;
+    }
+
+    if( typeof( options.sort ) === 'undefined' || options.sort === null ) options.sort = {}; 
+
+    // Sort by self.positionField if sort is empty and self.positionField is defined
+    if( Object.keys( options.sort ).length === 0 && self.positionField ){
+      options.sort[ self.positionField ] = 1;
     }
 
     self._queryMakeSelector( options.filters, options.sort, options.ranges, function( err, selector ){
@@ -868,7 +892,18 @@ var Store = declare( null,  {
 
     // Cast the values. This is a relaxed check: if a field is missing, it won't
     // complain. This way, applications won't start failing when adding fields
-    self.schema.validate( doc, { onlyObjectValues: true, deserialize: true }, function( err, doc, errors ) {
+    //var alwaysAllow = [];
+    var skipCast = [];
+    if( self.positionField ) {
+      //alwaysAllow.push( self.positionField );
+      skipCast.push( self.positionField );
+    }
+
+    // Note: alwaysAllow is a feature I THOUGHT of adding to simpleSchema, but ended up taking it out. Delete all references
+    // to alwaysAllow when I am comfortable with the current solution
+
+    //self.schema.validate( doc, { onlyObjectValues: true, deserialize: true, alwaysAllow: alwaysAllow, skipCast: skipCast }, function( err, doc, errors ) {
+    self.schema.validate( doc, { onlyObjectValues: true, deserialize: true, skipCast: skipCast }, function( err, doc, errors ) {
       if( err ){
         next( err );
       } else {
@@ -964,6 +999,7 @@ var Store = declare( null,  {
 
     // Check the IDs
     self._checkParamIds( params, body, true, function( err ){  
+      // if( err ) return this._sendError( next, err );
       self._sendErrorOnErr( err, next, function(){
 
         self.prepareBodyPost( body, function( err, body ){
@@ -997,6 +1033,8 @@ var Store = declare( null,  {
                             self.execPostDbInsertNoId( params, body, options, generatedId, function( err, fullDoc ){
                               self._sendErrorOnErr( err, next, function(){
         
+                                self._relocation( fullDoc[ self.idProperty ], options.beforeId );
+ 
                                 self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                   self._sendErrorOnErr( err, next, function(){
         
@@ -1090,11 +1128,67 @@ var Store = declare( null,  {
   },
 
 
+  _relocation: function( id, moveBeforeId, next ){
+
+    var self = this;
+    //console.log("CALLED CHANGE POSITION, ID: ", id, " BEFORE: ", moveBeforeId );
+    if( typeof( moveBeforeId ) === 'undefined' ) return;
+
+    // The last parameter, the callback, can be optional
+    if( typeof( next ) !== 'function' ) next = function(){};
+     
+    //console.log("CHECKING THAT MOVEBEFOREID WORKS..." , moveBeforeId, typeof( moveBeforeId ));
+   
+    // If moveBeforeId is 'null', then there is no need to look it
+    // up to make sure it exists
+    if( moveBeforeId === 'null' ){
+      //console.log("OK, moveBeforeId is null, can run anyway ");
+      self.dbLayer.relocation( self.positionField, self.idProperty, id, null, function( err ){
+        if( err ) return self._sendError( next, err );
+        next( null );
+      } );
+
+    // Check that moveBeforeId exists. Since this is not _actually_
+    // a field, looking it up is a bit of a challenge (we need to do
+    // manual casting etc.)
+    } else {
+ 
+      // Make up a fake record just with idProperty, which will be
+      // used to lookup moveBeforeId
+      var fakeBody = {};
+      fakeBody[ self.idProperty ] = moveBeforeId;
+
+      // Try and cast that fakeBody. If successful, fakeBody[ idProperty ]
+      // will be cast and ready to be used for the search
+      self._castDoc( fakeBody, function( err, doc ){
+        if( err ) return self._sendError( next, err );
+
+        //console.log("NEW DOC:" , doc );
+
+        // At this point, doc[ idProperty ] is all cast, ready to look for it
+        self.dbLayer.select( { conditions: { and: [ { field: self.idProperty, type: 'eq', value: doc[ self.idProperty ] } ] } }  , function( err, docs ){
+          if( err ) return self._sendError( next, err );
+
+          // moveBeforeId wasn't found -- not found error
+          if( ! docs.length === 0 ) return self._sendError( new self.NotFoundError );
+
+          //console.log( "OK, moveBeforeId exists!" );
+          self.dbLayer.relocation( self.positionField, self.idProperty, id, moveBeforeId, function( err ){
+            if( err ) return self._sendError( next, err );
+            next( null );
+          } );
+        });
+      });
+    } 
+
+  },
+
   _makePut: function( params, body, options, next ){
 
     var self = this;
     var overwrite;
     var body;
+
 
     if( typeof( next ) !== 'function' ) next = function(){};
 
@@ -1103,7 +1197,69 @@ var Store = declare( null,  {
       self._sendError( next, new self.NotImplementedError( ) );
       return;
     }
-   
+
+
+    // DETOUR: It's a relocation. Simply try and relocate the record
+    // (after the usual permissions etc.)
+    if( options.relocation && options.beforeId ){
+      
+      self._checkParamIds( params, body, false, function( err ){  
+        self._sendErrorOnErr( err, next, function(){
+
+          self.execAllDbFetch( params, body, options, function( err, fullDoc ){
+            self._sendErrorOnErr( err, next, function(){
+
+              if( ! fullDoc ){
+                self._sendError( next, new self.NotFoundError());
+              } else {
+
+                self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
+                  self._sendErrorOnErr( err, next, function(){
+        
+                    self._castDoc( doc, function( err, doc) {
+                      self._sendErrorOnErr( err, next, function(){
+        
+                        // Actually check permissions
+                        self.checkPermissionsPutExisting( params, body, options, doc, fullDoc, function( err, granted ){
+                          self._sendErrorOnErr( err, next, function(){
+            
+                            if( ! granted ){
+                              self._sendError( next, new self.ForbiddenError() );
+                            } else {
+// MERC
+                              self._relocation( fullDoc[ self.idProperty ], options.beforeId );
+
+                              self.afterPutExisting( params, body, options, doc, fullDoc, doc, fullDoc, options.overwrite, function( err ) {
+                                self._sendErrorOnErr( err, next, function(){
+                                  if( self.remote ){ 
+                                    self._res.json( 200, doc );
+                                  } else {
+                                    next( null, doc );
+                                  }
+
+                                });
+                              });
+                            }
+                          });
+                        });
+
+                      });
+                    });
+                 
+                  });
+                });
+ 
+              }
+            });
+          });
+
+        });
+      });
+
+      // That's it -- don't do anything else.
+      return;
+    }
+ 
     // Check the IDs.
     self._checkParamIds( params, body, false, function( err ){  
       self._sendErrorOnErr( err, next, function(){
@@ -1162,6 +1318,8 @@ var Store = declare( null,  {
                                 self.execPutDbInsert( params, body, options, function( err, fullDoc ){
                                   self._sendErrorOnErr( err, next, function(){
         
+                                    self._relocation( fullDoc[ self.idProperty ], options.beforeId );
+
                                     self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                       self._sendErrorOnErr( err, next, function(){
         
@@ -1255,6 +1413,7 @@ var Store = declare( null,  {
                                         self.execPutDbUpdate( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
                                           self._sendErrorOnErr( err, next, function(){
        
+                                           self._relocation( fullDoc[ self.idProperty ], options.beforeId );
  
                                             self.extrapolateDoc( params, body, options, fullDocAfter, function( err, docAfter ) {
                                               self._sendErrorOnErr( err, next, function(){
@@ -1690,7 +1849,12 @@ Store.Get = function( id, options, next ){
   if( len == 2 ) { next = options; options = {}; };
 
   // Make up the request
+  try {
+
   var request = new Class();
+  } catch (e ){
+    console.log("ERROR: " , e );
+  }
 
   // Fix it for the API
   _fixRequestForApi( request );
