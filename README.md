@@ -623,6 +623,16 @@ The store PeopleCarsList is nearly exactly the same as PeopleCars: the only diff
 
 You might even create a basic store _without_ running `onlineAll()` for it, and then derive several stores from it, each with a slightly different URL and (most likely) different permissions.
 
+# Artificial delays
+
+When testing the application locally, everything is fast and zippy. However, stores don't tend to behave like that in real life. If your application implements things like drag&drop, form saving, etc, you often want to see how it behaves in "real life" -- in a situation where responses can take anything between 1 and 8 seconds.
+
+In order for force JsonRestStores to add an artificial delay to _every_ online request (it won't apply to API), just assign a value to JsonRestStores.artificialDelay, like this:
+
+    var JsonRestStores = require('jsonreststores');
+    JsonRestStores.artificialDelay = 8000;
+
+This will apply to _every_ online request, which will be delayed by 8 seconds.
 
 # Relocation and before
 

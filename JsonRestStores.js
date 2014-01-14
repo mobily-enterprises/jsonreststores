@@ -625,10 +625,10 @@ var Store = declare( null,  {
     // options.beforeId and options.relocation
     if( mn === 'Put' || mn === "Post" ){
 
-      if( typeof( req.headers[ 'x-hotplate-before' ] ) !== 'undefined' )
-        options.beforeId = req.headers[ 'x-hotplate-before' ];
+      if( typeof( req.headers[ 'x-rest-before' ] ) !== 'undefined' )
+        options.beforeId = req.headers[ 'x-rest-before' ];
 
-      if( typeof( req.headers[ 'x-hotplate-relocation' ] ) !== 'undefined' )
+      if( typeof( req.headers[ 'x-rest-relocation' ] ) !== 'undefined' )
         options.relocation = true;
     }
 
@@ -1810,8 +1810,14 @@ Store.online = {};
         options.delete = !!request.deleteAfterGetQuery;
       }
 
-      // Actually run the request
-      request['_make' + mn ]( params, body, options, next );
+      if(Store.artificialDelay ) {
+        setTimeout( function(){
+          // Actually run the request
+          request['_make' + mn ]( params, body, options, next );
+        }, Store.artificialDelay );
+      } else {
+        request['_make' + mn ]( params, body, options, next );
+      }
 
     }
   }
@@ -2035,7 +2041,7 @@ function _checkThatParamIdsArePresent( body, paramIds, skipLast ){
   return errors;
 }
 
-
 exports = module.exports = Store;
+Store.artificialDelay = 0;
 
 
