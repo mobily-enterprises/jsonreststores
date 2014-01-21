@@ -1044,7 +1044,8 @@ var Store = declare( null,  {
                             self.execPostDbInsertNoId( params, body, options, generatedId, function( err, fullDoc ){
                               self._sendErrorOnErr( err, next, function(){
         
-                                self._relocation( fullDoc[ self.idProperty ], options ? options.beforeId : null  );
+                                //console.log("RUNNING RELOCATION:", fullDoc[ self.idProperty ], options && options.beforeId ? options.beforeId : null   );
+                                self._relocation( fullDoc[ self.idProperty ], options && options.beforeId ? options.beforeId : 'null'  );
  
                                 self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                   self._sendErrorOnErr( err, next, function(){
@@ -1142,12 +1143,16 @@ var Store = declare( null,  {
   _relocation: function( id, moveBeforeId, next ){
 
     var self = this;
-    //console.log("CALLED CHANGE POSITION, ID: ", id, " BEFORE: ", moveBeforeId );
-    if( typeof( moveBeforeId ) === 'undefined' ) return;
 
     // The last parameter, the callback, can be optional
     if( typeof( next ) !== 'function' ) next = function(){};
-     
+
+    // PositionField is null: nothing for us to do
+    if( self.positionField === 'null' ) return next( null );
+
+    //console.log("CALLED CHANGE POSITION, ID: ", id, " BEFORE: ", moveBeforeId );
+    if( typeof( moveBeforeId ) === 'undefined' ) return next( null );
+  
     //console.log("CHECKING THAT MOVEBEFOREID WORKS..." , moveBeforeId, typeof( moveBeforeId ));
    
     // If moveBeforeId is 'null', then there is no need to look it
@@ -1155,7 +1160,7 @@ var Store = declare( null,  {
     if( moveBeforeId === 'null' ){
       //console.log("OK, moveBeforeId is null, can run anyway ");
       self.dbLayer.relocation( self.positionField, self.idProperty, id, null, function( err ){
-        if( err ) return self._sendError( next, err );
+        if( err ) return next( err );
         next( null );
       } );
 
@@ -1172,20 +1177,19 @@ var Store = declare( null,  {
       // Try and cast that fakeBody. If successful, fakeBody[ idProperty ]
       // will be cast and ready to be used for the search
       self._castDoc( fakeBody, function( err, doc ){
-        if( err ) return self._sendError( next, err );
-
-        //console.log("NEW DOC:" , doc );
+        if( err ) return next( err );
 
         // At this point, doc[ idProperty ] is all cast, ready to look for it
         self.dbLayer.select( { conditions: { and: [ { field: self.idProperty, type: 'eq', value: doc[ self.idProperty ] } ] } }  , function( err, docs ){
-          if( err ) return self._sendError( next, err );
+          if( err ) return next( err );
 
           // moveBeforeId wasn't found -- not found error
           if( ! docs.length === 0 ) return self._sendError( new self.NotFoundError );
 
           //console.log( "OK, moveBeforeId exists!" );
           self.dbLayer.relocation( self.positionField, self.idProperty, id, moveBeforeId, function( err ){
-            if( err ) return self._sendError( next, err );
+            if( err ) return next( err );
+
             next( null );
           } );
         });
