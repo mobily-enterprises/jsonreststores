@@ -560,9 +560,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             test.equal( type, 'bytes' );
             test.equal( status, 201 );
             test.equal( data, '' );
+            test.done();
           }))
-  
-          test.done();
         });
       },
   

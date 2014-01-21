@@ -38,7 +38,7 @@ var Store = declare( null,  {
   // *** ATTRIBUTES THAT NEED TO BE DEFINED IN PROTOTYPE
   // ****************************************************
 
-  paramIds: [ ],
+  paramIds: null,
   schema: null,
   storeName: null, // Must be defined in prototype
 
@@ -259,6 +259,11 @@ var Store = declare( null,  {
 
     this.collectionName = this.collectionName ? this.collectionName : this.storeName;
 
+    // If paramId is not specified, takes it from publicURL
+    if( self.paramIds === null ){
+      self.paramIds =  ( self.publicURL + '/').match(/:.*?\/+/g).map( function(i){return i.substr(1, i.length - 2 )  } );
+    }
+   
     // Sets proto.paramId, which (as for the principle of 
     // least surprise) must be the last paramId passed to
     // the store.
@@ -277,6 +282,18 @@ var Store = declare( null,  {
     // Sets SearchSchema
     if( self.searchSchema == null ){
       self.searchSchema = self.schema;
+    }
+
+    // By default, paramIds are set in schema and searchSchema as { type: 'id' } so that developers
+    // can be lazy when defining their schemas
+    for( var i =0, l = self.paramIds.length; i < l; i ++ ){
+      var k = self.paramIds[ i ];
+      if( typeof( self.schema.structure[ k ] ) === 'undefined' ){
+         self.schema.structure[ k ] = { type: 'id' };
+      }
+      if( typeof( self.searchSchema.structure[ k ] ) === 'undefined' ){
+        self.searchSchema.structure[ k ] = { type: 'id' };
+      }
     }
 
     // Set `fields`, which will need to conform DbLayer's format: every key defined is in the schema, and keys
@@ -892,17 +909,11 @@ var Store = declare( null,  {
 
     // Cast the values. This is a relaxed check: if a field is missing, it won't
     // complain. This way, applications won't start failing when adding fields
-    //var alwaysAllow = [];
     var skipCast = [];
     if( self.positionField ) {
-      //alwaysAllow.push( self.positionField );
       skipCast.push( self.positionField );
     }
 
-    // Note: alwaysAllow is a feature I THOUGHT of adding to simpleSchema, but ended up taking it out. Delete all references
-    // to alwaysAllow when I am comfortable with the current solution
-
-    //self.schema.validate( doc, { onlyObjectValues: true, deserialize: true, alwaysAllow: alwaysAllow, skipCast: skipCast }, function( err, doc, errors ) {
     self.schema.validate( doc, { onlyObjectValues: true, deserialize: true, skipCast: skipCast }, function( err, doc, errors ) {
       if( err ){
         next( err );
@@ -1033,7 +1044,7 @@ var Store = declare( null,  {
                             self.execPostDbInsertNoId( params, body, options, generatedId, function( err, fullDoc ){
                               self._sendErrorOnErr( err, next, function(){
         
-                                self._relocation( fullDoc[ self.idProperty ], options.beforeId );
+                                self._relocation( fullDoc[ self.idProperty ], options ? options.beforeId : null  );
  
                                 self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                   self._sendErrorOnErr( err, next, function(){
@@ -1824,11 +1835,28 @@ Store.online = {};
 });
 
 
-Store.onlineAll = function( app, url, idName, Class ){
+Store.onlineAll = function( app, url ){
 
-  // If the last parameter wasn't passed, it will default
-  // to `this` (which will be the constructor itself)
-  if( typeof( Class ) === 'undefined' ) var Class = this;
+  // Class is `this`. Since Store is the constructor, and onlineAll is
+  // a method, `this` is the contructor. 
+  var Class = this;
+
+  // If needed (no url parameter), Instance the class in order to get the stores'
+  // publicURL attribute. Maybe I should get it straight from the prototype,
+  // but what if the constructor got subclassed?
+  if( ! url ){ 
+    var o = new Class();
+    var url = o.publicURL;
+  }
+
+  // We need a URL, or it's all bananas and pears
+  if( ! url ){
+    throw( new Error("Store " + o.storeName + " had onlineAll() called, but no suitable URL could be found" ) );
+  }
+
+  // OK, everything is dandy: work out base URL and id, and create the Express routes
+  var idName = url.match( /:\w*$/ )[0];
+  url = url.replace( /:\w*$/, '');
 
   // Make entries in "app", so that the application
   // will give the right responses

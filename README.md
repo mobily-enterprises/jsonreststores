@@ -219,13 +219,12 @@ Your `storesRoutes.js` file will then use `dbSpecific-mongo.js` to get the those
       var Managers = declare( JRS, {
     
         schema: new Schema({
-          id     : { type: 'id' },
           name   : { type: 'string', trim: 60 },
           surname: { type: 'string', trim: 60 },
         }),
     
-        paramIds: [ 'id' ],
         storeName: 'managers',
+        publicURL: '/manages/:id',
     
         handlePut: true,
         handlePost: true,
@@ -236,7 +235,7 @@ Your `storesRoutes.js` file will then use `dbSpecific-mongo.js` to get the those
         hardLimitOnQueries: 50,
       });
     
-      Managers.onlineAll( app, '/managers/', ':id' );
+      Managers.onlineAll( app );
     }
 
 ## TingoDB
@@ -290,13 +289,12 @@ Here is how you make a fully compliant store:
       var Managers = declare( JRS, {
 
         schema: new Schema({
-          id     : { type: 'id' },
           name   : { type: 'string', trim: 60 },
           surname: { type: 'string', trim: 60 },
         }),
 
-        paramIds: [ 'id' ],
         storeName: 'Managers',
+        publicURL: '/managers/:id',
 
         handlePut: true,
         handlePost: true,
@@ -307,14 +305,14 @@ Here is how you make a fully compliant store:
         hardLimitOnQueries: 50,
       });
 
-      Managers.onlineAll( app, '/managers/', ':id' );
+      Managers.onlineAll( app );
  
 
 That's it: this is enough to make a full store which will handly properly all of the HTTP calls. Try it if you don't believe me!
 
 * `Managers` is a new class that inherits from `JRS`. Creating the derived class is the first step towards creating a store
 * `schema` (_mandatory_) is an object of type Schema. 
-* `paramIds` (_mandatory_) is an array of IDs, ***where the last one is the most important one***: the last item in `paramIds` (in this case it's also the only one: `id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
+* `publicURL` is the URL the store is reachable at. ***The last one ID is the most important one***: the last ID in `publicURL` (in this case it's also the only one: `id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
 * `storeName` (_mandatory_) needs to be a unique name for your store. It is mandatory to have one, as (when used with a database) it will define the name of the DB table/collection
 * `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error
 * `Managers.onlineAll()` creates the right Express routes to actually activate your stores. Specifically:
@@ -439,11 +437,39 @@ A bit of testing with `curl`:
 
 It all works!
 
-## A nested store
+## A note on `onlineAll` and `paramIds`
 
-Stores are never "flat" as such: you have workspaces, and then you have users who "belong" to a workspace. Here is how you create a "nested" store:
+When you define a store like this:
 
-      var Managers= declare( JRS, {
+      var Managers = declare( JRS, {
+
+        schema: new Schema({
+          name   : { type: 'string', trim: 60 },
+          surname: { type: 'string', trim: 60 },
+        }),
+
+        storeName: 'Managers',
+        publicURL: '/managers/:id',
+
+        handlePut: true,
+        handlePost: true,
+        handleGet: true,
+        handleGetQuery: true,
+        handleDelete: true,
+
+        hardLimitOnQueries: 50,
+      });
+
+      Managers.onlineAll( app );
+
+The `publicURL` is used to:
+
+* Add `id: { type: id }` to the schema automatically. This is done so that you don't have to do the grunt work of defining id fields both in `publicURL` and in the schema
+* Creates the `paramIds` array for the store. In this case, `paramIds` will be `[ 'id' ]`.
+
+So, you could reach the same goal without `publicURL`:
+
+      var Managers = declare( JRS, {
 
         schema: new Schema({
           id     : { type: 'id' },
@@ -451,8 +477,8 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
           surname: { type: 'string', trim: 60 },
         }),
 
-        paramIds: [ 'id' ],
         storeName: 'Managers',
+        paramIds: [ 'id' ],
 
         handlePut: true,
         handlePost: true,
@@ -463,21 +489,52 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
         hardLimitOnQueries: 50,
       });
 
-      Managers.onlineAll( app, '/managers/', ':id' );
- 
+      Managers.onlineAll( app, '/managers/:id' );
+
+Note that:
+ * The `id` parameter had to be defined in the schema
+ * The `paramIds` array had to be defined by hand
+ * `Managers.onlineAll()` had to be passed the URL explicitely.
+
+This pattern is much more verbose, it repeats information in three spots (!), and should obviously be avoided. However, it has its place when you want to define generic base classes without a `publicURL`.
+
+In the documentation, I will often refers to `paramIds`, which is an array of element in the schema which match the ones in the route. However, in all examples I will use the "shortened" version without repeating IDs unnecessarily.
+
+Note that you can use the `url` parameter in `onlineAll()` to force the stores' URLs to something different than `publicURL`.
+
+## A nested store
+
+Stores are never "flat" as such: you have workspaces, and then you have users who "belong" to a workspace. Here is how you create a "nested" store:
+
+      var Managers= declare( JRS, {
+
+        schema: new Schema({
+          name   : { type: 'string', trim: 60 },
+          surname: { type: 'string', trim: 60 },
+        }),
+
+        storeName: 'Managers',
+        publicURL: '/managers/:id',
+
+        handlePut: true,
+        handlePost: true,
+        handleGet: true,
+        handleGetQuery: true,
+        handleDelete: true,
+
+        hardLimitOnQueries: 50,
+      });
+
 
       var ManagersCars = declare( JRS, {
 
         schema: new Schema({
-
-          id       : { type: 'id' },
-          managerId: { type: 'id' },
           make     : { type: 'string', trim: 60, required: true },
           model    : { type: 'string', trim: 60, required: true },
         }),
 
-        paramIds: [ 'managerId', 'id' ],
         storeName: 'ManagersCars',
+        publicURL: '/managers/:managerId/cars/:id',
 
         handlePut: true,
         handlePost: true,
@@ -488,19 +545,16 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
         hardLimitOnQueries: 50,
       });
 
-      ManagersCars.onlineAll( app, '/managers/:managerId/cars/', ':id' );
+      ManagersCars.onlineAll( app );
  
 
-You have two stores: one is the simple `Managers` store with a list of names and surname; the other one is the `ManagersCars` store: note how the URL for `ManagersCars` includes `managerId`, which is also listed in `paramIds`.
+You have two stores: one is the simple `Managers` store with a list of names and surname; the other one is the `ManagersCars` store: note how the URL for `ManagersCars` includes `managerId`.
 
 The ManagersCars store will will respond to `GET /managers/2222/cars/3333` (to fetch car 3333 of manager 2222), `GET /workspace/2222/users` (to get all cars of manager 2222), and so on.
 
 Remember that in `ManagersCars`:
 
 * Queries will _always_ honour the filter on `managerId`, both in queries and single-record operations.
-* Fields listed in `paramIds` are also defined in the store's schema, but there is _no need_ to make them as `required`.
-* The second parameter of `onlineAll()` included all `paramIds` except the last one
-* The third parameter of `onlineAll()` includes the field that will be used as unique ID for the store (`id`): this id will be used to identify unique records in the table
 
 ### On naming conventions
 
@@ -511,7 +565,6 @@ It's important to be consistent in naming conventions while creating stores. In 
     var Managers = declare( JRS, { 
 
       schema: new Schema({
-        id: { type: 'id' },
         // ...
       });
 
@@ -519,14 +572,13 @@ It's important to be consistent in naming conventions while creating stores. In 
       storeName: `Managers`
       // ...
     }
-    Managers.onlineAll( app, '/managers/', ':id' );
+    Managers.onlineAll( app );
 
 
 
     var People = declare( JRS, { 
 
       schema: new Schema({
-        id: { type: 'id' },
         // ...
       });
 
@@ -534,7 +586,7 @@ It's important to be consistent in naming conventions while creating stores. In 
       storeName: `People`
       // ...
     }
-    People.onlineAll( app, '/people/', ':id' );
+    People.onlineAll( app );
 
 * Store name is plural
 * Irregulars (Person => People) is a fact of life
@@ -547,7 +599,6 @@ It's important to be consistent in naming conventions while creating stores. In 
     var Cars = declare( JRS, { 
 
       schema: new Schema({
-        id: { type: 'id' },
         // ...
       });
 
@@ -555,14 +606,12 @@ It's important to be consistent in naming conventions while creating stores. In 
       storeName: `managers`
       // ...
     }
-    Cars.onlineAll( app, '/managers/', ':id' );
+    Cars.onlineAll( app );
 
 
     var ManagersCars = declare( Store, { 
 
       schema: new Schema({
-        managerId: { type: 'id' }
-        id: { type: 'id' },
         // ...
       });
 
@@ -570,13 +619,11 @@ It's important to be consistent in naming conventions while creating stores. In 
       storeName: `ManagerCars`
       // ...
     }
-    ManagersCars.onlineAll( app, '/managers/:managerId/cars/', ':id' );
+    ManagersCars.onlineAll( app );
 
     var PeopleCars = declare( Store, { 
 
       schema: new Schema({
-        personId: { type: 'id' }
-        id: { type: 'id' },
         // ...
       });
  
@@ -584,7 +631,7 @@ It's important to be consistent in naming conventions while creating stores. In 
       storeName: `PeopleCars`
       // ...
     }
-    PeopleCars.onlineAll( app, '/people/:personId/cars/', ':id' );
+    PeopleCars.onlineAll( app );
 
 * Nested store's name a combination of IDs
 * storeName attribute still the same as the store name
@@ -598,25 +645,26 @@ Sometimes, you need to create a basic store that interfaces with a specific data
     var PeopleCars = declare( Store, { 
 
       schema: new Schema({
-        personId: { type: 'id' }
-        id: { type: 'id' },
         // ...
       });
  
       // ...
       storeName: `PeopleCars`
+      publicURL: '/people/:personId/cars/:id',
+
       handleGet: true,
       handleGetQuery: true,
       handlePut: true
       // ...
     }
-    PeopleCars.onlineAll( app, '/people/:personId/cars/', ':id' );
+    PeopleCars.onlineAll( app );
 
     var PeopleCarsList = declare( PeopleCars, { 
       handleGet: false,
       handlePut: false 
+      publicURL: '/people/:personId/carsList/:id',
     }
-    PeopleCarsList.onlineAll( app, '/people/:personId/carslist/', ':id' );
+    PeopleCarsList.onlineAll( app );
 
 
 The store PeopleCarsList is nearly exactly the same as PeopleCars: the only difference is that it doesn't allow anything except GetQuery (that is, `GET /people/1234/carslist/` ).
@@ -646,15 +694,14 @@ Note that the way items are relocated is beyond the scope of JsonRestStores, whi
       var Managers= declare( JRS, {
 
         schema: new Schema({
-          id     : { type: 'id' },
           name   : { type: 'string', trim: 60 },
           surname: { type: 'string', trim: 60 },
         }),
 
         positionField: 'order',
 
-        paramIds: [ 'id' ],
         storeName: 'Managers',
+        publicURL: '/managers/:id',
 
         handlePut: true,
         handlePost: true,
@@ -732,6 +779,17 @@ To understand how indexes are created, take this example schema:
 
     // ...
     schema: new Schema({
+      name      : { type: 'string', searchable: true },
+      surname   : { type: 'string', searchable: true },
+      age       : { type: 'string', searchable: true },
+      }),
+    publicURL: '/bookings/:bookindId/people/:personId',
+    // ...
+
+This is the same as writing:
+ 
+    // ...
+    schema: new Schema({
       personId  : { type: 'id' }
       bookingId : { type: 'id' },
 
@@ -740,10 +798,10 @@ To understand how indexes are created, take this example schema:
       age       : { type: 'string', searchable: true },
       }),
     paramIds: [ 'bookingId', 'personId' ],
-    
     // ...
- 
-This store could be reachable from `/bookings/:bookingId/people/:personId`.
+    
+
+Remember that publicURL defines entries in the schema, as well as the `paramIds` array. This store will be reachable from `/bookings/:bookingId/people/:personId`.
 When calling `makeIndexes()`, the following indexes are always created:
 
 * `personId`. This, as the last item in paramIds, is created as an `unique` index.
@@ -805,22 +863,18 @@ Here is an example of a store only allowing deletion only to specific admin user
     var WorkspaceUsers = declare( JRS, {
 
       schema: new Schema({
-        workspaceId: { type: 'id' },
-        id:          { type: 'id' },
         email     :  { type: 'string', trim: 128, searchable: true, sortable: true  },
         name      :  { type: 'string', trim: 60, searchable: true, sortable: true  },
       }),
 
       storeName:  'WorkspaceUsers',
+      publicURL: '/workspaces/:workspaceId/users/:id',
 
       handlePut: true,
       handlePost: true,
       handleGet: true,
       handleGetQuery: true,
       handleDelete: true,
-
-      paramIds: [ 'workspaceId', 'id' ],
-
       
       checkPermissionsDelete: function( params, body, options, doc, fullDoc, cb ){
 
@@ -837,7 +891,7 @@ Here is an example of a store only allowing deletion only to specific admin user
 
     });
 
-    WorkspaceUsers.onlineAll( app, '/workspaces/:workspaceId/users', ':id' );
+    WorkspaceUsers.onlineAll( app );
 
 Permission checking can be as simple, or as complex, as you need it to be.
 
@@ -895,12 +949,12 @@ JsonRestStores allows you to decide how to query the database depending on what 
       var People = declare( Store, {
 
         schema: new Schema({
-          id     : { type: 'id' },
           name   : { type: 'string', trim: 20, searchable: true },
           surname: { type: 'string', trim: 20, searchable: true },
         }),
 
         storeName: 'People',
+        publicURL: '/people/:id',
 
         handlePut: true,
         handlePost: true,
@@ -908,18 +962,16 @@ JsonRestStores allows you to decide how to query the database depending on what 
         handleGetQuery: true,
         handleDelete: true,
 
-        paramIds: [ 'id' ],
       });
 
       // Create the right hooks to access the store
-      People.onlineAll( app, '/people/', ':id' );
+      People.onlineAll( app );
 
 So, for a query like `GET /people?name=tony&surname=mobily`, only records where `name` _and_ `surname` match will be returned as an array.
 
 You can decide to apply a different type of filter by defining `searchable` as an object:
 
         schema: new Schema({
-          id     : { type: 'id' },
           name   : { type: 'string', trim: 20, searchable: { type: 'eq' } },
           surname: { type: 'string', trim: 20, searchable: { type: 'startsWith' } },
         }),
@@ -931,7 +983,6 @@ In such a case, the request `GET /people?name=tony&surname=mob` will return all 
 You can decide if you want to apply `or` or `and` when filter searchable fields by setting the `condition` attribute in `searchable`. For example:
 
         schema: new Schema({
-          id     : { type: 'id' },
           age    : { type: 'number', max: 130, searchable: { type: 'eq' },
           name   : { type: 'string', trim: 20, searchable: { type: 'startsWith', condition: 'or' } },
           surname: { type: 'string', trim: 20, searchable: { type: 'startsWith', condition: 'or' } },
@@ -950,13 +1001,11 @@ Consider this example:
       var People = declare( Store, {
 
         schema: new Schema({
-          id     : { type: 'id' },
           name   : { type: 'string', trim: 20 },
           surname: { type: 'string', trim: 20 },
         }),
 
         searchSchema: new Schema({
-          id               : { type: 'id' },
           name             : { type: 'string', trim: 20, searchable: { type: 'is' } },
           surname          : { type: 'string', trim: 20, searchable: { type: 'is' } },
           nameContains     : { type: 'string', trim: 4, searchable:  { type: 'contains',   field: 'name' } },
@@ -965,18 +1014,17 @@ Consider this example:
         }),
 
         storeName: 'People',
+        publicURL: '/people/:id',
 
         handlePut: true,
         handlePost: true,
         handleGet: true,
         handleGetQuery: true,
         handleDelete: true,
-
-        paramIds: [ 'id' ],
       });
 
       // Create the right hooks to access the store
-      People.onlineAll( app, '/people/', ':id' );
+      People.onlineAll( app );
 
 
 This is neat! Basically, you are still bound to the limitations of HTTP GET requests (you can only specify a bunch of key/values in th GET); but, you can easily decide how each key/value pair will affect your search. For example, requesting `GET /people?nameContains=ony&surname=mobily` will match all records where the name _contains_ `ony` and the surname _is_ `mobily`.
@@ -1183,9 +1231,9 @@ This is the list of functions that actually do the work behind the scenes:
 
 When you write:
 
-    Workspaces.onlineAll( app, '/workspaces/', ':id' );
+    Workspaces.onlineAll( app )
 
-You are actually running:
+and the class has a `publicURL` set as `/workspaces/:id`, you are actually running:
 
     // Make entries in "app", so that the application
     // will give the right responses
@@ -1194,6 +1242,8 @@ You are actually running:
     app.put(      url + idName, Store.online.Put( Class ) );
     app.post(     url,          Store.online.Post( Class ) );
     app.delete(   url + idName, Store.online.Delete( Class ) );
+
+Where `url` is `/workspaces/` and `idName` is `:id`.
 
 Note that "Class" is the constructor class (in this case `Workspaces`).
 Let's take for example the first line: it creates a route for `/workspaces/:id` and adds, as a route handler, `Store.online.Put( Workspaces )`. 
