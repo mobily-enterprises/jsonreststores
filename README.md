@@ -919,6 +919,21 @@ Note that if your store is derived from another one, and you want to preserve yo
 This will ensure that the inherited `checkPermissionsDelete()` method is called and followed, and _then_ further checks are carried on.
 
 
+## "Prepare Body" and "after postValidate" hooks
+
+These hooks are there so that you can manpulate the data passed to your store both _before_ it's validated against the schema, and _after_ it's been validated.
+
+When data is submitted to the store, sometimes you want to manipulate it *before* it gets validated against the schema. For example, your application might pass extra parameters (which are not part of the schema) that will influence the actual schema fields. Or, you might want to manipulate the passed data _after_ validation (which is useful if you want to make absolute sure that all the fields are cast and valid).
+
+* `prepareBody( body, method, cb )`
+* `postValidate( body, method, cb )`
+
+In both hooks, `method` can be either `"put"` or `"post"`.
+
+`prepareBody()` is called with the data passed from the client _as is_ (no casting, nor anything). Any manipolation done by prepareBody will need to satisfy the schema, or validation will actually fail. This hook is useful if you want to force some fields to specific values, maybe depending on a session variable for the specific user. For example, when a record is created, you will have `creatorId` in the schema, but you won't want users to be able to specify any ID there. So, you can simply assign body.creatorId in the `prepareBody()` hook.
+
+`postValidate()` is called once validation is completed. This hook is especially useful if you want to make some cross-check on other stores (for example that IDs are correct, etc.); since everything is cast and validated, all IDs are already of the right type.
+
 ## "After" hooks
 
 These functions are handy where, in your own applications, you want "something" to happen after one of those operations is complete.
@@ -1334,8 +1349,9 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 
 * (ATTR) `self.handlePost` is checked. If false, send `NotImplementedError`
 * incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* (HOOK) `self.prepareBodyPost( body )` is run against the record just fetched
+* (HOOK) `self.prepareBody( body, 'post' )` is run against the record just fetched
 * Body is cast against the schema. If fail, send `UnprocessableEntityError`
+* (HOOK) `self.postValidate( body, 'post' )` is run against the record just fetched
 * (HOOK) `self.checkPermissionsPost( params, body, options )` is run. If fail, send `ForbiddenError`
 * Body is cleaned up of fields with `doNotSave: true` in schema
 * record is written to the DB.
@@ -1355,8 +1371,9 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 
 * (ATTR) `self.handlePut` is checked. If false, send `NotImplementedError`
 * incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* (HOOK) `self.prepareBodyPut( body )` is run against the record just fetched
+* (HOOK) `self.prepareBody( body, 'put' )` is run against the record just fetched
 * Body is cast against the schema. If fail, send `UnprocessableEntityError`
+* (HOOK) `self.postValidate( body, 'put' )` is run against the record just fetched
 * record is fetched from DB (ATTEMPT) -> `fullDoc`
 * `options.overwrite` is checked: if true & record not there, or false and record there, send `PreconditionFailedError`
 
