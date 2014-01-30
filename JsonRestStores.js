@@ -1348,7 +1348,7 @@ var Store = declare( null,  {
                                     self.execPutDbInsert( params, body, options, function( err, fullDoc ){
                                       self._sendErrorOnErr( err, next, function(){
             
-                                        self._relocation( fullDoc[ self.idProperty ], options.beforeId, parmams );
+                                        self._relocation( fullDoc[ self.idProperty ], options.beforeId, params );
     
                                         self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                           self._sendErrorOnErr( err, next, function(){
