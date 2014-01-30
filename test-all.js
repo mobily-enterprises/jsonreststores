@@ -18,6 +18,7 @@ Tests for:
   * Missing paramId in API Post or Put
   * Check that paramId have priority over body for putExisting, putNew, post
   * Check that indexing works
+  * Test hook bodyPostValidate
 */
 
 var 
@@ -324,7 +325,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       /* POST:
          * REST  handlePost
          * REST  checkParamIds
-         * APIh  prepareBodyPost
+         * APIh  prepareBody (post)
          * APIg  validate
          * REST  checkPermissionsPost
          * APIg  cleanup
@@ -416,13 +417,16 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
       },
   
-      'Post() APIh prepareBodyPost': function( test ){
+      'Post() APIh prepareBody (post)': function( test ){
         zap( function(){
   
           var People2 = declare( g.People, {
   
-            prepareBodyPost: function( body, done ){
-              body.name = body.name + "_prepareBodyPost";
+            prepareBody: function( body, method, done ){
+              
+              if( method === 'post' ){
+                body.name = body.name + "_prepareBodyPost";
+              }
               done( null, body );
             },
   
@@ -695,7 +699,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       /* PUT:
          * REST  handlePut
          * REST  checkParamIds
-         * APIh  prepareBodyPut
+         * APIh  prepareBody (put)
          * APIg  validate
          NEW:
          * REST  checkPermissionsPutNew
@@ -940,12 +944,14 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
       },
   
-      'Put() APIh prepareBodyPut': function( test ){
+      'Put() APIh prepareBody (put)': function( test ){
         zap( function(){
   
           var People2 = declare( g.People, {
-            prepareBodyPut: function( body, done ){
-              body.name = body.name.toUpperCase();
+            prepareBody: function( body, method, done ){
+              if( method === 'put' ){
+                body.name = body.name.toUpperCase();
+              }
               done( null, body );
             }
           });
