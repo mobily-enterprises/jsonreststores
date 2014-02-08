@@ -69,6 +69,8 @@ var Store = declare( null,  {
   hardLimitOnQueries: 50,
   deleteAfterGetQuery: false,
 
+  strictSchemaAfterRefetching: false,
+
   positionField: null,
 
   indexStyle: "simple",
@@ -128,8 +130,6 @@ var Store = declare( null,  {
   UnprocessableEntityError: e.UnprocessableEntityError,
   NotImplementedError: e.NotImplementedError,
   ServiceUnavailableError: e.ServiceUnavailableError,
-
-
 
   // Make all indexes based on the schema
   // Options can have:
@@ -918,8 +918,12 @@ var Store = declare( null,  {
       if( err ){
         next( err );
       } else {
+
         // There was a problem: return the errors
-        if( errors.length ){
+        // (but only if strictSchemaAfterRefetching is on)
+        // TODO: maybe, in case of errors, if **params** have errors, it should still chuck
+        // an error since things could go quite wrong if one of the params doesn't cast
+        if( self.strictSchemaAfterRefetching && errors.length ){
           next( new self.UnprocessableEntityError( { errors: errors, whileRefetching: true } ) );
         } else {
           next( null, doc );
@@ -929,8 +933,6 @@ var Store = declare( null,  {
 
   },
 
-
-
   _sendErrorOnErr: function( err, next, cb ){
     if( err ) {
       this._sendError( next, err );
@@ -938,7 +940,6 @@ var Store = declare( null,  {
       cb();
     }
   },
-
 
   _sendError: function( next, error ){
 
@@ -1252,16 +1253,22 @@ var Store = declare( null,  {
                             if( ! granted ){
                               self._sendError( next, new self.ForbiddenError() );
                             } else {
-// MERC
+
                               self._relocation( fullDoc[ self.idProperty ], options.beforeId, params );
 
-                              self.afterPutExisting( params, body, options, doc, fullDoc, doc, fullDoc, options.overwrite, function( err ) {
+                              self.prepareBeforeSend( doc, function( err, doc ){
                                 self._sendErrorOnErr( err, next, function(){
-                                  if( self.remote ){ 
-                                    self._res.json( 200, doc );
-                                  } else {
-                                    next( null, doc );
-                                  }
+
+                                  self.afterPutExisting( params, body, options, doc, fullDoc, doc, fullDoc, options.overwrite, function( err ) {
+                                    self._sendErrorOnErr( err, next, function(){
+
+                                      if( self.remote ){ 
+                                        self._res.json( 200, doc );
+                                      } else {
+                                        next( null, doc );
+                                      }
+                                    });
+                                  });
 
                                 });
                               });
