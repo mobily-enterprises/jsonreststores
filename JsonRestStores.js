@@ -304,7 +304,6 @@ var Store = declare( null,  {
     // Easy one: all fields in the schema are allowed, and are not searchable
     for( var k in self.schema.structure ) fields[ k ] = false;
 
-
     // The quest to decide which fields are searchable begins here. It's
     // trickier than you'd think, as:
     // * If `searchSchema` !== `schema`, anything in searchSchema must be searchable, even without `searchable` set
@@ -338,10 +337,12 @@ var Store = declare( null,  {
 
             // Will make the referenced field searchable. IF field points to an unset field,
             // throw an error
-            if( typeof( fields[ searchable.field ] ) === 'undefined' ){
+            if( typeof( fields[ searchable.field ] ) === 'undefined' && ! searchable.ref  ){
               throw( new Error("Illegal `field` attribute in searchable: " + searchable.field + ", field " + k + ", store " + self.storeName ));
             } else {
-              fields[ searchable.field ] = true;
+              if( ! searchable.ref ){
+                fields[ searchable.field ] = true;
+              }
             }
           }
             
@@ -365,7 +366,7 @@ var Store = declare( null,  {
     var dbFields = {};
     for( var k in fields ) dbFields[ k ] = fields[ k ];
     if( self.positionField ) dbFields[ self.positionField ] = null;
-    self.dbLayer = new self.DbLayer( self.collectionName, dbFields );
+    self.dbLayer = new self.DbLayer( self.collectionName, { fields: dbFields, ref: self.ref ? self.ref : {} } );
 
     // Set the DB's hard limit on queries. DB-specific implementations will
     // set this to `true` if the query is not cursor-based (this will prevent
@@ -656,7 +657,6 @@ var Store = declare( null,  {
       options.sort = parseSortBy( req );
       options.ranges = parseRangeHeaders( req );
       options.filters = parseFilters( req );
-
     }
 
     return options;
@@ -1153,8 +1153,8 @@ var Store = declare( null,  {
     // The last parameter, the callback, can be optional
     if( typeof( next ) !== 'function' ) next = function(){};
 
-    // PositionField is null: nothing for us to do
-    if( self.positionField === 'null' ) return next( null );
+    // PositionField is 'null': nothing for us to do
+    if( self.positionField === null ) return next( null );
 
     //console.log("CALLED CHANGE POSITION, ID: ", id, " BEFORE: ", moveBeforeId );
     if( typeof( moveBeforeId ) === 'undefined' ) return next( null );
