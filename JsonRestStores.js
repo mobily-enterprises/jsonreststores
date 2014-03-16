@@ -71,7 +71,7 @@ var Store = declare( null,  {
 
   strictSchemaAfterRefetching: false,
 
-  positionField: null,
+  // positionField: null,
 
   indexStyle: "simple",
 
@@ -365,7 +365,7 @@ var Store = declare( null,  {
 
     var dbFields = {};
     for( var k in fields ) dbFields[ k ] = fields[ k ];
-    if( self.positionField ) dbFields[ self.positionField ] = null;
+    //if( self.positionField ) dbFields[ self.positionField ] = null;
     self.dbLayer = new self.DbLayer( self.collectionName, { fields: dbFields, ref: self.ref ? self.ref : {} } );
 
     // Set the DB's hard limit on queries. DB-specific implementations will
@@ -766,9 +766,9 @@ var Store = declare( null,  {
     if( typeof( options.sort ) === 'undefined' || options.sort === null ) options.sort = {}; 
 
     // Sort by self.positionField if sort is empty and self.positionField is defined
-    if( Object.keys( options.sort ).length === 0 && self.positionField ){
-      options.sort[ self.positionField ] = 1;
-    }
+    //if( Object.keys( options.sort ).length === 0 && self.positionField ){
+    //  options.sort[ self.positionField ] = 1;
+    //}
 
     self._queryMakeSelector( options.filters, options.sort, options.ranges, function( err, selector ){
       if( err ){
@@ -1049,7 +1049,7 @@ var Store = declare( null,  {
                                   self._sendErrorOnErr( err, next, function(){
             
                                     //console.log("RUNNING RELOCATION:", fullDoc[ self.idProperty ], options && options.beforeId ? options.beforeId : null   );
-                                    self._relocation( fullDoc[ self.idProperty ], options && options.beforeId ? options.beforeId : 'null', params);
+                                    //self._relocation( fullDoc[ self.idProperty ], options && options.beforeId ? options.beforeId : 'null', params);
      
                                     self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                       self._sendErrorOnErr( err, next, function(){
@@ -1145,7 +1145,7 @@ var Store = declare( null,  {
 
   },
 
-
+/*
   _relocation: function( id, moveBeforeId, params, next ){
 
     var self = this;
@@ -1209,6 +1209,7 @@ var Store = declare( null,  {
     } 
 
   },
+  */
 
   _makePut: function( params, body, options, next ){
 
@@ -1254,7 +1255,7 @@ var Store = declare( null,  {
                               self._sendError( next, new self.ForbiddenError() );
                             } else {
 
-                              self._relocation( fullDoc[ self.idProperty ], options.beforeId, params );
+                              //self._relocation( fullDoc[ self.idProperty ], options.beforeId, params );
 
                               self.prepareBeforeSend( doc, function( err, doc ){
                                 self._sendErrorOnErr( err, next, function(){
@@ -1355,7 +1356,7 @@ var Store = declare( null,  {
                                     self.execPutDbInsert( params, body, options, function( err, fullDoc ){
                                       self._sendErrorOnErr( err, next, function(){
             
-                                        self._relocation( fullDoc[ self.idProperty ], options.beforeId, params );
+                                        //self._relocation( fullDoc[ self.idProperty ], options.beforeId, params );
     
                                         self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                           self._sendErrorOnErr( err, next, function(){
@@ -1450,7 +1451,7 @@ var Store = declare( null,  {
                                             self.execPutDbUpdate( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
                                               self._sendErrorOnErr( err, next, function(){
            
-                                               self._relocation( fullDoc[ self.idProperty ], options.beforeId, params );
+                                               //self._relocation( fullDoc[ self.idProperty ], options.beforeId, params );
      
                                                 self.extrapolateDoc( params, body, options, fullDocAfter, function( err, docAfter ) {
                                                   self._sendErrorOnErr( err, next, function(){
