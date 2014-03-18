@@ -22,6 +22,29 @@ Funnily enough, it didn't catch a bug as big as the sky with the Range headers r
 
 */
 
+
+/*
+
+Conversion to new db layer:
+
+
+JSONRESTSTORES:
+
+* [ X ] _castDoc in JsonRestStores is no longer useful, as it's already all done at schema level
+
+* Change constructor. A layer needs:
+  - Schema (passed by JsonRestStores, taken from its params)
+  - idProperty (passed by JsonRestStores, taken from idParams)
+  - Nested (passed by JsonRestStores, taken from its params)
+  - positionField and positionBase (passed only if "position" is true, positionField fixed as __position and positionBase depending on idParams)
+  - SchemaError (fixed)
+
+* Implement searchSchema, which can be EXACTLY as it is. But, it needs searchableOption, which is only used if searchable is true.
+
+
+*/
+
+
 var 
   dummy
 , e = require('allhttperrors')
@@ -48,7 +71,7 @@ var Store = declare( null,  {
 
   DbLayer: null, // If not set in prototype, NEEDS to be passed as the constructor parameter
   searchSchema: null, // If not set in prototype, is set as `schema` by constructor
-  collectionName: null, // If not set in prototype, is set as `storeName` by constructor
+  //collectionName: null, // If not set in prototype, is set as `storeName` by constructor
 
   // ****************************************************
   // *** ATTRIBUTES THAT DEFINE STORE'S BEHAVIOUR
@@ -71,9 +94,9 @@ var Store = declare( null,  {
 
   strictSchemaAfterRefetching: false,
 
-  // positionField: null,
 
-  indexStyle: "simple",
+  nested: null,
+  position: false,
 
   // ****************************************************
   // *** FUNCTIONS THAT CAN BE OVERRIDDEN BY DEVELOPERS
@@ -131,116 +154,6 @@ var Store = declare( null,  {
   NotImplementedError: e.NotImplementedError,
   ServiceUnavailableError: e.ServiceUnavailableError,
 
-  // Make all indexes based on the schema
-  // Options can have:
-  //   `{ background: true }`, which will make sure makeIndex is called with { background: true }
-  //   `{ style: 'simple' | 'permute' }`, which will override the indexing style set by the store
-  makeIndexes: function( options ){
-
-    // THANK YOU http://stackoverflow.com/questions/9960908/permutations-in-javascript
-    // Permutation function
-    function permute( input ) {
-      var permArr = [],
-      usedChars = [];
-      function main( input ){
-        var i, ch;
-        for (i = 0; i < input.length; i++) {
-          ch = input.splice(i, 1)[0];
-          usedChars.push(ch);
-          if (input.length == 0) {
-            permArr.push( usedChars.slice() );
-          }
-          main( input );
-          input.splice( i, 0, ch );
-          usedChars.pop();
-        }
-        return permArr;
-      }
-      return main(input);
-    }
-
-    var self = this;
-    var idsHash = {};
-    var style;
-    var opt = {};
-
-    // Create `opt`, the options object passed to the db driver
-    if( typeof( options ) === 'undefined' || options === null ) options = {};
-    opt.background = !!options.background;
-
-    // Sanitise the `style` parameter to either 'simple' or 'permute'
-    if( typeof( options.style ) !== 'string'  ){
-      style = self.indexStyle;
-    } else if( options.style === 'simple' || options.style === 'permute' ){
-      style = options.style;
-    } else {
-      style = self.indexStyle;
-    }
-
-    // Index this.idProperty as unique, as it must be
-    var uniqueIndexOpt = {};
-    uniqueIndexOpt.background = !! options.background;
-    uniqueIndexOpt.unique = true;
-    
-    self.dbLayer.makeIndex( this.idProperty, uniqueIndexOpt );
-
-    // Make idsHash, the common beginning of any indexing. It also creates an
-    // index with it. Not necessary in most DBs if there is at least one indexed field
-    // (partial indexes can be used), but good to have in case there aren't other fields.
-    self.paramIds.forEach( function( p ) {
-      idsHash[ p ] = 1;
-    });
-    self.dbLayer.makeIndex( idsHash, opt );
-
-    // The type of indexing will depend on the style...
-    switch( style ){
-
-      case 'simple':
-
-        // Simple style: it will create one index per field,
-        // where each index starts with paramIds
-        Object.keys( self.fields ).forEach( function( field ){
-          var keys = {};
-          for( var k in idsHash ) keys[ k ] = idsHash[ k ];
-          if( typeof( idsHash[ field ] ) === 'undefined' ){
-            keys[ field ] = 1;
-            self.dbLayer.makeIndex( keys, opt );
-          }
-        });
-
-      break;
-
-      case 'permute':
-       
-        // Complete style: it will create indexes for _all_ permutations
-        // of searchable fields, where each permutation will start with paramIds
-        var toPermute = [];
-        Object.keys( self.fields ).forEach( function( field ){
-          if( typeof( idsHash[ field ] ) === 'undefined' ) toPermute.push( field );
-        });
-
-        // Create index for each permutation
-        permute( toPermute ).forEach( function( combination ){
-          var keys = {};
-          for( var k in idsHash ) keys[ k ] = idsHash[ k ];
-
-          for( var i = 0; i < combination.length; i ++ ) keys[ combination[ i ]  ] = 1;
-          self.dbLayer.makeIndex( keys, opt );
-        });
-        
-      break;
-
-      default:
-        throw( new Error("indexStyle needs to be 'simple' or 'permute'" ) );
-      break;
-
-    }
- 
-  },
-
-  dropAllIndexes: function( done ){
-    this.dbLayer.dropAllIndexes( done );
-  },
 
   constructor: function( DbLayer ){
 
@@ -257,7 +170,7 @@ var Store = declare( null,  {
       throw( new Error("You must define a db driver, via constructor or via prototype (creating " + self.storeName + ')' ));
     }
 
-    this.collectionName = this.collectionName ? this.collectionName : this.storeName;
+    //this.collectionName = this.collectionName ? this.collectionName : this.storeName;
 
     // If paramId is not specified, takes it from publicURL
     if( self.paramIds === null ){
@@ -267,7 +180,7 @@ var Store = declare( null,  {
     // Sets proto.paramId, which (as for the principle of 
     // least surprise) must be the last paramId passed to
     // the store.
-    this.idProperty = self._lastParamId();
+    self.idProperty = self._lastParamId();
 
     // The schema must be defined
     if( typeof( self.schema ) === 'undefined' || self.schema == null ){
@@ -284,6 +197,8 @@ var Store = declare( null,  {
       self.searchSchema = self.schema;
     }
 
+    
+
     // By default, paramIds are set in schema and searchSchema as { type: 'id' } so that developers
     // can be lazy when defining their schemas
     for( var i =0, l = self.paramIds.length; i < l; i ++ ){
@@ -296,6 +211,22 @@ var Store = declare( null,  {
       }
     }
 
+    var layerOptions = {
+      schema: self.schema,
+      nested: self.nested,
+      idProperty: self.idProperty,
+      schemaError: self.UnprocessableEntityError,
+    };
+    if( self.position ){
+      layerOptions.positionField = '__position';
+      layerOptions.positionBase = self.paramIds.slice( 1, -1 );
+    }
+
+    // Actually create the layer with the given parameters
+    self.dbLayer = new self.DbLayer( self.storeName, layerOptions );
+
+
+    /*
     // Set `fields`, which will need to conform DbLayer's format: every key defined is in the schema, and keys
     // with `true` values are also searchable.
 
@@ -366,7 +297,11 @@ var Store = declare( null,  {
     var dbFields = {};
     for( var k in fields ) dbFields[ k ] = fields[ k ];
     //if( self.positionField ) dbFields[ self.positionField ] = null;
-    self.dbLayer = new self.DbLayer( self.collectionName, { fields: dbFields, ref: self.ref ? self.ref : {} } );
+    //self.dbLayer = new self.DbLayer( self.collectionName, { fields: dbFields, ref: self.ref ? self.ref : {} } );
+    self.dbLayer = new self.DbLayer( self.storeName, { fields: dbFields, ref: self.ref ? self.ref : {} } );
+    */
+
+
 
     // Set the DB's hard limit on queries. DB-specific implementations will
     // set this to `true` if the query is not cursor-based (this will prevent
@@ -374,7 +309,7 @@ var Store = declare( null,  {
     self.dbLayer.hardLimitOnQueries = self.hardLimitOnQueries;
 
     // Sets the self.fields variable, which will be handy to know what's a field and searchable
-    self.fields = fields;
+    //self.fields = fields;
   },
 
 
@@ -575,24 +510,42 @@ var Store = declare( null,  {
       var filterValue = filters[ filterField ];
 
       var searchable = self.searchSchema.structure[ filterField ].searchable;
+      var searchOptions = self.searchSchema.structure[ filterField ].searchOptions;
 
-      // Searchable is not an object/is null: just set conditions as defaults
-      if( typeof( searchable ) !== 'object' || searchable === null ){
-        field = filterField;
-        type = 'eq';
-        condition = 'and';
-      // Searchable is an object: try to get values from it
+      if( searchable) {
+
+        // searchOptions is not an object/is null: just set default conditions (equality with field)
+        if( typeof( searchOptions ) !== 'object' || searchOptions === null ){
+          field = filterField;
+          type = 'eq';
+          condition = 'and';
+          conditions[ condition ].push( { field: field, type: type, value: filters[ filterField ] } );
+
+        // searchOptions IS an object: it might be an array or a single condition set
+        } else {
+         
+          // Make sure elements ends up as an array regardless
+          if( Array.isArray( searchOptions ) ){
+            var elements = searchOptions;
+          } else {
+            var elements = [ searchOptions ];
+          }
+
+          elements.forEach( function( element ){
+            field = element.field || filterField;
+            type = element.type || 'eq';
+            condition = element.condition || 'and';
+
+            conditions[ condition ].push( { field: field, type: type, value: filters[ filterField ] } );
+          });
+
+        }
+
+      // Field is not searchable: error!
       } else {
-        field = searchable.field || filterField;
-        type = searchable.type || 'eq';
-        condition = searchable.condition || 'and';
+        errors.push( { field: filterField, message: 'Field not allowed in search: ' + filterField + ' in ' + self.storeName } );
       }
 
-      if( ! self.fields ){
-        errors.push( { field: field, message: 'Field not allowed in search: ' + filter + ' in ' + self.storeName } );
-      } else {
-        conditions[ condition ].push( { field: field, type: type, value: filters[ filterField ] } );
-      }
     }
 
     // Call the callback with an error, or with the selector (containing conditions, ranges, sort)
@@ -611,6 +564,8 @@ var Store = declare( null,  {
     }
 
   },
+
+
 
 
   /*
@@ -791,7 +746,7 @@ var Store = declare( null,  {
   // ****************************************************
 
 
-  _extrapolateDocAnd_castDocAndprepareBeforeSendAll: function( params, body, options, docs, cb ){
+  _extrapolateDocAndprepareBeforeSendAll: function( params, body, options, docs, cb ){
 
     var self = this;
 
@@ -805,10 +760,10 @@ var Store = declare( null,  {
             callback( err, null );
           } else {
 
-            self._castDoc( doc, function( err, doc) {
-              if( err ){
-                callback( err, null );
-              } else {
+            //self._castDoc( doc, function( err, doc) {
+            //  if( err ){
+            //    callback( err, null );
+            //  } else {
 
                 self.prepareBeforeSend( doc, function( err, doc ){
                   if( err ){
@@ -818,8 +773,8 @@ var Store = declare( null,  {
                     callback( null, null );
                   }
                 });
-              }
-            });
+            //  }
+            //});
 
           }
         });
@@ -897,36 +852,6 @@ var Store = declare( null,  {
             body[ k ] = fakeRecord[ k ];
           });
           next( null );
-        }
-      }
-    });
-
-  },
-
-  _castDoc: function( doc, next ){
-
-    var self = this;
-
-    // Cast the values. This is a relaxed check: if a field is missing, it won't
-    // complain. This way, applications won't start failing when adding fields
-    var skipCast = [];
-    if( self.positionField ) {
-      skipCast.push( self.positionField );
-    }
-
-    self.schema.validate( doc, { onlyObjectValues: true, deserialize: true, skipCast: skipCast }, function( err, doc, errors ) {
-      if( err ){
-        next( err );
-      } else {
-
-        // There was a problem: return the errors
-        // (but only if strictSchemaAfterRefetching is on)
-        // TODO: maybe, in case of errors, if **params** have errors, it should still chuck
-        // an error since things could go quite wrong if one of the params doesn't cast
-        if( self.strictSchemaAfterRefetching && errors.length ){
-          next( new self.UnprocessableEntityError( { errors: errors, whileRefetching: true } ) );
-        } else {
-          next( null, doc );
         }
       }
     });
@@ -1054,8 +979,8 @@ var Store = declare( null,  {
                                     self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                       self._sendErrorOnErr( err, next, function(){
             
-                                        self._castDoc( doc, function( err, doc) {
-                                          self._sendErrorOnErr( err, next, function(){
+                                        //self._castDoc( doc, function( err, doc) {
+                                          //self._sendErrorOnErr( err, next, function(){
                                         
                                             // Remote request: set headers, and send the doc back (if echo is on)
                                             if( self.remote ){
@@ -1112,8 +1037,8 @@ var Store = declare( null,  {
                                             } 
                 
                                        
-                                          });
-                                        });
+                                          //});
+                                        //});
     
                                       });
                                     });
@@ -1145,72 +1070,6 @@ var Store = declare( null,  {
 
   },
 
-/*
-  _relocation: function( id, moveBeforeId, params, next ){
-
-    var self = this;
-
-    // The last parameter, the callback, can be optional
-    if( typeof( next ) !== 'function' ) next = function(){};
-
-    // PositionField is 'null': nothing for us to do
-    if( self.positionField === null ) return next( null );
-
-    //console.log("CALLED CHANGE POSITION, ID: ", id, " BEFORE: ", moveBeforeId );
-    if( typeof( moveBeforeId ) === 'undefined' ) return next( null );
-  
-    // Make up the conditions hash, to be passed to relocation so that the main
-    // select is filtered by the paramIds (otherwise it will reorder the WHOLE table!)
-    var conditionsHash = { and: [] };
-    for( var i = 0, l = self.paramIds.length -1; i < l; i ++ ){
-      var paramId = self.paramIds[ i ];
-      conditionsHash.and.push( { field: paramId, type: 'eq', value: params[ paramId ] } );
-    }
-
-    // If moveBeforeId is 'null', then there is no need to look it
-    // up to make sure it exists
-    if( moveBeforeId === 'null' ){
-      //console.log("OK, moveBeforeId is null, can run anyway ");
-      self.dbLayer.relocation( self.positionField, self.idProperty, id, null, conditionsHash, function( err ){
-        if( err ) return next( err );
-        next( null );
-      } );
-
-    // Check that moveBeforeId exists. Since this is not _actually_
-    // a field, looking it up is a bit of a challenge (we need to do
-    // manual casting etc.)
-    } else {
- 
-      // Make up a fake record just with idProperty, which will be
-      // used to lookup moveBeforeId
-      var fakeBody = {};
-      fakeBody[ self.idProperty ] = moveBeforeId;
-
-      // Try and cast that fakeBody. If successful, fakeBody[ idProperty ]
-      // will be cast and ready to be used for the search
-      self._castDoc( fakeBody, function( err, doc ){
-        if( err ) return next( err );
-
-        // At this point, doc[ idProperty ] is all cast, ready to look for it
-        self.dbLayer.select( { conditions: { and: [ { field: self.idProperty, type: 'eq', value: doc[ self.idProperty ] } ] } }  , function( err, docs ){
-          if( err ) return next( err );
-
-          // moveBeforeId wasn't found -- not found error
-          if( ! docs.length === 0 ) return self._sendError( new self.NotFoundError );
-
-          //console.log( "OK, moveBeforeId exists!" );
-          self.dbLayer.relocation( self.positionField, self.idProperty, id, moveBeforeId, conditionsHash, function( err ){
-            if( err ) return next( err );
-
-            next( null );
-          } );
-        });
-      });
-    } 
-
-  },
-  */
-
   _makePut: function( params, body, options, next ){
 
     var self = this;
@@ -1225,7 +1084,6 @@ var Store = declare( null,  {
       self._sendError( next, new self.NotImplementedError( ) );
       return;
     }
-
 
     // DETOUR: It's a relocation. Simply try and relocate the record
     // (after the usual permissions etc.)
@@ -1244,8 +1102,8 @@ var Store = declare( null,  {
                 self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                   self._sendErrorOnErr( err, next, function(){
         
-                    self._castDoc( doc, function( err, doc) {
-                      self._sendErrorOnErr( err, next, function(){
+                    //self._castDoc( doc, function( err, doc) {
+                      //self._sendErrorOnErr( err, next, function(){
         
                         // Actually check permissions
                         self.checkPermissionsPutExisting( params, body, options, doc, fullDoc, function( err, granted ){
@@ -1277,8 +1135,8 @@ var Store = declare( null,  {
                           });
                         });
 
-                      });
-                    });
+                      //});
+                    //});
                  
                   });
                 });
@@ -1361,8 +1219,8 @@ var Store = declare( null,  {
                                         self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                           self._sendErrorOnErr( err, next, function(){
             
-                                            self._castDoc( doc, function( err, doc) {
-                                              self._sendErrorOnErr( err, next, function(){
+                                            //self._castDoc( doc, function( err, doc) {
+                                              //self._sendErrorOnErr( err, next, function(){
             
                                                 // Remote request: set headers, and send the doc back (if echo is on)
                                                 if( self.remote ){
@@ -1410,8 +1268,8 @@ var Store = declare( null,  {
     
                                                 }
                 
-                                              });
-                                            });
+                                              //});
+                                            //});
     
                                           });
                                         });
@@ -1433,8 +1291,8 @@ var Store = declare( null,  {
                               self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                 self._sendErrorOnErr( err, next, function(){
             
-                                  self._castDoc( doc, function( err, doc) {
-                                    self._sendErrorOnErr( err, next, function(){
+                                  //self._castDoc( doc, function( err, doc) {
+                                    //self._sendErrorOnErr( err, next, function(){
             
                                       // Actually check permissions
                                       self.checkPermissionsPutExisting( params, body, options, doc, fullDoc, function( err, granted ){
@@ -1457,8 +1315,8 @@ var Store = declare( null,  {
                                                   self._sendErrorOnErr( err, next, function(){
     
             
-                                                    self._castDoc( docAfter, function( err, docAfter ) {
-                                                      self._sendErrorOnErr( err, next, function(){
+                                                    //self._castDoc( docAfter, function( err, docAfter ) {
+                                                      //self._sendErrorOnErr( err, next, function(){
                     
                                                         // Remote request: set headers, and send the doc back (if echo is on)
                                                         if( self.remote ){
@@ -1510,8 +1368,8 @@ var Store = declare( null,  {
                                                           });
                                                         }
                     
-                                                      });
-                                                    });
+                                                      //});
+                                                    //});
             
                                                   });
                                                 });
@@ -1525,8 +1383,8 @@ var Store = declare( null,  {
                                         });
                                       });
                 
-                                    });
-                                  });
+                                    //});
+                                  //});
             
                                 });
                               });
@@ -1596,7 +1454,7 @@ var Store = declare( null,  {
                     self.execGetDbQuery( params, body, options, function( err, queryDocs, total, grandTotal ){
                       self._sendErrorOnErr( err, next, function(){
        
-                        self._extrapolateDocAnd_castDocAndprepareBeforeSendAll( params, body, options, queryDocs, function( err ){
+                        self._extrapolateDocAndprepareBeforeSendAll( params, body, options, queryDocs, function( err ){
                           self._sendErrorOnErr( err, next, function(){
         
                             self.afterGetQuery( params, body, options, queryDocs, function( err ) {
@@ -1672,8 +1530,8 @@ var Store = declare( null,  {
               self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                 self._sendErrorOnErr( err, next, function(){
     
-                  self._castDoc( doc, function( err, doc) {
-                    self._sendErrorOnErr( err, next, function(){
+                  //self._castDoc( doc, function( err, doc) {
+                  //  self._sendErrorOnErr( err, next, function(){
         
                       // Check the permissions 
                       self.checkPermissionsGet( params, body, options, doc, fullDoc, function( err, granted ){
@@ -1716,8 +1574,8 @@ var Store = declare( null,  {
                       });
         
         
-                    });
-                  });
+                  //  });
+                  //});
                 });
               });
     
@@ -1758,8 +1616,8 @@ var Store = declare( null,  {
               self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                 self._sendErrorOnErr( err, next, function(){
     
-                  self._castDoc( doc, function( err, doc) {
-                    self._sendErrorOnErr( err, next, function(){
+                  //self._castDoc( doc, function( err, doc) {
+                    //self._sendErrorOnErr( err, next, function(){
         
                       // Check the permissions 
                       self.checkPermissionsDelete( params, body, options, doc, fullDoc, function( err, granted ){
@@ -1799,8 +1657,9 @@ var Store = declare( null,  {
                         });
                       });
         
-                    });
-                  });
+                    //});
+                  //});
+
                 });
               });
     
@@ -2102,4 +1961,34 @@ function _checkThatParamIdsArePresent( body, paramIds, skipLast ){
 exports = module.exports = Store;
 Store.artificialDelay = 0;
 
+/*
+  _castDoc: function( doc, next ){
 
+    var self = this;
+
+    // Cast the values. This is a relaxed check: if a field is missing, it won't
+    // complain. This way, applications won't start failing when adding fields
+    var skipCast = [];
+    if( self.positionField ) {
+      skipCast.push( self.positionField );
+    }
+
+    self.schema.validate( doc, { onlyObjectValues: true, deserialize: true, skipCast: skipCast }, function( err, doc, errors ) {
+      if( err ){
+        next( err );
+      } else {
+
+        // There was a problem: return the errors
+        // (but only if strictSchemaAfterRefetching is on)
+        // TODO: maybe, in case of errors, if **params** have errors, it should still chuck
+        // an error since things could go quite wrong if one of the params doesn't cast
+        if( self.strictSchemaAfterRefetching && errors.length ){
+          next( new self.UnprocessableEntityError( { errors: errors, whileRefetching: true } ) );
+        } else {
+          next( null, doc );
+        }
+      }
+    });
+
+  },
+*/
