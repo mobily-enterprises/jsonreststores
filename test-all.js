@@ -81,16 +81,38 @@ function l( v ){
 
 var compareCollections = function( test, a, b ){
 
-  try {
+  // Makes sure that records have the keys in the right order
+  var a0 = [];
+  for( var i = 0, l = a.length; i < l; i ++ ){
+    var item = a[ i ];
+    var newItem = {};
+    Object.keys( item ).sort().forEach( function( k ){
+      newItem[ k ] = item[ k ];
+    });
+    delete newItem._children;
+    a0.push( newItem );
+  }
+  var b0 = [];
+  for( var i = 0, l = b.length; i < l; i ++ ){
+    var item = b[ i ];
+    var newItem = {};
+    Object.keys( item ).sort().forEach( function( k ){
+      newItem[ k ] = item[ k ];
+    });
+    delete newItem._children;
+    b0.push( newItem );
+  }
+
+ try {
     var a1 = [], a2, a3;
-    a.forEach( function( item ){
+    a0.forEach( function( item ){
       a1.push( JSON.stringify( item ) );
     });
     a2 = a1.sort();
     a3 = JSON.stringify( a2 );
 
     var b1 = [], b2, b3;
-    b.forEach( function( item ){
+    b0.forEach( function( item ){
       b1.push( JSON.stringify( item ) );
     });
     b2 = b1.sort();
@@ -99,12 +121,23 @@ var compareCollections = function( test, a, b ){
     test.fail( a, b, "Comparison failed", "recordset comparison" );
   }
 
-  var res = ( a3 == b3 );
+  equal = ( a3 == b3 );
 
-  if( ! res ){
+  if( ! equal ){
     test.fail( a, b, "Record sets do not match", "recordset comparison" );
+    //test.fail( a, b, console.log("MISMATCH BETWEEN:" );
+    //console.log( a );
+    //console.log( b );
+    //console.log( a3 );
+    //console.log( b3 );
+
+    console.log( (new Error()).stack );
   }
+
+  //test.ok( equal, "Record sets do not match" );
+
 }
+
 
 var populateCollection = function( data, collection, cb ){
 
