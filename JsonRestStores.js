@@ -170,7 +170,7 @@ var Store = declare( null,  {
       throw( new Error("You must define a db driver, via constructor or via prototype (creating " + self.storeName + ')' ));
     }
 
-    //this.collectionName = this.collectionName ? this.collectionName : this.storeName;
+    self.collectionName = this.collectionName ? this.collectionName : this.storeName;
 
     // If paramId is not specified, takes it from publicURL
     if( self.paramIds === null ){
@@ -192,24 +192,121 @@ var Store = declare( null,  {
       throw( new Error("You must define a store name for a store") );
     }
 
-    // Sets SearchSchema
-    if( self.searchSchema == null ){
-      self.searchSchema = self.schema;
-    }
 
-    
+    //                   *** SETTING THE SCHEMAS ***
 
-    // By default, paramIds are set in schema and searchSchema as { type: 'id' } so that developers
+
+    // STEP #1: COMPLETE THE DB SCHEMA.
+    //          Complete the DB `schema` with paramIds set as 'id', and make paramIds searchable
+
+    // By default, paramIds are set in schema as { type: 'id' } so that developers
     // can be lazy when defining their schemas
-    for( var i =0, l = self.paramIds.length; i < l; i ++ ){
+    for( var i = 0, l = self.paramIds.length; i < l; i ++ ){
       var k = self.paramIds[ i ];
       if( typeof( self.schema.structure[ k ] ) === 'undefined' ){
          self.schema.structure[ k ] = { type: 'id' };
       }
-      if( typeof( self.searchSchema.structure[ k ] ) === 'undefined' ){
-        self.searchSchema.structure[ k ] = { type: 'id' };
+    }
+
+    // By default, add paramIds will be set as `searchable` in DB `schema`
+    for( var i = 0, l = self.paramIds.length; i < l; i ++ ){
+      var k = self.paramIds[ i ];
+      self.schema.structure[ k ].searchable = true;
+    }
+
+   
+    // STEP #2: MAKE SURE searchSchema IS DEFINED AND GOOD
+    //          If not there, create it as a copy of `schema` where `searchable is there.
+    //          If there, make sure that every item has `searchable`
+
+    // If searchSchema wasn't defined, then set it as a copy of the schema where
+    // fields are searchable, EXCLUDING the paramIds fields.
+    if( self.searchSchema == null ){
+
+      var searchSchemaWasGenerated = true;
+
+      var searchSchemaStructure = { };
+      for( var k in self.schema.structure ){
+        if( typeof( self.paramIds[ k ] ) === 'undefined' && self.schema.structure[ k ].searchable ){
+          searchSchemaStructure[ k ] = self.schema.structure[ k ];
+        }
+      }
+      self.searchSchema = new self.schema.constructor( searchSchemaStructure );
+
+
+    // If searchSchema WAS defined, then add `searchable` to all entries
+    // Since it's a defined search schema, all of its entries need to be
+    // searchable regardless.
+    } else {
+
+      var searchSchemaWasGenerated = false;
+
+      for( var k in self.searchSchema.structure ){
+        self.searchSchema.structure[ k ].searchable = true;
       }
     }
+
+
+    // STEP #3: MAKE SURE THAT Db-LEVEL SCHEMA WILL INDEX PROPERLY  
+    //          For every entry in searchSchema, add `searchable` and `permute` to 
+    //          corresponding entry in `schema`.
+    //          Also, for every `paramId`, set it as a permutePrefix in main `schema`
+
+    // Make sure that, for every entry present in searchSchema,
+    // the corresponding DB-level schema is 1) searchable 2) permute
+    // (unless they are paramIds, in which case there is no point. AND YES, users might
+    // decide that paramIds are in searchSchema, it already happens in Hotplate)
+    for( var k in self.searchSchema.structure ){
+    
+      var entry = self.searchSchema.structure[ k ];
+
+      // Simple case: no `searchOptions`. So, the search target is 
+      // the same as `k`.
+      if( typeof( entry.searchOptions ) === 'undefined' ){
+
+        if( typeof( self.paramIds[ k ] ) === 'undefined' ){
+          self.schema.structure[ k ].searchable = true;
+          self.schema.structure[ k ].permute = true;
+        } 
+
+      }
+
+      // More complex case: `searchOptions` is there. This means that
+      // the referenced field *might* be different.
+      // Things are made tricky by the fact that searchOptions can be
+      // an object, or an array of objects.
+      // Array or not, objects can define a `field` key specifying which field
+      // should be used for the search.
+      else {
+     
+        if( Array.isArray( entry.searchOptions ) ){
+          var elements = entry.searchOptions;
+        } else {
+          var elements = [ entry.searchOptions ];
+        }
+
+        elements.forEach( function( element ){
+          var fieldName = element.field ? element.field : k;
+
+          self.schema.structure[ fieldName ].searchable = true;
+          self.schema.structure[ fieldName ].permute = true;
+        });
+
+      }
+    }
+
+    // Add permutePrefix attribute to schema structure for paramIds. This will make
+    // sure that searchabl+permute fields in the schema are indexed with paramIds as prefix
+    // NOTE: This works of paramIds EXCLUDING the last one, which is the idProperty
+    // and mustn't be part of the permutation
+    for( var i = 0, l = self.paramIds.length; i < l - 1; i ++ ){
+      var k = self.paramIds[ i ];
+      self.schema.structure[ k ].permutePrefix = true;
+    }
+
+
+    //                *** DONE: SETTING THE SCHEMAS ***
+
 
     var layerOptions = {
       schema: self.schema,
@@ -223,96 +320,27 @@ var Store = declare( null,  {
     }
 
     // Actually create the layer with the given parameters
-    self.dbLayer = new self.DbLayer( self.storeName, layerOptions );
-
-
-    /*
-    // Set `fields`, which will need to conform DbLayer's format: every key defined is in the schema, and keys
-    // with `true` values are also searchable.
-
-    var fields = {};
-
-    // Easy one: all fields in the schema are allowed, and are not searchable
-    for( var k in self.schema.structure ) fields[ k ] = false;
-
-    // The quest to decide which fields are searchable begins here. It's
-    // trickier than you'd think, as:
-    // * If `searchSchema` !== `schema`, anything in searchSchema must be searchable, even without `searchable` set
-    // * `searchable` might contain a `field` attribute, which will reference ANOTHER field
-    var specificSearchSchema = self.searchSchema !== self.Schema;
-    for( var k in self.searchSchema.structure ){
-
-      var searchable = self.searchSchema.structure[ k ].searchable;
-
-      // It has a specific search schema, no `searchable` attribute: just
-      // make that particular field searchable, end of story
-      if( specificSearchSchema && ( typeof( searchable ) !== 'object' || searchable === null ) ){
-        fields[ k ] = true;
-      } else {
-
-        // Field is marked as "searchable". However, `searchable` might have a `field`
-        // attribute -- if it does, then the searchable one is another field
-        var searchable = self.searchSchema.structure[ k ].searchable;
-
-        // Searchable is `true`: the searchable field is obviously `k`
-        if( searchable  === true ){
-          fields[ k ] = true;
-
-        // Searchable is an object: the searchable field might be `k`, or
-        // -- if searchable defines a `field` it will be that `field`
-        } else if( typeof( searchable ) === 'object' && searchable !== null ){
-
-          if( typeof( searchable.field ) === 'undefined' ){
-            fields[ k ] = true;
-          } else {
-
-            // Will make the referenced field searchable. IF field points to an unset field,
-            // throw an error
-            if( typeof( fields[ searchable.field ] ) === 'undefined' && ! searchable.ref  ){
-              throw( new Error("Illegal `field` attribute in searchable: " + searchable.field + ", field " + k + ", store " + self.storeName ));
-            } else {
-              if( ! searchable.ref ){
-                fields[ searchable.field ] = true;
-              }
-            }
-          }
-            
-        } else throw( new Error("Error in searchable attribute " + k + ", store " + self.storeName ) );
-      }
-    }
-
-    // `paramIds` are searchable by default. This also has the side effects of checking that
-    // anything in `paramIds` is an actual field
-    for( var i = 0, l  = self.paramIds.length; i <  l; i ++ ){
-      if( typeof( fields[ self.paramIds[ i ] ] ) === 'undefined' ){
-        throw( new Error("Illegal `field` attribute in searchable: " + self.paramIds[ i ] + ", store " + self.storeName ));
-      } else {
-        fields[ self.paramIds[ i ] ] = true;
-      }
-    }
-
-    // Create the dbLayer object, ready to accept insert/delete/select/update operations
-    // on that specific collection . Add positonField as a db field if this.positionField is set
-
-    var dbFields = {};
-    for( var k in fields ) dbFields[ k ] = fields[ k ];
-    //if( self.positionField ) dbFields[ self.positionField ] = null;
-    //self.dbLayer = new self.DbLayer( self.collectionName, { fields: dbFields, ref: self.ref ? self.ref : {} } );
-    self.dbLayer = new self.DbLayer( self.storeName, { fields: dbFields, ref: self.ref ? self.ref : {} } );
-    */
-
-
+    self.dbLayer = new self.DbLayer( self.collectionName, layerOptions );
 
     // Set the DB's hard limit on queries. DB-specific implementations will
     // set this to `true` if the query is not cursor-based (this will prevent
     // a million results from being returned)
     self.dbLayer.hardLimitOnQueries = self.hardLimitOnQueries;
 
-    // Sets the self.fields variable, which will be handy to know what's a field and searchable
-    //self.fields = fields;
   },
 
+  // *********************************************************************
+  // *** INDEXING FUNCTIONS (STUBS TO THE LAYER'S INDEXING FUNCTIONS)
+  // *********************************************************************
 
+
+  makeAllIndexes: function( options, cb ){
+    this.dbLayer.makeAllIndexes( options, cb );
+  },
+
+  dropAllIndexes: function( cb ){
+    this.dbLayer.dropAllIndexes( cb );
+  },
 
   // *********************************************************************
   // *** FUNCTIONS THAT ACTUALLY ACCESS DATA THROUGH THE DB DRIVER
@@ -407,7 +435,7 @@ var Store = declare( null,  {
     // wasn't passed: assign an ObjectId to it
     record[ self.idProperty ] = generatedId;
 
-    self.dbLayer.insert( record, { returnRecord: true }, cb );
+    self.dbLayer.insert( record, { returnRecord: true, skipValidation: true }, cb );
 
   },
 
@@ -431,7 +459,7 @@ var Store = declare( null,  {
       }
     });
 
-    self.dbLayer.update( selector, updateObject, { deleteUnsetFields: true, multi: false }, function( err, howMany ){
+    self.dbLayer.update( selector, updateObject, { deleteUnsetFields: true, multi: false, skipValidation: true }, function( err, howMany ){
       if( err ){
         cb( err );
       } else {
@@ -479,7 +507,7 @@ var Store = declare( null,  {
       }
     });
 
-    self.dbLayer.insert( record, { returnRecord: true }, cb );
+    self.dbLayer.insert( record, { returnRecord: true, skipValidation: true }, cb );
 
   },
 
@@ -490,7 +518,7 @@ var Store = declare( null,  {
     var selector = {};
 
     self._enrichSelectorWithParams( selector, params );
-    self.dbLayer.delete( selector, { multi: false }, cb );
+    self.dbLayer.delete( selector, { multi: false, skipValidation: true }, cb );
   },
 
   _queryMakeSelector: function( filters, sort, ranges, cb ){
@@ -504,15 +532,23 @@ var Store = declare( null,  {
     conditions.and = [];
     conditions.or = [];
 
+
     // Add filters to the selector
     for( var filterField in filters ){
 
       var filterValue = filters[ filterField ];
 
-      var searchable = self.searchSchema.structure[ filterField ].searchable;
-      var searchOptions = self.searchSchema.structure[ filterField ].searchOptions;
+      // There is a slim chance that  self.searchSchema.structure[ filterField ] is not there:
+      // it happens in case the request is from API and it required a field available
+      // in the main schema but NOT in the search schema
+      var searchable = self.searchSchema.structure[ filterField ] && self.searchSchema.structure[ filterField ].searchable;
+      var searchOptions = self.searchSchema.structure[ filterField ] && self.searchSchema.structure[ filterField ].searchOptions;
 
-      if( searchable) {
+      //console.log("DEBUG:");
+      //console.log( self.searchSchema.structure );
+      //console.log( self.schema.structure );
+    
+      if( searchable || !self.remote ) {
 
         // searchOptions is not an object/is null: just set default conditions (equality with field)
         if( typeof( searchOptions ) !== 'object' || searchOptions === null ){
@@ -564,8 +600,6 @@ var Store = declare( null,  {
     }
 
   },
-
-
 
 
   /*
@@ -948,10 +982,12 @@ var Store = declare( null,  {
             self.schema.validate( body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, body, errors ){
               self._sendErrorOnErr( err, next, function(){
         
+
                 if( errors.length ){
                   self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
                 } else {
-      
+     
+ 
                    self.postValidate( body, 'post', function( err ){
                      self._sendErrorOnErr( err, next, function(){
   
@@ -1412,6 +1448,26 @@ var Store = declare( null,  {
 
   },
 
+  // Helper function for _makeGetQuery
+  _validateSearchFilter: function( filters, options, cb ){
+
+    var self = this;
+
+    // If it's a remote call, then simply validate using the searchSchema
+    if( self.remote ){
+      return self.searchSchema.validate( filters, options, cb);
+    }
+
+    // If it's a local call, validate using a new schema made up with the searchSchema AND
+    // the common schema merged together
+    var schemaStructure = {};
+    for( var k in self.searchSchema.structure ) schemaStructure[ k ] = self.searchSchema.structure[ k ];
+    for( var k in self.schema.structure ) schemaStructure[ k ] = schemaStructure[ k ] || self.schema.structure[ k ];
+
+    var newSchema = new self.searchSchema.constructor( schemaStructure );
+    newSchema.validate( filters, options, cb );
+  },
+
   _makeGetQuery: function( params, body, options, next ){
 
     var self = this;
@@ -1440,7 +1496,8 @@ var Store = declare( null,  {
               self._sendError( next, new self.ForbiddenError() );
             } else {
     
-              self.searchSchema.validate( options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
+              self._validateSearchFilter( options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
+              //self.searchSchema.validate( options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
                 self._sendErrorOnErr( err, next, function(){
 
                   // Actually assigning cast and validated filters to `options`
