@@ -22,6 +22,29 @@ Funnily enough, it didn't catch a bug as big as the sky with the Range headers r
 
 */
 
+
+/*
+
+Conversion to new db layer:
+
+
+JSONRESTSTORES:
+
+* [ X ] _castDoc in JsonRestStores is no longer useful, as it's already all done at schema level
+
+* Change constructor. A layer needs:
+  - Schema (passed by JsonRestStores, taken from its params)
+  - idProperty (passed by JsonRestStores, taken from idParams)
+  - Nested (passed by JsonRestStores, taken from its params)
+  - positionField and positionBase (passed only if "position" is true, positionField fixed as __position and positionBase depending on idParams)
+  - SchemaError (fixed)
+
+* Implement searchSchema, which can be EXACTLY as it is. But, it needs searchableOption, which is only used if searchable is true.
+
+
+*/
+
+
 var 
   dummy
 , e = require('allhttperrors')
@@ -48,7 +71,7 @@ var Store = declare( null,  {
 
   DbLayer: null, // If not set in prototype, NEEDS to be passed as the constructor parameter
   searchSchema: null, // If not set in prototype, is set as `schema` by constructor
-  collectionName: null, // If not set in prototype, is set as `storeName` by constructor
+  //collectionName: null, // If not set in prototype, is set as `storeName` by constructor
 
   // ****************************************************
   // *** ATTRIBUTES THAT DEFINE STORE'S BEHAVIOUR
@@ -71,9 +94,9 @@ var Store = declare( null,  {
 
   strictSchemaAfterRefetching: false,
 
-  // positionField: null,
 
-  indexStyle: "simple",
+  nested: null,
+  position: false,
 
   // ****************************************************
   // *** FUNCTIONS THAT CAN BE OVERRIDDEN BY DEVELOPERS
@@ -131,116 +154,6 @@ var Store = declare( null,  {
   NotImplementedError: e.NotImplementedError,
   ServiceUnavailableError: e.ServiceUnavailableError,
 
-  // Make all indexes based on the schema
-  // Options can have:
-  //   `{ background: true }`, which will make sure makeIndex is called with { background: true }
-  //   `{ style: 'simple' | 'permute' }`, which will override the indexing style set by the store
-  makeIndexes: function( options ){
-
-    // THANK YOU http://stackoverflow.com/questions/9960908/permutations-in-javascript
-    // Permutation function
-    function permute( input ) {
-      var permArr = [],
-      usedChars = [];
-      function main( input ){
-        var i, ch;
-        for (i = 0; i < input.length; i++) {
-          ch = input.splice(i, 1)[0];
-          usedChars.push(ch);
-          if (input.length == 0) {
-            permArr.push( usedChars.slice() );
-          }
-          main( input );
-          input.splice( i, 0, ch );
-          usedChars.pop();
-        }
-        return permArr;
-      }
-      return main(input);
-    }
-
-    var self = this;
-    var idsHash = {};
-    var style;
-    var opt = {};
-
-    // Create `opt`, the options object passed to the db driver
-    if( typeof( options ) === 'undefined' || options === null ) options = {};
-    opt.background = !!options.background;
-
-    // Sanitise the `style` parameter to either 'simple' or 'permute'
-    if( typeof( options.style ) !== 'string'  ){
-      style = self.indexStyle;
-    } else if( options.style === 'simple' || options.style === 'permute' ){
-      style = options.style;
-    } else {
-      style = self.indexStyle;
-    }
-
-    // Index this.idProperty as unique, as it must be
-    var uniqueIndexOpt = {};
-    uniqueIndexOpt.background = !! options.background;
-    uniqueIndexOpt.unique = true;
-    
-    self.dbLayer.makeIndex( this.idProperty, uniqueIndexOpt );
-
-    // Make idsHash, the common beginning of any indexing. It also creates an
-    // index with it. Not necessary in most DBs if there is at least one indexed field
-    // (partial indexes can be used), but good to have in case there aren't other fields.
-    self.paramIds.forEach( function( p ) {
-      idsHash[ p ] = 1;
-    });
-    self.dbLayer.makeIndex( idsHash, opt );
-
-    // The type of indexing will depend on the style...
-    switch( style ){
-
-      case 'simple':
-
-        // Simple style: it will create one index per field,
-        // where each index starts with paramIds
-        Object.keys( self.fields ).forEach( function( field ){
-          var keys = {};
-          for( var k in idsHash ) keys[ k ] = idsHash[ k ];
-          if( typeof( idsHash[ field ] ) === 'undefined' ){
-            keys[ field ] = 1;
-            self.dbLayer.makeIndex( keys, opt );
-          }
-        });
-
-      break;
-
-      case 'permute':
-       
-        // Complete style: it will create indexes for _all_ permutations
-        // of searchable fields, where each permutation will start with paramIds
-        var toPermute = [];
-        Object.keys( self.fields ).forEach( function( field ){
-          if( typeof( idsHash[ field ] ) === 'undefined' ) toPermute.push( field );
-        });
-
-        // Create index for each permutation
-        permute( toPermute ).forEach( function( combination ){
-          var keys = {};
-          for( var k in idsHash ) keys[ k ] = idsHash[ k ];
-
-          for( var i = 0; i < combination.length; i ++ ) keys[ combination[ i ]  ] = 1;
-          self.dbLayer.makeIndex( keys, opt );
-        });
-        
-      break;
-
-      default:
-        throw( new Error("indexStyle needs to be 'simple' or 'permute'" ) );
-      break;
-
-    }
- 
-  },
-
-  dropAllIndexes: function( done ){
-    this.dbLayer.dropAllIndexes( done );
-  },
 
   constructor: function( DbLayer ){
 
@@ -257,7 +170,7 @@ var Store = declare( null,  {
       throw( new Error("You must define a db driver, via constructor or via prototype (creating " + self.storeName + ')' ));
     }
 
-    this.collectionName = this.collectionName ? this.collectionName : this.storeName;
+    self.collectionName = this.collectionName ? this.collectionName : this.storeName;
 
     // If paramId is not specified, takes it from publicURL
     if( self.paramIds === null ){
@@ -267,7 +180,7 @@ var Store = declare( null,  {
     // Sets proto.paramId, which (as for the principle of 
     // least surprise) must be the last paramId passed to
     // the store.
-    this.idProperty = self._lastParamId();
+    self.idProperty = self._lastParamId();
 
     // The schema must be defined
     if( typeof( self.schema ) === 'undefined' || self.schema == null ){
@@ -279,105 +192,155 @@ var Store = declare( null,  {
       throw( new Error("You must define a store name for a store") );
     }
 
-    // Sets SearchSchema
-    if( self.searchSchema == null ){
-      self.searchSchema = self.schema;
-    }
 
-    // By default, paramIds are set in schema and searchSchema as { type: 'id' } so that developers
+    //                   *** SETTING THE SCHEMAS ***
+
+
+    // STEP #1: COMPLETE THE DB SCHEMA.
+    //          Complete the DB `schema` with paramIds set as 'id', and make paramIds searchable
+
+    // By default, paramIds are set in schema as { type: 'id' } so that developers
     // can be lazy when defining their schemas
-    for( var i =0, l = self.paramIds.length; i < l; i ++ ){
+    for( var i = 0, l = self.paramIds.length; i < l; i ++ ){
       var k = self.paramIds[ i ];
       if( typeof( self.schema.structure[ k ] ) === 'undefined' ){
          self.schema.structure[ k ] = { type: 'id' };
       }
-      if( typeof( self.searchSchema.structure[ k ] ) === 'undefined' ){
-        self.searchSchema.structure[ k ] = { type: 'id' };
+    }
+
+    // By default, add paramIds will be set as `searchable` in DB `schema`
+    for( var i = 0, l = self.paramIds.length; i < l; i ++ ){
+      var k = self.paramIds[ i ];
+      self.schema.structure[ k ].searchable = true;
+    }
+
+   
+    // STEP #2: MAKE SURE searchSchema IS DEFINED AND GOOD
+    //          If not there, create it as a copy of `schema` where `searchable is there.
+    //          If there, make sure that every item has `searchable`
+
+    // If searchSchema wasn't defined, then set it as a copy of the schema where
+    // fields are searchable, EXCLUDING the paramIds fields.
+    if( self.searchSchema == null ){
+
+      var searchSchemaWasGenerated = true;
+
+      var searchSchemaStructure = { };
+      for( var k in self.schema.structure ){
+        if( typeof( self.paramIds[ k ] ) === 'undefined' && self.schema.structure[ k ].searchable ){
+          searchSchemaStructure[ k ] = self.schema.structure[ k ];
+        }
+      }
+      self.searchSchema = new self.schema.constructor( searchSchemaStructure );
+
+
+    // If searchSchema WAS defined, then add `searchable` to all entries
+    // Since it's a defined search schema, all of its entries need to be
+    // searchable regardless.
+    } else {
+
+      var searchSchemaWasGenerated = false;
+
+      for( var k in self.searchSchema.structure ){
+        self.searchSchema.structure[ k ].searchable = true;
       }
     }
 
-    // Set `fields`, which will need to conform DbLayer's format: every key defined is in the schema, and keys
-    // with `true` values are also searchable.
 
-    var fields = {};
+    // STEP #3: MAKE SURE THAT Db-LEVEL SCHEMA WILL INDEX PROPERLY  
+    //          For every entry in searchSchema, add `searchable` and `permute` to 
+    //          corresponding entry in `schema`.
+    //          Also, for every `paramId`, set it as a permutePrefix in main `schema`
 
-    // Easy one: all fields in the schema are allowed, and are not searchable
-    for( var k in self.schema.structure ) fields[ k ] = false;
-
-    // The quest to decide which fields are searchable begins here. It's
-    // trickier than you'd think, as:
-    // * If `searchSchema` !== `schema`, anything in searchSchema must be searchable, even without `searchable` set
-    // * `searchable` might contain a `field` attribute, which will reference ANOTHER field
-    var specificSearchSchema = self.searchSchema !== self.Schema;
+    // Make sure that, for every entry present in searchSchema,
+    // the corresponding DB-level schema is 1) searchable 2) permute
+    // (unless they are paramIds, in which case there is no point. AND YES, users might
+    // decide that paramIds are in searchSchema, it already happens in Hotplate)
     for( var k in self.searchSchema.structure ){
+    
+      var entry = self.searchSchema.structure[ k ];
 
-      var searchable = self.searchSchema.structure[ k ].searchable;
+      // Simple case: no `searchOptions`. So, the search target is 
+      // the same as `k`.
+      if( typeof( entry.searchOptions ) === 'undefined' ){
 
-      // It has a specific search schema, no `searchable` attribute: just
-      // make that particular field searchable, end of story
-      if( specificSearchSchema && ( typeof( searchable ) !== 'object' || searchable === null ) ){
-        fields[ k ] = true;
-      } else {
+        if( typeof( self.paramIds[ k ] ) === 'undefined' ){
+          self.schema.structure[ k ].searchable = true;
+          self.schema.structure[ k ].permute = true;
+        } 
 
-        // Field is marked as "searchable". However, `searchable` might have a `field`
-        // attribute -- if it does, then the searchable one is another field
-        var searchable = self.searchSchema.structure[ k ].searchable;
+      }
 
-        // Searchable is `true`: the searchable field is obviously `k`
-        if( searchable  === true ){
-          fields[ k ] = true;
+      // More complex case: `searchOptions` is there. This means that
+      // the referenced field *might* be different.
+      // Things are made tricky by the fact that searchOptions can be
+      // an object, or an array of objects.
+      // Array or not, objects can define a `field` key specifying which field
+      // should be used for the search.
+      else {
+     
+        if( Array.isArray( entry.searchOptions ) ){
+          var elements = entry.searchOptions;
+        } else {
+          var elements = [ entry.searchOptions ];
+        }
 
-        // Searchable is an object: the searchable field might be `k`, or
-        // -- if searchable defines a `field` it will be that `field`
-        } else if( typeof( searchable ) === 'object' && searchable !== null ){
+        elements.forEach( function( element ){
+          var fieldName = element.field ? element.field : k;
 
-          if( typeof( searchable.field ) === 'undefined' ){
-            fields[ k ] = true;
-          } else {
+          self.schema.structure[ fieldName ].searchable = true;
+          self.schema.structure[ fieldName ].permute = true;
+        });
 
-            // Will make the referenced field searchable. IF field points to an unset field,
-            // throw an error
-            if( typeof( fields[ searchable.field ] ) === 'undefined' && ! searchable.ref  ){
-              throw( new Error("Illegal `field` attribute in searchable: " + searchable.field + ", field " + k + ", store " + self.storeName ));
-            } else {
-              if( ! searchable.ref ){
-                fields[ searchable.field ] = true;
-              }
-            }
-          }
-            
-        } else throw( new Error("Error in searchable attribute " + k + ", store " + self.storeName ) );
       }
     }
 
-    // `paramIds` are searchable by default. This also has the side effects of checking that
-    // anything in `paramIds` is an actual field
-    for( var i = 0, l  = self.paramIds.length; i <  l; i ++ ){
-      if( typeof( fields[ self.paramIds[ i ] ] ) === 'undefined' ){
-        throw( new Error("Illegal `field` attribute in searchable: " + self.paramIds[ i ] + ", store " + self.storeName ));
-      } else {
-        fields[ self.paramIds[ i ] ] = true;
-      }
+    // Add permutePrefix attribute to schema structure for paramIds. This will make
+    // sure that searchabl+permute fields in the schema are indexed with paramIds as prefix
+    // NOTE: This works of paramIds EXCLUDING the last one, which is the idProperty
+    // and mustn't be part of the permutation
+    for( var i = 0, l = self.paramIds.length; i < l - 1; i ++ ){
+      var k = self.paramIds[ i ];
+      self.schema.structure[ k ].permutePrefix = true;
     }
 
-    // Create the dbLayer object, ready to accept insert/delete/select/update operations
-    // on that specific collection . Add positonField as a db field if this.positionField is set
 
-    var dbFields = {};
-    for( var k in fields ) dbFields[ k ] = fields[ k ];
-    //if( self.positionField ) dbFields[ self.positionField ] = null;
-    self.dbLayer = new self.DbLayer( self.collectionName, { fields: dbFields, ref: self.ref ? self.ref : {} } );
+    //                *** DONE: SETTING THE SCHEMAS ***
+
+
+    var layerOptions = {
+      schema: self.schema,
+      nested: self.nested,
+      idProperty: self.idProperty,
+      schemaError: self.UnprocessableEntityError,
+    };
+    if( self.position ){
+      layerOptions.positionField = '__position';
+      layerOptions.positionBase = self.paramIds.slice( 1, -1 );
+    }
+
+    // Actually create the layer with the given parameters
+    self.dbLayer = new self.DbLayer( self.collectionName, layerOptions );
 
     // Set the DB's hard limit on queries. DB-specific implementations will
     // set this to `true` if the query is not cursor-based (this will prevent
     // a million results from being returned)
     self.dbLayer.hardLimitOnQueries = self.hardLimitOnQueries;
 
-    // Sets the self.fields variable, which will be handy to know what's a field and searchable
-    self.fields = fields;
   },
 
+  // *********************************************************************
+  // *** INDEXING FUNCTIONS (STUBS TO THE LAYER'S INDEXING FUNCTIONS)
+  // *********************************************************************
 
+
+  makeAllIndexes: function( options, cb ){
+    this.dbLayer.makeAllIndexes( options, cb );
+  },
+
+  dropAllIndexes: function( cb ){
+    this.dbLayer.dropAllIndexes( cb );
+  },
 
   // *********************************************************************
   // *** FUNCTIONS THAT ACTUALLY ACCESS DATA THROUGH THE DB DRIVER
@@ -472,7 +435,7 @@ var Store = declare( null,  {
     // wasn't passed: assign an ObjectId to it
     record[ self.idProperty ] = generatedId;
 
-    self.dbLayer.insert( record, { returnRecord: true }, cb );
+    self.dbLayer.insert( record, { returnRecord: true, skipValidation: true }, cb );
 
   },
 
@@ -496,7 +459,7 @@ var Store = declare( null,  {
       }
     });
 
-    self.dbLayer.update( selector, updateObject, { deleteUnsetFields: true, multi: false }, function( err, howMany ){
+    self.dbLayer.update( selector, updateObject, { deleteUnsetFields: true, multi: false, skipValidation: true }, function( err, howMany ){
       if( err ){
         cb( err );
       } else {
@@ -544,7 +507,7 @@ var Store = declare( null,  {
       }
     });
 
-    self.dbLayer.insert( record, { returnRecord: true }, cb );
+    self.dbLayer.insert( record, { returnRecord: true, skipValidation: true }, cb );
 
   },
 
@@ -555,7 +518,7 @@ var Store = declare( null,  {
     var selector = {};
 
     self._enrichSelectorWithParams( selector, params );
-    self.dbLayer.delete( selector, { multi: false }, cb );
+    self.dbLayer.delete( selector, { multi: false, skipValidation: true }, cb );
   },
 
   _queryMakeSelector: function( filters, sort, ranges, cb ){
@@ -569,30 +532,56 @@ var Store = declare( null,  {
     conditions.and = [];
     conditions.or = [];
 
+
     // Add filters to the selector
     for( var filterField in filters ){
 
       var filterValue = filters[ filterField ];
 
-      var searchable = self.searchSchema.structure[ filterField ].searchable;
+      // There is a slim chance that  self.searchSchema.structure[ filterField ] is not there:
+      // it happens in case the request is from API and it required a field available
+      // in the main schema but NOT in the search schema
+      var searchable = self.searchSchema.structure[ filterField ] && self.searchSchema.structure[ filterField ].searchable;
+      var searchOptions = self.searchSchema.structure[ filterField ] && self.searchSchema.structure[ filterField ].searchOptions;
 
-      // Searchable is not an object/is null: just set conditions as defaults
-      if( typeof( searchable ) !== 'object' || searchable === null ){
-        field = filterField;
-        type = 'eq';
-        condition = 'and';
-      // Searchable is an object: try to get values from it
+      //console.log("DEBUG:");
+      //console.log( self.searchSchema.structure );
+      //console.log( self.schema.structure );
+    
+      if( searchable || !self.remote ) {
+
+        // searchOptions is not an object/is null: just set default conditions (equality with field)
+        if( typeof( searchOptions ) !== 'object' || searchOptions === null ){
+          field = filterField;
+          type = 'eq';
+          condition = 'and';
+          conditions[ condition ].push( { field: field, type: type, value: filters[ filterField ] } );
+
+        // searchOptions IS an object: it might be an array or a single condition set
+        } else {
+         
+          // Make sure elements ends up as an array regardless
+          if( Array.isArray( searchOptions ) ){
+            var elements = searchOptions;
+          } else {
+            var elements = [ searchOptions ];
+          }
+
+          elements.forEach( function( element ){
+            field = element.field || filterField;
+            type = element.type || 'eq';
+            condition = element.condition || 'and';
+
+            conditions[ condition ].push( { field: field, type: type, value: filters[ filterField ] } );
+          });
+
+        }
+
+      // Field is not searchable: error!
       } else {
-        field = searchable.field || filterField;
-        type = searchable.type || 'eq';
-        condition = searchable.condition || 'and';
+        errors.push( { field: filterField, message: 'Field not allowed in search: ' + filterField + ' in ' + self.storeName } );
       }
 
-      if( ! self.fields ){
-        errors.push( { field: field, message: 'Field not allowed in search: ' + filter + ' in ' + self.storeName } );
-      } else {
-        conditions[ condition ].push( { field: field, type: type, value: filters[ filterField ] } );
-      }
     }
 
     // Call the callback with an error, or with the selector (containing conditions, ranges, sort)
@@ -791,7 +780,7 @@ var Store = declare( null,  {
   // ****************************************************
 
 
-  _extrapolateDocAnd_castDocAndprepareBeforeSendAll: function( params, body, options, docs, cb ){
+  _extrapolateDocAndprepareBeforeSendAll: function( params, body, options, docs, cb ){
 
     var self = this;
 
@@ -805,10 +794,10 @@ var Store = declare( null,  {
             callback( err, null );
           } else {
 
-            self._castDoc( doc, function( err, doc) {
-              if( err ){
-                callback( err, null );
-              } else {
+            //self._castDoc( doc, function( err, doc) {
+            //  if( err ){
+            //    callback( err, null );
+            //  } else {
 
                 self.prepareBeforeSend( doc, function( err, doc ){
                   if( err ){
@@ -818,8 +807,8 @@ var Store = declare( null,  {
                     callback( null, null );
                   }
                 });
-              }
-            });
+            //  }
+            //});
 
           }
         });
@@ -897,36 +886,6 @@ var Store = declare( null,  {
             body[ k ] = fakeRecord[ k ];
           });
           next( null );
-        }
-      }
-    });
-
-  },
-
-  _castDoc: function( doc, next ){
-
-    var self = this;
-
-    // Cast the values. This is a relaxed check: if a field is missing, it won't
-    // complain. This way, applications won't start failing when adding fields
-    var skipCast = [];
-    if( self.positionField ) {
-      skipCast.push( self.positionField );
-    }
-
-    self.schema.validate( doc, { onlyObjectValues: true, deserialize: true, skipCast: skipCast }, function( err, doc, errors ) {
-      if( err ){
-        next( err );
-      } else {
-
-        // There was a problem: return the errors
-        // (but only if strictSchemaAfterRefetching is on)
-        // TODO: maybe, in case of errors, if **params** have errors, it should still chuck
-        // an error since things could go quite wrong if one of the params doesn't cast
-        if( self.strictSchemaAfterRefetching && errors.length ){
-          next( new self.UnprocessableEntityError( { errors: errors, whileRefetching: true } ) );
-        } else {
-          next( null, doc );
         }
       }
     });
@@ -1023,10 +982,12 @@ var Store = declare( null,  {
             self.schema.validate( body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, body, errors ){
               self._sendErrorOnErr( err, next, function(){
         
+
                 if( errors.length ){
                   self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
                 } else {
-      
+     
+ 
                    self.postValidate( body, 'post', function( err ){
                      self._sendErrorOnErr( err, next, function(){
   
@@ -1054,8 +1015,8 @@ var Store = declare( null,  {
                                     self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                       self._sendErrorOnErr( err, next, function(){
             
-                                        self._castDoc( doc, function( err, doc) {
-                                          self._sendErrorOnErr( err, next, function(){
+                                        //self._castDoc( doc, function( err, doc) {
+                                          //self._sendErrorOnErr( err, next, function(){
                                         
                                             // Remote request: set headers, and send the doc back (if echo is on)
                                             if( self.remote ){
@@ -1112,8 +1073,8 @@ var Store = declare( null,  {
                                             } 
                 
                                        
-                                          });
-                                        });
+                                          //});
+                                        //});
     
                                       });
                                     });
@@ -1145,72 +1106,6 @@ var Store = declare( null,  {
 
   },
 
-/*
-  _relocation: function( id, moveBeforeId, params, next ){
-
-    var self = this;
-
-    // The last parameter, the callback, can be optional
-    if( typeof( next ) !== 'function' ) next = function(){};
-
-    // PositionField is 'null': nothing for us to do
-    if( self.positionField === null ) return next( null );
-
-    //console.log("CALLED CHANGE POSITION, ID: ", id, " BEFORE: ", moveBeforeId );
-    if( typeof( moveBeforeId ) === 'undefined' ) return next( null );
-  
-    // Make up the conditions hash, to be passed to relocation so that the main
-    // select is filtered by the paramIds (otherwise it will reorder the WHOLE table!)
-    var conditionsHash = { and: [] };
-    for( var i = 0, l = self.paramIds.length -1; i < l; i ++ ){
-      var paramId = self.paramIds[ i ];
-      conditionsHash.and.push( { field: paramId, type: 'eq', value: params[ paramId ] } );
-    }
-
-    // If moveBeforeId is 'null', then there is no need to look it
-    // up to make sure it exists
-    if( moveBeforeId === 'null' ){
-      //console.log("OK, moveBeforeId is null, can run anyway ");
-      self.dbLayer.relocation( self.positionField, self.idProperty, id, null, conditionsHash, function( err ){
-        if( err ) return next( err );
-        next( null );
-      } );
-
-    // Check that moveBeforeId exists. Since this is not _actually_
-    // a field, looking it up is a bit of a challenge (we need to do
-    // manual casting etc.)
-    } else {
- 
-      // Make up a fake record just with idProperty, which will be
-      // used to lookup moveBeforeId
-      var fakeBody = {};
-      fakeBody[ self.idProperty ] = moveBeforeId;
-
-      // Try and cast that fakeBody. If successful, fakeBody[ idProperty ]
-      // will be cast and ready to be used for the search
-      self._castDoc( fakeBody, function( err, doc ){
-        if( err ) return next( err );
-
-        // At this point, doc[ idProperty ] is all cast, ready to look for it
-        self.dbLayer.select( { conditions: { and: [ { field: self.idProperty, type: 'eq', value: doc[ self.idProperty ] } ] } }  , function( err, docs ){
-          if( err ) return next( err );
-
-          // moveBeforeId wasn't found -- not found error
-          if( ! docs.length === 0 ) return self._sendError( new self.NotFoundError );
-
-          //console.log( "OK, moveBeforeId exists!" );
-          self.dbLayer.relocation( self.positionField, self.idProperty, id, moveBeforeId, conditionsHash, function( err ){
-            if( err ) return next( err );
-
-            next( null );
-          } );
-        });
-      });
-    } 
-
-  },
-  */
-
   _makePut: function( params, body, options, next ){
 
     var self = this;
@@ -1225,7 +1120,6 @@ var Store = declare( null,  {
       self._sendError( next, new self.NotImplementedError( ) );
       return;
     }
-
 
     // DETOUR: It's a relocation. Simply try and relocate the record
     // (after the usual permissions etc.)
@@ -1244,8 +1138,8 @@ var Store = declare( null,  {
                 self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                   self._sendErrorOnErr( err, next, function(){
         
-                    self._castDoc( doc, function( err, doc) {
-                      self._sendErrorOnErr( err, next, function(){
+                    //self._castDoc( doc, function( err, doc) {
+                      //self._sendErrorOnErr( err, next, function(){
         
                         // Actually check permissions
                         self.checkPermissionsPutExisting( params, body, options, doc, fullDoc, function( err, granted ){
@@ -1277,8 +1171,8 @@ var Store = declare( null,  {
                           });
                         });
 
-                      });
-                    });
+                      //});
+                    //});
                  
                   });
                 });
@@ -1361,8 +1255,8 @@ var Store = declare( null,  {
                                         self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                           self._sendErrorOnErr( err, next, function(){
             
-                                            self._castDoc( doc, function( err, doc) {
-                                              self._sendErrorOnErr( err, next, function(){
+                                            //self._castDoc( doc, function( err, doc) {
+                                              //self._sendErrorOnErr( err, next, function(){
             
                                                 // Remote request: set headers, and send the doc back (if echo is on)
                                                 if( self.remote ){
@@ -1410,8 +1304,8 @@ var Store = declare( null,  {
     
                                                 }
                 
-                                              });
-                                            });
+                                              //});
+                                            //});
     
                                           });
                                         });
@@ -1433,8 +1327,8 @@ var Store = declare( null,  {
                               self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                 self._sendErrorOnErr( err, next, function(){
             
-                                  self._castDoc( doc, function( err, doc) {
-                                    self._sendErrorOnErr( err, next, function(){
+                                  //self._castDoc( doc, function( err, doc) {
+                                    //self._sendErrorOnErr( err, next, function(){
             
                                       // Actually check permissions
                                       self.checkPermissionsPutExisting( params, body, options, doc, fullDoc, function( err, granted ){
@@ -1457,8 +1351,8 @@ var Store = declare( null,  {
                                                   self._sendErrorOnErr( err, next, function(){
     
             
-                                                    self._castDoc( docAfter, function( err, docAfter ) {
-                                                      self._sendErrorOnErr( err, next, function(){
+                                                    //self._castDoc( docAfter, function( err, docAfter ) {
+                                                      //self._sendErrorOnErr( err, next, function(){
                     
                                                         // Remote request: set headers, and send the doc back (if echo is on)
                                                         if( self.remote ){
@@ -1510,8 +1404,8 @@ var Store = declare( null,  {
                                                           });
                                                         }
                     
-                                                      });
-                                                    });
+                                                      //});
+                                                    //});
             
                                                   });
                                                 });
@@ -1525,8 +1419,8 @@ var Store = declare( null,  {
                                         });
                                       });
                 
-                                    });
-                                  });
+                                    //});
+                                  //});
             
                                 });
                               });
@@ -1552,6 +1446,26 @@ var Store = declare( null,  {
       });
     });
 
+  },
+
+  // Helper function for _makeGetQuery
+  _validateSearchFilter: function( filters, options, cb ){
+
+    var self = this;
+
+    // If it's a remote call, then simply validate using the searchSchema
+    if( self.remote ){
+      return self.searchSchema.validate( filters, options, cb);
+    }
+
+    // If it's a local call, validate using a new schema made up with the searchSchema AND
+    // the common schema merged together
+    var schemaStructure = {};
+    for( var k in self.searchSchema.structure ) schemaStructure[ k ] = self.searchSchema.structure[ k ];
+    for( var k in self.schema.structure ) schemaStructure[ k ] = schemaStructure[ k ] || self.schema.structure[ k ];
+
+    var newSchema = new self.searchSchema.constructor( schemaStructure );
+    newSchema.validate( filters, options, cb );
   },
 
   _makeGetQuery: function( params, body, options, next ){
@@ -1582,7 +1496,8 @@ var Store = declare( null,  {
               self._sendError( next, new self.ForbiddenError() );
             } else {
     
-              self.searchSchema.validate( options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
+              self._validateSearchFilter( options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
+              //self.searchSchema.validate( options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
                 self._sendErrorOnErr( err, next, function(){
 
                   // Actually assigning cast and validated filters to `options`
@@ -1596,7 +1511,7 @@ var Store = declare( null,  {
                     self.execGetDbQuery( params, body, options, function( err, queryDocs, total, grandTotal ){
                       self._sendErrorOnErr( err, next, function(){
        
-                        self._extrapolateDocAnd_castDocAndprepareBeforeSendAll( params, body, options, queryDocs, function( err ){
+                        self._extrapolateDocAndprepareBeforeSendAll( params, body, options, queryDocs, function( err ){
                           self._sendErrorOnErr( err, next, function(){
         
                             self.afterGetQuery( params, body, options, queryDocs, function( err ) {
@@ -1672,8 +1587,8 @@ var Store = declare( null,  {
               self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                 self._sendErrorOnErr( err, next, function(){
     
-                  self._castDoc( doc, function( err, doc) {
-                    self._sendErrorOnErr( err, next, function(){
+                  //self._castDoc( doc, function( err, doc) {
+                  //  self._sendErrorOnErr( err, next, function(){
         
                       // Check the permissions 
                       self.checkPermissionsGet( params, body, options, doc, fullDoc, function( err, granted ){
@@ -1716,8 +1631,8 @@ var Store = declare( null,  {
                       });
         
         
-                    });
-                  });
+                  //  });
+                  //});
                 });
               });
     
@@ -1758,8 +1673,8 @@ var Store = declare( null,  {
               self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                 self._sendErrorOnErr( err, next, function(){
     
-                  self._castDoc( doc, function( err, doc) {
-                    self._sendErrorOnErr( err, next, function(){
+                  //self._castDoc( doc, function( err, doc) {
+                    //self._sendErrorOnErr( err, next, function(){
         
                       // Check the permissions 
                       self.checkPermissionsDelete( params, body, options, doc, fullDoc, function( err, granted ){
@@ -1799,8 +1714,9 @@ var Store = declare( null,  {
                         });
                       });
         
-                    });
-                  });
+                    //});
+                  //});
+
                 });
               });
     
@@ -2102,4 +2018,34 @@ function _checkThatParamIdsArePresent( body, paramIds, skipLast ){
 exports = module.exports = Store;
 Store.artificialDelay = 0;
 
+/*
+  _castDoc: function( doc, next ){
 
+    var self = this;
+
+    // Cast the values. This is a relaxed check: if a field is missing, it won't
+    // complain. This way, applications won't start failing when adding fields
+    var skipCast = [];
+    if( self.positionField ) {
+      skipCast.push( self.positionField );
+    }
+
+    self.schema.validate( doc, { onlyObjectValues: true, deserialize: true, skipCast: skipCast }, function( err, doc, errors ) {
+      if( err ){
+        next( err );
+      } else {
+
+        // There was a problem: return the errors
+        // (but only if strictSchemaAfterRefetching is on)
+        // TODO: maybe, in case of errors, if **params** have errors, it should still chuck
+        // an error since things could go quite wrong if one of the params doesn't cast
+        if( self.strictSchemaAfterRefetching && errors.length ){
+          next( new self.UnprocessableEntityError( { errors: errors, whileRefetching: true } ) );
+        } else {
+          next( null, doc );
+        }
+      }
+    });
+
+  },
+*/
