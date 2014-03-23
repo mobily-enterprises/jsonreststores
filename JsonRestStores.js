@@ -334,8 +334,8 @@ var Store = declare( null,  {
   // *********************************************************************
 
 
-  makeAllIndexes: function( options, cb ){
-    this.dbLayer.makeAllIndexes( options, cb );
+  generateSchemaIndexes: function( options, cb ){
+    this.dbLayer.generateSchemaIndexes( options, cb );
   },
 
   dropAllIndexes: function( cb ){
