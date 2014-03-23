@@ -154,6 +154,12 @@ var Store = declare( null,  {
   NotImplementedError: e.NotImplementedError,
   ServiceUnavailableError: e.ServiceUnavailableError,
 
+  reposition: function( doc, options, cb ){
+
+    console.log("REPOSITION CALLED! (JsonRestStores)");
+    if( typeof( cb ) === 'undefined' ) cb = function(){};
+    this.dbLayer.reposition( doc, options, cb );
+  },
 
   constructor: function( DbLayer ){
 
@@ -1011,6 +1017,7 @@ var Store = declare( null,  {
             
                                     //console.log("RUNNING RELOCATION:", fullDoc[ self.idProperty ], options && options.beforeId ? options.beforeId : null   );
                                     //self._relocation( fullDoc[ self.idProperty ], options && options.beforeId ? options.beforeId : 'null', params);
+                                    self.reposition( fullDoc, options && options.beforeId ? options.beforeId : 'null' );
      
                                     self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                       self._sendErrorOnErr( err, next, function(){
@@ -1150,6 +1157,7 @@ var Store = declare( null,  {
                             } else {
 
                               //self._relocation( fullDoc[ self.idProperty ], options.beforeId, params );
+                              self.reposition( fullDoc, options && options.beforeId ? options.beforeId : 'null' );
 
                               self.prepareBeforeSend( doc, function( err, doc ){
                                 self._sendErrorOnErr( err, next, function(){
@@ -1251,6 +1259,7 @@ var Store = declare( null,  {
                                       self._sendErrorOnErr( err, next, function(){
             
                                         //self._relocation( fullDoc[ self.idProperty ], options.beforeId, params );
+                                        self.reposition( fullDoc, options && options.beforeId ? options.beforeId : 'null' );
     
                                         self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                           self._sendErrorOnErr( err, next, function(){
@@ -1346,6 +1355,7 @@ var Store = declare( null,  {
                                               self._sendErrorOnErr( err, next, function(){
            
                                                //self._relocation( fullDoc[ self.idProperty ], options.beforeId, params );
+                                               self.reposition( fullDoc, options && options.beforeId ? options.beforeId : 'null' );
      
                                                 self.extrapolateDoc( params, body, options, fullDocAfter, function( err, docAfter ) {
                                                   self._sendErrorOnErr( err, next, function(){
