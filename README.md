@@ -65,21 +65,13 @@ To understand stores and client interaction, you can read [Dojo's JsonRest store
 ## JsonRestStores' features
 
 * Follows the KISS principle: everything is kept as simple as possible.
-
 * 100% compliant with [Dojo's JsonRest stores](http://dojotoolkit.org/reference-guide/1.8/dojo/store/JsonRest.html). This means for example that the server will handle the `if-match` and `if-none-match` headers (for `PUT` calls), or will take into consideration the `range` headers and provide the right `Content-range` header in the responses (for `GET` calls) and so on.
-
 * It's database-agnostic. It uses simpledblayer to access data, and it can also manipulate subsets of existing data.
-
 * It uses a simple schema library  simple, extendible data validation. 
-
 * It uses OOP patterns neatly using simpledeclare: each store is a javascript constructor which inherits from the database-specific constructor (which inherits itself from a generic, base constructor).
-
 * All unimplemented methods will return a `501 Unimplemented Method` server response
-
 * It's able to manipulate only a subset of your DB data. If you have existing tables/collections, JsonRestStores will only ever touch the fields defined in your store's schema.
-
-* It will instruct the database layer to create indexes according to what's marked as `searchable` in the schema; this includes creating compound keys for the definind IDs (for example, a store providing `/bookings/1234/users/5678/products` will have `bookingId`, `userId` and `productId` as compound keys). You can decide the indexing style: `simple` (fewer indexes, but conplex queries won't be fully indexed) or compound (more indexes, and every query is guaranteed to be fully indexed).
-
+* It will use SimpleDbLayer, which will create indexes according to what's marked as `searchable` in the schema; this includes creating compound keys with the store's IDs as prefix when possible/appropriate
 * It's highly addictive. You will never want to write an API call by hand again.
 
 # Quickstart
@@ -689,7 +681,7 @@ Both `PUT` and `POST` calls will check for headers to see if an item is being re
 * `X-rest-before`. If set, the item will be placed _before_ the one with the ID corresponding to the header value.
 * `X-rest-relocation`. If set, JsonRestStore will actually ignore the data, and will simply relocate the item as it was. This is useful if you want your client to trigger a relocation without re-submitting (useless) data to the server.
 
-Note that the way items are relocated is beyond the scope of JsonRestStores, which calls the DB layer's `_relocate` function. All you have to do to allow relocation is define a `positionField`:
+Note that the way items are relocated is beyond the scope of JsonRestStores, which calls the DB layer's `position()` function. All you have to do to allow relocation is pass the store `position: true`:
 
       var Managers= declare( JRS, {
 
@@ -698,7 +690,7 @@ Note that the way items are relocated is beyond the scope of JsonRestStores, whi
           surname: { type: 'string', trim: 60 },
         }),
 
-        positionField: 'order',
+        position: true,
 
         storeName: 'Managers',
         publicURL: '/managers/:id',
@@ -714,10 +706,8 @@ Note that the way items are relocated is beyond the scope of JsonRestStores, whi
 
 Note that:
 
-* The field is not part of the schema, and therefore it cannot be fetched/recorded directly
-* You cannot search by `positionField`, nor order by it
-* JsoNRestStores will return items ordered by `positionField` when no sorting option is provided
-* The `positionField` will be indexed
+* The position field is not exposed in any way. In fact, the way it's implemented by the DB layer is irrelevant to JsonRestStores
+* JsoNRestStores will return items in the right order when no sorting option is provided
 
 # Important methods and attributes you can override
 
@@ -769,70 +759,17 @@ The method's signature is:
 
     prepareBeforeSend( doc, cb )
 
+
+## Indexing functions
+
+Indexing is delegated to SimpleDbLayer, which will generate the right indexes depending on the defined schema. Two functions are available directly from JsonRestStores -- which just call the equivalent ones in the store's DB layer:
+
+* `generateSchemaIndexes( options, cb )` -- it generates all indexes for the defined schema. `options` can have `background: true` if you want the operation to run in the background
+
+* `dropAllIndexes( cb )` -- it drops all indexes. This must obviously be avoided during production
+
+
 ## Queries
-
-### `indexStyle`
-
-This attribute can be `simple` (which is the class' default) or `permute`. It defines how indexes will be created when the method `makeIndexes()` is called.  (Note that indexes are never created automatically: you do need to call `makeIndexes()` to create them).
-
-To understand how indexes are created, take this example schema:
-
-    // ...
-    schema: new Schema({
-      name      : { type: 'string', searchable: true },
-      surname   : { type: 'string', searchable: true },
-      age       : { type: 'string', searchable: true },
-      }),
-    publicURL: '/bookings/:bookindId/people/:personId',
-    // ...
-
-This is the same as writing:
- 
-    // ...
-    schema: new Schema({
-      personId  : { type: 'id' }
-      bookingId : { type: 'id' },
-
-      name      : { type: 'string', searchable: true },
-      surname   : { type: 'string', searchable: true },
-      age       : { type: 'string', searchable: true },
-      }),
-    paramIds: [ 'bookingId', 'personId' ],
-    // ...
-    
-
-Remember that publicURL defines entries in the schema, as well as the `paramIds` array. This store will be reachable from `/bookings/:bookingId/people/:personId`.
-When calling `makeIndexes()`, the following indexes are always created:
-
-* `personId`. This, as the last item in paramIds, is created as an `unique` index.
-* `bookingId+personId`. Basically, a compound index that includes `bookingId` and `personId` contatenated
-
-However there are other searchable fields:  `name`, `surname` and `age` that need to be indexed. What yo udo know, is that this store will **always** look for records filtering _at least_ by `personId` and `bookingId`. So, when `indexStyle` is simple, the following compound indexes are created:
-
-* `bookingId+personId+name`
-* `bookingId+personId+surname`
-* `bookingId+personId+age`
-
-This means that when filtering by `name`, the query will be fully indexed. However, what if a very common use-case is to search by name, surname and age at the same time? Most database servers will perform reasonably well, but will only be able to use one of the three compound indexes (normally, the one with the most information).
-
-If you want to make absolute sure that every query will use indexes, you should set `indexStyle` as `permute`, which will create:
-
-* `bookingId+personId+name+surname+age`
-* `bookingId+personId+name+age+surname`
-* `bookingId+personId+surname+name+age`
-* `bookingId+personId+surname+age+name`
-* `bookingId+personId+age+name+surname`
-* `bookingId+personId+age+surname+name`
-
-It basically creates a compound index for every possible searching combination. Watch out! Increasing the number of fields will tend to blow out the number of indexes your database will need to keep up to date every time there is a write!
-
-### Partial permutations?
-
-If you have a situation where you have a lot of searchable fields, and only wish to permute some of them, you can:
-
-* Create the store with `indexStyle` set to `simple`
-* Create another store that inherits from the previous one, but sets `indexStyle` to permute and `searchSchema` to the list of fields you want to permute
-* Run `createIndexes()` on both stores
 
 ### `deleteAfterGetQuery`
 
@@ -841,7 +778,6 @@ If set to `true`, any "get query" method will have the side effect of deleting t
 ### `hardLimitOnQueries`
 
 This is the limit of the number of elements that can be returned by a query without ID (GetQuery). The default is 50. 
-
 ## Permissions
 
 By default, everything is allowed: stores allow pretty much anything and anything; anybody can DELETE, PUT, POST, etc. Furtunately, JsonRestStores allows you to decide exactly what is allowed and what isn't, by overriding specific methods.
@@ -984,11 +920,11 @@ JsonRestStores allows you to decide how to query the database depending on what 
 
 So, for a query like `GET /people?name=tony&surname=mobily`, only records where `name` _and_ `surname` match will be returned as an array.
 
-You can decide to apply a different type of filter by defining `searchable` as an object:
+You can decide to apply a different type of filter by defining `searchableOptions` for that field:
 
         schema: new Schema({
-          name   : { type: 'string', trim: 20, searchable: { type: 'eq' } },
-          surname: { type: 'string', trim: 20, searchable: { type: 'startsWith' } },
+          name   : { type: 'string', trim: 20, searchable: true, searchOptions: { type: 'eq' } },
+          surname: { type: 'string', trim: 20, searchable: true, searchOptions: { type: 'startsWith' } },
         }),
 
 In such a case, the request `GET /people?name=tony&surname=mob` will return all records where `name` is `Tony`, and surname starts with `mob`. ere, `type` can be any one condition allowed in simpledblayer: `is` `eq` `lt` `lte` `gt` `gte` `startWith` `startsWith` `contain` `contains` `endsWith` `endWith`.
@@ -998,9 +934,9 @@ In such a case, the request `GET /people?name=tony&surname=mob` will return all 
 You can decide if you want to apply `or` or `and` when filter searchable fields by setting the `condition` attribute in `searchable`. For example:
 
         schema: new Schema({
-          age    : { type: 'number', max: 130, searchable: { type: 'eq' },
-          name   : { type: 'string', trim: 20, searchable: { type: 'startsWith', condition: 'or' } },
-          surname: { type: 'string', trim: 20, searchable: { type: 'startsWith', condition: 'or' } },
+          age    : { type: 'number', max: 130, searchable: true, searchOptions: { type: 'eq' },
+          name   : { type: 'string', trim: 20, searchable: true, searchOptions: { type: 'startsWith', condition: 'or' } },
+          surname: { type: 'string', trim: 20, searchable: true, searchOptions: { type: 'startsWith', condition: 'or' } },
         }),
 
 In such a case, _the `or` conditions will be grouped together_; so, the request `GET /people?age=37&name=ton&surname=mob` will return all records where `age` is `37`, and then _either_ the name starts with `ton`, _or_ the surname starts with `mob`.  This is probably an uncommon scenario, but there might be cases where `or` is actually useful.
@@ -1021,11 +957,12 @@ Consider this example:
         }),
 
         searchSchema: new Schema({
-          name             : { type: 'string', trim: 20, searchable: { type: 'is' } },
-          surname          : { type: 'string', trim: 20, searchable: { type: 'is' } },
-          nameContains     : { type: 'string', trim: 4, searchable:  { type: 'contains',   field: 'name' } },
-          surnameContains  : { type: 'string', trim: 4, searchable:  { type: 'contains',   field: 'surname' } },
-          surnameStartsWith: { type: 'string', trim: 4, searchable:  { type: 'startsWith', field: 'surname' } },
+          name             : { type: 'string', trim: 20, searchable: true, searchOptions: { type: 'is' } },
+          surname          : { type: 'string', trim: 20, searchable: true, searchOptions: { type: 'is' } },
+          nameContains     : { type: 'string', trim: 4, searchable: true, searchOptions: { type: 'contains',   field: 'name' } },
+          surnameContains  : { type: 'string', trim: 4, searchable: true, searchOptions: { type: 'contains',   field: 'surname' } },
+          surnameStartsWith: { type: 'string', trim: 4, searchable: true, searchOptions: { type: 'startsWith', field: 'surname' } },
+          nameOrSurnameStartsWith: { type: 'string', trim: 4, searchable: true, searchOptions: [ { field: 'surname', type: 'startsWith', condition: 'or' }, { field: 'name', type: 'startsWith', condition: 'or' } ] },
         }),
 
         storeName: 'People',
@@ -1044,7 +981,15 @@ Consider this example:
 
 This is neat! Basically, you are still bound to the limitations of HTTP GET requests (you can only specify a bunch of key/values in th GET); but, you can easily decide how each key/value pair will affect your search. For example, requesting `GET /people?nameContains=ony&surname=mobily` will match all records where the name _contains_ `ony` and the surname _is_ `mobily`.
 
-This is achieved thanks to the `field` attribute in `searchable`, which allows you to specify which field the filter will apply to.
+This is achieved thanks to the `field` attribute in `searchOptions`, which allows you to specify which field the filter will apply to.
+
+Note that you can pass an array of options to `searchOptions` (see `nameOrSurnameStartsWith`). In this case, all conditions will be applied.
+
+### Schema and search schema: security
+
+Note that when a store is queried, only fields marked as `searchable` in the schema will actually be searchable. If a `searchSchema` is provided, only fields in the `searchSchema` will actually be searchable.
+
+It's advisable to define a `searchSchema` for every store in a production site, so that you have full control of what is searchable by remote calls.
 
 ## Schema attribute `sortable`
 
@@ -1157,6 +1102,8 @@ When a request comes from a remote operation, the `options` object is populated 
 * `sort` for `GetQuery` requests (if used as remote store, taken from URL)
 
 When querying from the API, can pass `overwrite`, `sort`, `ranges`, `filters`.
+
+When using `GetQuery()` from the API, you are not limited to searching for fields defined in the `searchSchema` (a limitation that is present for all remote queries for obvious security reasons). When using `GetQuery()` from the API, you can search for any field _either_ in the `schema` _or_ in the `searchSchema`.
 
 Here is a detailed explanation of these options:
 
