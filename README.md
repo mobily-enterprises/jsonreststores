@@ -674,14 +674,14 @@ In order for force JsonRestStores to add an artificial delay to _every_ online r
 
 This will apply to _every_ online request, which will be delayed by 8 seconds.
 
-# Relocation and before
+# Reposition and before
 
-Both `PUT` and `POST` calls will check for headers to see if an item is being relocated:
+Both `PUT` and `POST` calls will check for headers to see if an item is being repositioned:
 
 * `X-rest-before`. If set, the item will be placed _before_ the one with the ID corresponding to the header value.
-* `X-rest-relocation`. If set, JsonRestStore will actually ignore the data, and will simply relocate the item as it was. This is useful if you want your client to trigger a relocation without re-submitting (useless) data to the server.
+* `X-rest-reposition`. If set, JsonRestStore will actually ignore the data, and will simply reposition the item as it was. This is useful if you want your client to trigger a reposition without re-submitting (useless) data to the server.
 
-Note that the way items are relocated is beyond the scope of JsonRestStores, which calls the DB layer's `position()` function. All you have to do to allow relocation is pass the store `position: true`:
+Note that the way items are repositioned is beyond the scope of JsonRestStores, which calls the DB layer's `position()` function. All you have to do to allow repositioning is pass the store `position: true`:
 
       var Managers= declare( JRS, {
 
