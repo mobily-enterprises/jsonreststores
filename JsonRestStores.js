@@ -254,12 +254,11 @@ var Store = declare( null,  {
 
 
     // STEP #3: MAKE SURE THAT Db-LEVEL SCHEMA WILL INDEX PROPERLY  
-    //          For every entry in searchSchema, add `searchable` and `permute` to 
+    //          For every entry in searchSchema, add `searchable` to 
     //          corresponding entry in `schema`.
-    //          Also, for every `paramId`, set it as a permutePrefix in main `schema`
 
     // Make sure that, for every entry present in searchSchema,
-    // the corresponding DB-level schema is 1) searchable 2) permute
+    // the corresponding DB-level schema is searchable
     // (unless they are paramIds, in which case there is no point. AND YES, users might
     // decide that paramIds are in searchSchema, it already happens in Hotplate)
     for( var k in self.searchSchema.structure ){
@@ -272,7 +271,6 @@ var Store = declare( null,  {
 
         if( typeof( self.paramIds[ k ] ) === 'undefined' ){
           self.schema.structure[ k ].searchable = true;
-          self.schema.structure[ k ].permute = true;
         } 
 
       }
@@ -295,21 +293,10 @@ var Store = declare( null,  {
           var fieldName = element.field ? element.field : k;
 
           self.schema.structure[ fieldName ].searchable = true;
-          self.schema.structure[ fieldName ].permute = true;
         });
 
       }
     }
-
-    // Add permutePrefix attribute to schema structure for paramIds. This will make
-    // sure that searchabl+permute fields in the schema are indexed with paramIds as prefix
-    // NOTE: This works of paramIds EXCLUDING the last one, which is the idProperty
-    // and mustn't be part of the permutation
-    for( var i = 0, l = self.paramIds.length; i < l - 1; i ++ ){
-      var k = self.paramIds[ i ];
-      self.schema.structure[ k ].permutePrefix = true;
-    }
-
 
     //                *** DONE: SETTING THE SCHEMAS ***
 
@@ -340,12 +327,20 @@ var Store = declare( null,  {
   // *********************************************************************
 
 
-  generateSchemaIndexes: function( options, cb ){
-    this.dbLayer.generateSchemaIndexes( options, cb );
-  },
+  generateStoreAndSchemaIndexes: function( options, cb ){
 
-  dropAllIndexes: function( cb ){
-    this.dbLayer.dropAllIndexes( cb );
+    var self = this;
+
+    this.dbLayer.generateSchemaIndexes( options, function( err ){
+      if( err ) return cb( err );
+
+      // TODO: Add more indexes:
+      // * Add new index with { workspaceId: 1, searchableField: 1 } for each searchable if multiHome
+      // * Add new index for paramIds
+      // * MAYBE for each sortable, create paramIds + field
+
+      cb( null );
+    } );
   },
 
   // *********************************************************************

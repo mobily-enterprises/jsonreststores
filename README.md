@@ -762,12 +762,15 @@ The method's signature is:
 
 ## Indexing functions
 
-Indexing is delegated to SimpleDbLayer, which will generate the right indexes depending on the defined schema. Two functions are available directly from JsonRestStores -- which just call the equivalent ones in the store's DB layer:
+The only indexing function available is:
 
-* `generateSchemaIndexes( options, cb )` -- it generates all indexes for the defined schema. `options` can have `background: true` if you want the operation to run in the background
+* `generateStoreAndSchemaIndexes( options, cb )` -- The name speaks for itself. `options` can have `background: true` if you want the operation to run in the background
 
-* `dropAllIndexes( cb )` -- it drops all indexes. This must obviously be avoided during production
+This function will run SimpleDbLayer's generateSchemaIndexes(), as well as adding store-specific indexes:
 
+* Will create an index with all `idParams`
+* Will create a new index for each searchable field, in the form `workspaceId + searchableField` since most searches will be run by users within their `workspaceId` domain
+* Will create a compound index with `paramIds + field` for each `sortable` field
 
 ## Queries
 
