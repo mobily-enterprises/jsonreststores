@@ -948,7 +948,7 @@ In such a case, _the `or` conditions will be grouped together_; so, the request 
 
 Specifying `searchable` straight into the schema limits you to decide how each field will be searched; so, there is a 1:1 correspondence between a field and how it's searched.
 
-To overcome this limitation, JsonRestStores allows you to define an additional schema, called `searchSchema`, which gives you a lot more power.
+To overcome this limitation, JsonRestStores allows you to define an additional schema, called `onlineSearchSchema`, which gives you a lot more power.
 
 Consider this example:
 
@@ -959,7 +959,7 @@ Consider this example:
           surname: { type: 'string', trim: 20 },
         }),
 
-        searchSchema: new Schema({
+        onlineSearchSchema: new Schema({
           name             : { type: 'string', trim: 20, searchable: true, searchOptions: { type: 'is' } },
           surname          : { type: 'string', trim: 20, searchable: true, searchOptions: { type: 'is' } },
           nameContains     : { type: 'string', trim: 4, searchable: true, searchOptions: { type: 'contains',   field: 'name' } },
@@ -990,9 +990,9 @@ Note that you can pass an array of options to `searchOptions` (see `nameOrSurnam
 
 ### Schema and search schema: security
 
-Note that when a store is queried, only fields marked as `searchable` in the schema will actually be searchable. If a `searchSchema` is provided, only fields in the `searchSchema` will actually be searchable.
+Note that when a store is queried, only fields marked as `searchable` in the schema will actually be searchable. If a `onlineSearchSchema` is provided, only fields in the `onlineSearchSchema` will actually be searchable.
 
-It's advisable to define a `searchSchema` for every store in a production site, so that you have full control of what is searchable by remote calls.
+It's advisable to define a `onlineSearchSchema` for every store in a production site, so that you have full control of what is searchable by remote calls.
 
 ## Schema attribute `sortable`
 
@@ -1106,7 +1106,7 @@ When a request comes from a remote operation, the `options` object is populated 
 
 When querying from the API, can pass `overwrite`, `sort`, `ranges`, `filters`.
 
-When using `GetQuery()` from the API, you are not limited to searching for fields defined in the `searchSchema` (a limitation that is present for all remote queries for obvious security reasons). When using `GetQuery()` from the API, you can search for any field _either_ in the `schema` _or_ in the `searchSchema`.
+When using `GetQuery()` from the API, you are not limited to searching for fields defined in the `onlineSearchSchema` (a limitation that is present for all remote queries for obvious security reasons). When using `GetQuery()` from the API, you can search for any field _either_ in the `schema` _or_ in the `onlineSearchSchema`.
 
 Here is a detailed explanation of these options:
 
@@ -1274,7 +1274,7 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * (ATTR) `self.handleGetQuery` is checked. If false, send `NotImplementedError`
 * incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
 * (HOOK) `self.checkPermissionsGetQuery( params, body, options )` is run. If fail, send `ForbiddenError`
-* Search terms (from GET data) are cast against the searchSchema. If fail, send `BadRequestError`
+* Search terms (from GET data) are cast against the onlineSearchSchema. If fail, send `BadRequestError`
 * docs are fetched from DB.
 * FOR EACH RECORD -> `queryDocs`
  * (HOOK) `self.extrapolateDoc( fulldoc )` is run against each `fullDoc` -> `doc`

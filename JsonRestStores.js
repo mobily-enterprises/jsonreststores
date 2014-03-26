@@ -23,28 +23,6 @@ Funnily enough, it didn't catch a bug as big as the sky with the Range headers r
 */
 
 
-/*
-
-Conversion to new db layer:
-
-
-JSONRESTSTORES:
-
-* [ X ] _castDoc in JsonRestStores is no longer useful, as it's already all done at schema level
-
-* Change constructor. A layer needs:
-  - Schema (passed by JsonRestStores, taken from its params)
-  - idProperty (passed by JsonRestStores, taken from idParams)
-  - Nested (passed by JsonRestStores, taken from its params)
-  - positionField and positionBase (passed only if "position" is true, positionField fixed as __position and positionBase depending on idParams)
-  - SchemaError (fixed)
-
-* Implement searchSchema, which can be EXACTLY as it is. But, it needs searchableOption, which is only used if searchable is true.
-
-
-*/
-
-
 var 
   dummy
 , e = require('allhttperrors')
@@ -70,7 +48,7 @@ var Store = declare( null,  {
   // ****************************************************
 
   DbLayer: null, // If not set in prototype, NEEDS to be passed as the constructor parameter
-  searchSchema: null, // If not set in prototype, is set as `schema` by constructor
+  onlineSearchSchema: null, // If not set in prototype, is set as `schema` by constructor
   //collectionName: null, // If not set in prototype, is set as `storeName` by constructor
 
   // ****************************************************
@@ -221,49 +199,49 @@ var Store = declare( null,  {
     }
 
    
-    // STEP #2: MAKE SURE searchSchema IS DEFINED AND GOOD
+    // STEP #2: MAKE SURE onlineSearchSchema IS DEFINED AND GOOD
     //          If not there, create it as a copy of `schema` where `searchable is there.
     //          If there, make sure that every item has `searchable`
 
-    // If searchSchema wasn't defined, then set it as a copy of the schema where
+    // If onlineSearchSchema wasn't defined, then set it as a copy of the schema where
     // fields are searchable, EXCLUDING the paramIds fields.
-    if( self.searchSchema == null ){
+    if( self.onlineSearchSchema == null ){
 
-      var searchSchemaWasGenerated = true;
+      var onlineSearchSchemaWasGenerated = true;
 
-      var searchSchemaStructure = { };
+      var onlineSearchSchemaStructure = { };
       for( var k in self.schema.structure ){
         if( typeof( self.paramIds[ k ] ) === 'undefined' && self.schema.structure[ k ].searchable ){
-          searchSchemaStructure[ k ] = self.schema.structure[ k ];
+          onlineSearchSchemaStructure[ k ] = self.schema.structure[ k ];
         }
       }
-      self.searchSchema = new self.schema.constructor( searchSchemaStructure );
+      self.onlineSearchSchema = new self.schema.constructor( onlineSearchSchemaStructure );
 
 
-    // If searchSchema WAS defined, then add `searchable` to all entries
+    // If onlineSearchSchema WAS defined, then add `searchable` to all entries
     // Since it's a defined search schema, all of its entries need to be
     // searchable regardless.
     } else {
 
-      var searchSchemaWasGenerated = false;
+      var onlineSearchSchemaWasGenerated = false;
 
-      for( var k in self.searchSchema.structure ){
-        self.searchSchema.structure[ k ].searchable = true;
+      for( var k in self.onlineSearchSchema.structure ){
+        self.onlineSearchSchema.structure[ k ].searchable = true;
       }
     }
 
 
     // STEP #3: MAKE SURE THAT Db-LEVEL SCHEMA WILL INDEX PROPERLY  
-    //          For every entry in searchSchema, add `searchable` to 
+    //          For every entry in onlineSearchSchema, add `searchable` to 
     //          corresponding entry in `schema`.
 
-    // Make sure that, for every entry present in searchSchema,
+    // Make sure that, for every entry present in onlineSearchSchema,
     // the corresponding DB-level schema is searchable
     // (unless they are paramIds, in which case there is no point. AND YES, users might
-    // decide that paramIds are in searchSchema, it already happens in Hotplate)
-    for( var k in self.searchSchema.structure ){
+    // decide that paramIds are in onlineSearchSchema, it already happens in Hotplate)
+    for( var k in self.onlineSearchSchema.structure ){
     
-      var entry = self.searchSchema.structure[ k ];
+      var entry = self.onlineSearchSchema.structure[ k ];
 
       // Simple case: no `searchOptions`. So, the search target is 
       // the same as `k`.
@@ -539,14 +517,14 @@ var Store = declare( null,  {
 
       var filterValue = filters[ filterField ];
 
-      // There is a slim chance that  self.searchSchema.structure[ filterField ] is not there:
+      // There is a slim chance that  self.onlineSearchSchema.structure[ filterField ] is not there:
       // it happens in case the request is from API and it required a field available
       // in the main schema but NOT in the search schema
-      var searchable = self.searchSchema.structure[ filterField ] && self.searchSchema.structure[ filterField ].searchable;
-      var searchOptions = self.searchSchema.structure[ filterField ] && self.searchSchema.structure[ filterField ].searchOptions;
+      var searchable = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchable;
+      var searchOptions = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchOptions;
 
       //console.log("DEBUG:");
-      //console.log( self.searchSchema.structure );
+      //console.log( self.onlineSearchSchema.structure );
       //console.log( self.schema.structure );
     
       if( searchable || !self.remote ) {
@@ -677,7 +655,7 @@ var Store = declare( null,  {
             subToken = subTokens[ i ];
             subTokenClean = subToken.replace( '+', '' ).replace( '-', '' );
 
-            if( ! self.remote || ( self.searchSchema.structure[ subTokenClean ] && self.searchSchema.structure[ subTokenClean ].sortable ) ){
+            if( ! self.remote || ( self.onlineSearchSchema.structure[ subTokenClean ] && self.onlineSearchSchema.structure[ subTokenClean ].sortable ) ){
               if( subTokens[ i ][ 0 ] === '+' || subTokens[ i ][ 0 ] === '-' ){
                 var sortDirection = subTokens[ i ][ 0 ] == '-' ? -1 : 1;
                 sortField = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
@@ -730,8 +708,8 @@ var Store = declare( null,  {
         tokenRight = tokens[1];
 
         // Only add it to the filter if it's in the schema AND if it's searchable
-        //if( tokenLeft != 'sort' && ( ! self.remote || ( self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].searchable )) ) {
-        if( tokenLeft != 'sortBy' && self.searchSchema.structure[ tokenLeft ] && self.searchSchema.structure[ tokenLeft ].searchable  ) {
+        //if( tokenLeft != 'sort' && ( ! self.remote || ( self.onlineSearchSchema.structure[ tokenLeft ] && self.onlineSearchSchema.structure[ tokenLeft ].searchable )) ) {
+        if( tokenLeft != 'sortBy' && self.onlineSearchSchema.structure[ tokenLeft ] && self.onlineSearchSchema.structure[ tokenLeft ].searchable  ) {
 
           result[ tokenLeft ] = tokenRight;
 
@@ -1457,18 +1435,18 @@ var Store = declare( null,  {
 
     var self = this;
 
-    // If it's a remote call, then simply validate using the searchSchema
+    // If it's a remote call, then simply validate using the onlineSearchSchema
     if( self.remote ){
-      return self.searchSchema.validate( filters, options, cb);
+      return self.onlineSearchSchema.validate( filters, options, cb);
     }
 
-    // If it's a local call, validate using a new schema made up with the searchSchema AND
+    // If it's a local call, validate using a new schema made up with the onlineSearchSchema AND
     // the common schema merged together
     var schemaStructure = {};
-    for( var k in self.searchSchema.structure ) schemaStructure[ k ] = self.searchSchema.structure[ k ];
+    for( var k in self.onlineSearchSchema.structure ) schemaStructure[ k ] = self.onlineSearchSchema.structure[ k ];
     for( var k in self.schema.structure ) schemaStructure[ k ] = schemaStructure[ k ] || self.schema.structure[ k ];
 
-    var newSchema = new self.searchSchema.constructor( schemaStructure );
+    var newSchema = new self.onlineSearchSchema.constructor( schemaStructure );
     newSchema.validate( filters, options, cb );
   },
 
@@ -1501,7 +1479,7 @@ var Store = declare( null,  {
             } else {
     
               self._validateSearchFilter( options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
-              //self.searchSchema.validate( options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
+              //self.onlineSearchSchema.validate( options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
                 self._sendErrorOnErr( err, next, function(){
 
                   // Actually assigning cast and validated filters to `options`

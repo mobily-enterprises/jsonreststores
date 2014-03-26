@@ -232,7 +232,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           extra:       { type: 'string', max: 99, doNotSave: true },
         }),
 
-        searchSchema: new Schema({
+        onlineSearchSchema: new Schema({
           name:     { type: 'string', searchable: { type: 'eq' }  },
           surname:  { type: 'string', max: 20, searchable: true },
           age:      { type: 'number', max: 99, searchable: true },
@@ -263,7 +263,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           extra:       { type: 'string', max: 99, doNotSave: true },
         }),
 
-        searchSchema: new Schema({
+        onlineSearchSchema: new Schema({
           name:     { type: 'string', searchable: { type: 'eq' }  },
           surname:  { type: 'string', max: 20, searchable: true },
           age:      { type: 'number', max: 99, searchable: true },
