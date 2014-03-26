@@ -630,14 +630,14 @@ var Store = declare( null,  {
     }
 
     // Put and Post can come with extra headers which will set
-    // options.beforeId and options.relocation
+    // options.beforeId and options.reposition
     if( mn === 'Put' || mn === "Post" ){
 
       if( typeof( req.headers[ 'x-rest-before' ] ) !== 'undefined' )
         options.beforeId = req.headers[ 'x-rest-before' ];
 
-      if( typeof( req.headers[ 'x-rest-relocation' ] ) !== 'undefined' )
-        options.relocation = true;
+      if( typeof( req.headers[ 'x-rest-reposition' ] ) !== 'undefined' )
+        options.reposition = true;
     }
 
     // Set the 'SortBy', 'ranges' and 'filters' in
@@ -1010,8 +1010,6 @@ var Store = declare( null,  {
                                 self.execPostDbInsertNoId( params, body, options, generatedId, function( err, fullDoc ){
                                   self._sendErrorOnErr( err, next, function(){
             
-                                    //console.log("RUNNING RELOCATION:", fullDoc[ self.idProperty ], options && options.beforeId ? options.beforeId : null   );
-                                    //self._relocation( fullDoc[ self.idProperty ], options && options.beforeId ? options.beforeId : 'null', params);
                                     self.reposition( fullDoc, options && options.beforeId ? options.beforeId : 'null' );
      
                                     self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
@@ -1123,9 +1121,9 @@ var Store = declare( null,  {
       return;
     }
 
-    // DETOUR: It's a relocation. Simply try and relocate the record
+    // DETOUR: It's a reposition. Simply try and relocate the record
     // (after the usual permissions etc.)
-    if( options.relocation && options.beforeId ){
+    if( options.reposition && options.beforeId ){
       
       self._checkParamIds( params, body, false, function( err ){  
         self._sendErrorOnErr( err, next, function(){
@@ -1151,7 +1149,6 @@ var Store = declare( null,  {
                               self._sendError( next, new self.ForbiddenError() );
                             } else {
 
-                              //self._relocation( fullDoc[ self.idProperty ], options.beforeId, params );
                               self.reposition( fullDoc, options && options.beforeId ? options.beforeId : 'null' );
 
                               self.prepareBeforeSend( doc, function( err, doc ){
@@ -1253,7 +1250,6 @@ var Store = declare( null,  {
                                     self.execPutDbInsert( params, body, options, function( err, fullDoc ){
                                       self._sendErrorOnErr( err, next, function(){
             
-                                        //self._relocation( fullDoc[ self.idProperty ], options.beforeId, params );
                                         self.reposition( fullDoc, options && options.beforeId ? options.beforeId : 'null' );
     
                                         self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
@@ -1349,7 +1345,6 @@ var Store = declare( null,  {
                                             self.execPutDbUpdate( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
                                               self._sendErrorOnErr( err, next, function(){
            
-                                               //self._relocation( fullDoc[ self.idProperty ], options.beforeId, params );
                                                self.reposition( fullDoc, options && options.beforeId ? options.beforeId : 'null' );
      
                                                 self.extrapolateDoc( params, body, options, fullDocAfter, function( err, docAfter ) {
