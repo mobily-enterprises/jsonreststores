@@ -636,6 +636,10 @@ var Store = declare( null,  {
       if( typeof( req.headers[ 'x-rest-before' ] ) !== 'undefined' )
         options.beforeId = req.headers[ 'x-rest-before' ];
 
+        // If it's empty, it means "place at the end". Note the "null is special" exception,
+        // there because Dojo (and others) do not allow empty headers.
+        if( options.beforeId === 'null' || options.beforeId === '' ) options.beforeId = null;
+
       if( typeof( req.headers[ 'x-rest-reposition' ] ) !== 'undefined' )
         options.reposition = true;
     }
@@ -1010,7 +1014,7 @@ var Store = declare( null,  {
                                 self.execPostDbInsertNoId( params, body, options, generatedId, function( err, fullDoc ){
                                   self._sendErrorOnErr( err, next, function(){
             
-                                    self.reposition( fullDoc, options && options.beforeId ? options.beforeId : 'null' );
+                                    self.reposition( fullDoc, options && options.beforeId ? options.beforeId : null );
      
                                     self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                       self._sendErrorOnErr( err, next, function(){
@@ -1149,7 +1153,7 @@ var Store = declare( null,  {
                               self._sendError( next, new self.ForbiddenError() );
                             } else {
 
-                              self.reposition( fullDoc, options && options.beforeId ? options.beforeId : 'null' );
+                              self.reposition( fullDoc, options && options.beforeId ? options.beforeId : null );
 
                               self.prepareBeforeSend( doc, function( err, doc ){
                                 self._sendErrorOnErr( err, next, function(){
@@ -1250,7 +1254,7 @@ var Store = declare( null,  {
                                     self.execPutDbInsert( params, body, options, function( err, fullDoc ){
                                       self._sendErrorOnErr( err, next, function(){
             
-                                        self.reposition( fullDoc, options && options.beforeId ? options.beforeId : 'null' );
+                                        self.reposition( fullDoc, options && options.beforeId ? options.beforeId : null );
     
                                         self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
                                           self._sendErrorOnErr( err, next, function(){
@@ -1345,7 +1349,7 @@ var Store = declare( null,  {
                                             self.execPutDbUpdate( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
                                               self._sendErrorOnErr( err, next, function(){
            
-                                               self.reposition( fullDoc, options && options.beforeId ? options.beforeId : 'null' );
+                                               self.reposition( fullDoc, options && options.beforeId ? options.beforeId : null );
      
                                                 self.extrapolateDoc( params, body, options, fullDocAfter, function( err, docAfter ) {
                                                   self._sendErrorOnErr( err, next, function(){
@@ -1895,7 +1899,7 @@ Store.Put = function( id, body, options, next ){
 
   // Sets only idProperty in the params hash. Note that
   // you might well decide to pass the whole object in body, and
-  // pass 'null' as the object ID: in that case, this function
+  // pass `null` as the object ID: in that case, this function
   // will sort out `params` with the `id` set
   if( id !== null ){
     params[ request.idProperty ] = id;
