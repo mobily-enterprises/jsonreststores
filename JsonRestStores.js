@@ -33,6 +33,8 @@ var
 ;
 
 
+var DbLayerFactory = function( 
+
 var Store = declare( null,  {
 
   // ****************************************************
@@ -138,15 +140,17 @@ var Store = declare( null,  {
     this.dbLayer.reposition( doc, beforeId, cb );
   },
 
-  constructor: function( DbLayer ){
+  constructor: function(){
 
     var self = this;
 
     // Accept the DB driver from the constructor. If it's not passed through the
     // constructor, then it must be already in the prototype (inherited or set)
+    /*
     if( typeof( DbLayer ) !== 'undefined' ){
       self.DbLayer = DbLayer;
     }
+    */
     
     // The db driver must be defined
     if( typeof( self.DbLayer ) === 'undefined' || self.DbLayer == null ){
@@ -291,6 +295,8 @@ var Store = declare( null,  {
 
     // Actually create the layer with the given parameters
     self.dbLayer = new self.DbLayer( self.collectionName, layerOptions );
+
+    console.log("ASSOCIATED DB LAYER", self.dbLayer.table, "WHICH IS:", self.dbLayer );
 
     // Set the DB's hard limit on queries. DB-specific implementations will
     // set this to `true` if the query is not cursor-based (this will prevent
@@ -1699,7 +1705,10 @@ Store.online = {};
     return function( req, res, next ){
 
       var request = new Class();
-   
+  
+      console.log("REQUEST OBJECT:");
+      console.log( request );
+ 
       // It's definitely remote
       request.remote = true;
 
