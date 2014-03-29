@@ -43,7 +43,7 @@ It sounds simple enough (although it's only two tables and it already looks rath
 * When implementing `GET /bookings/`, you need to return the right `Content-Range` HTTP headers in your results
 * When implementing `GET /bookings/`, you also need to make sure you take into account any `Range` header set by the client, who might only want to receive a subset of the data
 * With `POST` and `PUT`, you need to make sure that data is validated against some kind of schema, and return the appropriate errors if it's not.
-* With `PUT`, you need to consider the HTTP headersd `If-match` and `If-none-match` to see if you can/should/must overwrite existing records
+* With `PUT`, you need to consider the HTTP headers `If-match` and `If-none-match` to see if you can//should//must overwrite existing records
 * You must remember to get your filters right: when implementing `GET /bookings/:bookingId/users/:userId`, you must make sure that you are making queries to the database without forgetting `:bookingId`. This sounds pretty obvious with only 2 stores, gets tricky when you have a few dozens.
 * Don't forget about URL format validation: you need to make sure that anything submitted by the user is sanitised etc.
 * You need to create database indexes the right way, so that searches are not slow.
@@ -115,13 +115,13 @@ Here is how you would change a stock `app.js` file if you used MongoDb:
     var http = require('http');
     var path = require('path');
 
-    var dbSpecific = require('./dbSpecific-mongo.js'); // ADDED
-    var storesRoutes = require('./storesRoutes.js'); // ADDED
    
     var app = express();
     
-    // ADDED 8 lines:
+    // ADDED 11 lines:
     // The whole app will be wrapped around the connecton
+    var dbSpecific = require('./dbSpecific-mongo.js'); // ADDED
+    var storesRoutes = require('./storesRoutes.js'); // ADDED
     dbSpecific.connect( 'mongodb://localhost/tests', {}, function( err ){
       if( err ){
         console.error("Could not connect to the database server");
@@ -141,7 +141,7 @@ Here is how you would change a stock `app.js` file if you used MongoDb:
         app.use(app.router);
         app.use(express.static(path.join(__dirname, 'public')));
     
-        // Set JsonRestStore routes for REST stores
+        // ADDED 1 line: Set JsonRestStore routes for REST stores
         storesRoutes( app ); // ADDED
     
         // development only
@@ -155,6 +155,8 @@ Here is how you would change a stock `app.js` file if you used MongoDb:
         http.createServer(app).listen(app.get('port'), function(){
           console.log('Express server listening on port ' + app.get('port'));
         });
+
+      // ADDED 2 lines: extra closing brackets
       }
     });
 
@@ -200,8 +202,7 @@ It's basically just a module that exports all of the db-specific constructor, an
 Your `storesRoutes.js` file will then use `dbSpecific-mongo.js` to get the those variables:
 
     var declare = require('simpledeclare'); // Declare module
-
-    var dbSpecific = require('./dbSpecific-tingo.js');
+    var dbSpecific = require('./dbSpecific-mingo.js');
 
     exports = module.exports = function( app ){
 
@@ -216,7 +217,7 @@ Your `storesRoutes.js` file will then use `dbSpecific-mongo.js` to get the those
         }),
     
         storeName: 'managers',
-        publicURL: '/manages/:id',
+        publicURL: '/managers/:id',
     
         handlePut: true,
         handlePost: true,
@@ -226,8 +227,9 @@ Your `storesRoutes.js` file will then use `dbSpecific-mongo.js` to get the those
     
         hardLimitOnQueries: 50,
       });
-    
-      Managers.onlineAll( app );
+   
+      var managers = new Managers(); 
+      managers.setAllRoutes( app );
     }
 
 ## TingoDB
@@ -266,7 +268,7 @@ What if you want to use TingoDB instead? since everything is encapsulated, all y
 At this point you are nearly good to go; you only need some minor modifications:
 
 * In `storesRoutes.js` and `app.js`, change `require('./dbSpecific-mongo.js');` into `require('./dbSpecific-tingo.js');`
-* In `app.js`, change the connection string into `dbSpecific.connect( '/tmp/tests', {}, function( err ){`
+* In `app.js`, change the connection function into `dbSpecific.connect( '/tmp/tests', {}, function( err ){`
 
 In the rest of the documentation, I will assume that your `db`, `JRS` and `Schema` variables are set and will focus on the code that actually creates the stores.
 
@@ -285,7 +287,7 @@ Here is how you make a fully compliant store:
           surname: { type: 'string', trim: 60 },
         }),
 
-        storeName: 'Managers',
+        storeName: 'managers',
         publicURL: '/managers/:id',
 
         handlePut: true,
@@ -297,30 +299,29 @@ Here is how you make a fully compliant store:
         hardLimitOnQueries: 50,
       });
 
-      Managers.onlineAll( app );
+      var managers = new Managers(); 
+      managers.setAllRoutes( app );
  
 
 That's it: this is enough to make a full store which will handly properly all of the HTTP calls. Try it if you don't believe me!
 
 * `Managers` is a new class that inherits from `JRS`. Creating the derived class is the first step towards creating a store
-* `schema` (_mandatory_) is an object of type Schema. 
+* `schema` is an object of type Schema that will define what's acceptable in a REST call
 * `publicURL` is the URL the store is reachable at. ***The last one ID is the most important one***: the last ID in `publicURL` (in this case it's also the only one: `id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
 * `storeName` (_mandatory_) needs to be a unique name for your store. It is mandatory to have one, as (when used with a database) it will define the name of the DB table/collection
 * `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error
-* `Managers.onlineAll()` creates the right Express routes to actually activate your stores. Specifically:
+* `managers.setAllRoutes( app )` creates the right Express routes to actually activate your stores. Specifically:
 
 .
 
-    // get (specific ID)
-    app.get(    url + idName,  function( req, res, next ){ /* ... */ } );
-    // getQuery (array of objects, no ID)
-    app.get(    url,          function( req, res, next ){ /* ... */ } );
-    // put (specific ID)
-    app.put(    url + idName, function( req, res, next ){ /* ... */ } );
-    // post (new record, no ID)
-    app.post(   url,          function( req, res, next ){ /* ... */ } );
-    // delete (specific ID)
-    app.delete( url + idName, function( req, res, next ){ /* ... */ } );
+    // Make entries in "app", so that the application
+    // will give the right responses
+    app.get(      url + idName, this.getRequestHandler( 'Get' ) );
+    app.get(      url,          this.getRequestHandler( 'GetQuery') );
+    app.put(      url + idName, this.getRequestHandler( 'Put') );
+    app.post(     url,          this.getRequestHandler( 'Post') );
+    app.delete(   url + idName, this.getRequestHandler( 'Delete') );
+
 
 So, the following routes will be defined:
 
@@ -433,26 +434,26 @@ It all works!
 
 When you define a store like this:
 
-      var Managers = declare( JRS, {
+    var Managers = declare( JRS, {
 
-        schema: new Schema({
-          name   : { type: 'string', trim: 60 },
-          surname: { type: 'string', trim: 60 },
-        }),
+      schema: new Schema({
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', trim: 60 },
+      }),
 
-        storeName: 'Managers',
-        publicURL: '/managers/:id',
+      storeName: 'managers',
+      publicURL: '/managers/:id',
 
-        handlePut: true,
-        handlePost: true,
-        handleGet: true,
-        handleGetQuery: true,
-        handleDelete: true,
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
 
-        hardLimitOnQueries: 50,
-      });
+      hardLimitOnQueries: 50,
+    });
 
-      Managers.onlineAll( app );
+    managers.setAllRoutes( app );
 
 The `publicURL` is used to:
 
@@ -461,38 +462,38 @@ The `publicURL` is used to:
 
 So, you could reach the same goal without `publicURL`:
 
-      var Managers = declare( JRS, {
+    var Managers = declare( JRS, {
 
-        schema: new Schema({
-          id     : { type: 'id' },
-          name   : { type: 'string', trim: 60 },
-          surname: { type: 'string', trim: 60 },
-        }),
+      schema: new Schema({
+        id     : { type: 'id' },
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', trim: 60 },
+      }),
 
-        storeName: 'Managers',
-        paramIds: [ 'id' ],
+      storeName: 'Managers',
+      paramIds: [ 'id' ],
 
-        handlePut: true,
-        handlePost: true,
-        handleGet: true,
-        handleGetQuery: true,
-        handleDelete: true,
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
 
-        hardLimitOnQueries: 50,
-      });
+      hardLimitOnQueries: 50,
+    });
 
-      Managers.onlineAll( app, '/managers/:id' );
+    var managers = new Managers();
+    managers.setAllRoutes( app ); // This will throw()
 
 Note that:
  * The `id` parameter had to be defined in the schema
  * The `paramIds` array had to be defined by hand
- * `Managers.onlineAll()` had to be passed the URL explicitely.
+ * `managers.setAllRoutes( app )` couldn't be used as the public URL is not there
+ * You cannot define, in the prototype, both publicURL and paramIds
 
-This pattern is much more verbose, it repeats information in three spots (!), and should obviously be avoided. However, it has its place when you want to define generic base classes without a `publicURL`.
+This pattern is much more verbose, and it doesn't allow the store to be placed online.
 
 In the documentation, I will often refers to `paramIds`, which is an array of element in the schema which match the ones in the route. However, in all examples I will use the "shortened" version without repeating IDs unnecessarily.
-
-Note that you can use the `url` parameter in `onlineAll()` to force the stores' URLs to something different than `publicURL`.
 
 ## A nested store
 
@@ -516,6 +517,8 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
 
         hardLimitOnQueries: 50,
       });
+      var managers = new Managers();
+      managers.setAllRoutes( app );
 
 
       var ManagersCars = declare( JRS, {
@@ -525,7 +528,7 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
           model    : { type: 'string', trim: 60, required: true },
         }),
 
-        storeName: 'ManagersCars',
+        storeName: 'managersCars',
         publicURL: '/managers/:managerId/cars/:id',
 
         handlePut: true,
@@ -537,16 +540,17 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
         hardLimitOnQueries: 50,
       });
 
-      ManagersCars.onlineAll( app );
+      var managersCars = new ManagersCars();
+      managersCars.setAllRoutes( app );
  
 
-You have two stores: one is the simple `Managers` store with a list of names and surname; the other one is the `ManagersCars` store: note how the URL for `ManagersCars` includes `managerId`.
+You have two stores: one is the simple `managers` store with a list of names and surname; the other one is the `managersCars` store: note how the URL for `managersCars` includes `managerId`.
 
-The ManagersCars store will will respond to `GET /managers/2222/cars/3333` (to fetch car 3333 of manager 2222), `GET /workspace/2222/users` (to get all cars of manager 2222), and so on.
+The managersCars store will will respond to `GET /managers/2222/cars/3333` (to fetch car 3333 of manager 2222), `GET /workspace/2222/users` (to get all cars of manager 2222), and so on.
 
-Remember that in `ManagersCars`:
+Remember that in `managersCars`:
 
-* Queries will _always_ honour the filter on `managerId`, both in queries and single-record operations.
+* Remote queries will _always_ honour the filter on `managerId`, both in queries and single-record operations.
 
 ### On naming conventions
 
@@ -561,10 +565,11 @@ It's important to be consistent in naming conventions while creating stores. In 
       });
 
       // ...
-      storeName: `Managers`
+      storeName: `managers`
       // ...
     }
-    Managers.onlineAll( app );
+    var managers = new Managers();
+    managers.setAllRoutes( app );
 
 
 
@@ -575,16 +580,20 @@ It's important to be consistent in naming conventions while creating stores. In 
       });
 
       // ...
-      storeName: `People`
+      storeName: `people`
       // ...
     }
-    People.onlineAll( app );
+    var people = new People();
+    people.setAllRoutes( app );
 
-* Store name is plural
-* Irregulars (Person => People) is a fact of life
-* Store name variable in capital letters (it's a constructor)
-* storeName attribute in capital letters (follows the store name)
-* URL in small letters (Capitalised/Urls/Are/Lame)
+* Store names are plural (they are collections representing multiple entries)
+* Irregulars (Person => People) are a fact of life
+* Store constructors (derived from JRS) are in capital letters (it's a constructor)
+* Store variables are in small letters (they are normal variables)
+* storeName attributes are in small letters (they are not constructors)
+* URL are in small letters (following the stores' names, plus `/Capital/Urls/Are/Silly`)
+
+# YOU ARE HERE (REDOCUMENTING)
 
 #### Nested stores    
 
