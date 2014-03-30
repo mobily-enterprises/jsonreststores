@@ -458,7 +458,7 @@ When you define a store like this:
 The `publicURL` is used to:
 
 * Add `id: { type: id }` to the schema automatically. This is done so that you don't have to do the grunt work of defining id fields both in `publicURL` and in the schema
-* Creates the `paramIds` array for the store. In this case, `paramIds` will be `[ 'id' ]`.
+* Create the `paramIds` array for the store. In this case, `paramIds` will be `[ 'id' ]`.
 
 So, you could reach the same goal without `publicURL`:
 
@@ -556,7 +556,7 @@ Remember that in `managersCars`:
 
 It's important to be consistent in naming conventions while creating stores. In this case, code is cleared than a thousand bullet points:
 
-#### Simple stores
+#### Naming convertions for simple stores
 
     var Managers = declare( JRS, { 
 
@@ -586,16 +586,16 @@ It's important to be consistent in naming conventions while creating stores. In 
     var people = new People();
     people.setAllRoutes( app );
 
-* Store names are plural (they are collections representing multiple entries)
+* Store names anywhere are plural (they are collections representing multiple entries)
 * Irregulars (Person => People) are a fact of life
-* Store constructors (derived from JRS) are in capital letters (it's a constructor)
+* Store constructors (derived from JRS) are in capital letters (as constructors, they should be)
 * Store variables are in small letters (they are normal variables)
-* storeName attributes are in small letters (they are not constructors)
+* storeName attributes are in small letters (to follow the lead of variables)
 * URL are in small letters (following the stores' names, plus `/Capital/Urls/Are/Silly`)
 
 # YOU ARE HERE (REDOCUMENTING)
 
-#### Nested stores    
+#### Naming conventions for nested stores    
 
     var Cars = declare( JRS, { 
 
@@ -734,13 +734,13 @@ Note that permission functions have both `doc` and `fullDoc` so that they can ea
 
 The method's signature is:
 
-    extrapolateDoc( params, body, options, fullDoc, cb( err, doc ) )`
+    extrapolateDoc( request, fullDoc, cb( err, doc ) )`
 
 It's important that you create a copy of `fullDoc` rather than changing it directly. E.g.:
 
 ...this is wrong:
     
-    extrapolateDoc: function( params, body, options, fullDoc, cb){
+    extrapolateDoc: function( request, fullDoc, cb){
       // WRONG!!! This will effectively change fullDoc, which IS a side-effect
       doc = fullDoc;
       doc.name = doc.name.toUpperCase();
@@ -749,7 +749,7 @@ It's important that you create a copy of `fullDoc` rather than changing it direc
 
 ...this is correct:
 
-    extrapolateDoc: function( params, body, options, fullDoc, cb){
+    extrapolateDoc: function( request, fullDoc, cb){
       // CORRECT! This will create a copy of fullDoc, and THEN manipulate it
       var doc = {};
       for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
@@ -798,12 +798,12 @@ Each permission function needs to call the callback: if everything went fine, `c
 
 Here are the functions:
 
- * `checkPermissionsPost( params, body, options, cb )` 
- * `checkPermissionsPutNew( params, body, options, cb )`
- * `checkPermissionsPutExisting( params, body, options, doc, fullDoc, cb )`
- * `checkPermissionsGet( params, body, options, doc, fullDoc, cb )`
- * `checkPermissionsGetQuery( params, body, options, cb )`
- * `checkPermissionsDelete( params, body, options, doc, fullDoc, cb )`
+ * `checkPermissionsPost( request, cb )` 
+ * `checkPermissionsPutNew( request, cb )`
+ * `checkPermissionsPutExisting( request, doc, fullDoc, cb )`
+ * `checkPermissionsGet( request, doc, fullDoc, cb )`
+ * `checkPermissionsGetQuery( request, cb )`
+ * `checkPermissionsDelete( request, doc, fullDoc, cb )`
 
 Here is an example of a store only allowing deletion only to specific admin users:
 
@@ -824,7 +824,7 @@ Here is an example of a store only allowing deletion only to specific admin user
       handleGetQuery: true,
       handleDelete: true,
       
-      checkPermissionsDelete: function( params, body, options, doc, fullDoc, cb ){
+      checkPermissionsDelete: function( request, doc, fullDoc, cb ){
 
         // User is logged in: all good
         if( this._req.session.user ){
@@ -845,7 +845,7 @@ Permission checking can be as simple, or as complex, as you need it to be.
 
 Note that if your store is derived from another one, and you want to preserve your master store's permission model, you can run `this.inheritedAsync(arguments)` like so:
 
-      checkPermissionsDelete: function( params, body, options, doc, fullDoc, cb ){
+      checkPermissionsDelete: function( request, doc, fullDoc, cb ){
 
         this.inheritedAsync( arguments, function( err, granted ) {
 
@@ -888,11 +888,11 @@ These functions are handy where, in your own applications, you want "something" 
 
 You can redefine them as you wish.
 
- * `afterPutNew( params, body, options, doc, fullDoc, overwrite, cb )` (Called after a new record is PUT)
- * `afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb )` (After a record is overwritten with PUT)
- * `afterPost( params, body, options, doc, fullDoc, cb )` (After a new record is POSTed)
- * `afterDelete( params, body, options, doc, fullDoc, cb )` (After a record is deleted)
- * `afterGet( params, body, options, doc, fullDoc, cb  )` (After a record is retrieved)
+ * `afterPutNew( request, doc, fullDoc, overwrite, cb )` (Called after a new record is PUT)
+ * `afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb )` (After a record is overwritten with PUT)
+ * `afterPost( request, doc, fullDoc, cb )` (After a new record is POSTed)
+ * `afterDelete( request, doc, fullDoc, cb )` (After a record is deleted)
+ * `afterGet( request, doc, fullDoc, cb  )` (After a record is retrieved)
 
 Note that these hooks are run **after** data has been written to the database, but **before** a response is provided to the user.
 
@@ -1244,7 +1244,7 @@ This is what happens in that route handler:
       var options = request._initOptionsFromReq( mn, req );
 
       // Actually run the request
-      request._makePut( params, body, options, next );
+      request._makePut( request, next );
 
     }
 
@@ -1269,49 +1269,49 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 ### `_makeGet()` (for `GET` requests, with ID)
 
 * (ATTR) `self.handleGet` is checked. If false, send `NotImplementedError`
-* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
 * record is fetched from DB. If fail, send `NotFoundError` -> `fullDoc`
 * (HOOK) `self.extrapolateDoc( fullDoc )` is run against the record just fetched -> `doc`
 * `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.checkPermissionsGet( params, body, options, doc, fullDoc )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.checkPermissionsGet( request, doc, fullDoc )` is run. If fail, send `ForbiddenError`
 * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
-* (HOOK) `self.afterGet( params, body, options, doc, fullDoc )` is run
+* (HOOK) `self.afterGet( request, doc, fullDoc )` is run
 * `doc` is sent (status: 200)/returned. Party!
 
 ### `_makeGetQuery()` (for GET requests, no ID)
 
 * (ATTR) `self.handleGetQuery` is checked. If false, send `NotImplementedError`
-* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* (HOOK) `self.checkPermissionsGetQuery( params, body, options )` is run. If fail, send `ForbiddenError`
+* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* (HOOK) `self.checkPermissionsGetQuery( request )` is run. If fail, send `ForbiddenError`
 * Search terms (from GET data) are cast against the onlineSearchSchema. If fail, send `BadRequestError`
 * docs are fetched from DB.
 * FOR EACH RECORD -> `queryDocs`
  * (HOOK) `self.extrapolateDoc( fulldoc )` is run against each `fullDoc` -> `doc`
  * Each `doc` is cast against the schema. If ONE fails, everything fails: send `UnprocessableEntityError`
  * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
-* (HOOK) `self.afterGetQueries( params, body, options, queryDocs )` is run
+* (HOOK) `self.afterGetQueries( request, queryDocs )` is run
 * `queryDocs` is sent as array (status: 200)/returned as array. Party!
 
 ### `_makeDelete()` (for DELETE requests)
 
 * (ATTR) `self.handleDelete` is checked. If false, send `NotImplementedError`
-* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
 * `fullDoc` is fetched from DB. If fail, send `NotFoundError`
 * (HOOK) `self.extrapolateDoc( doc )` is run against the record just fetched -> `doc`
 * `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.checkPermissionsDelete( params, body, options, doc, fullDoc )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.checkPermissionsDelete( request, doc, fullDoc )` is run. If fail, send `ForbiddenError`
 * Record is deleted!
-* (HOOK) `self.afterDelete( params, body, options, doc, fullDoc )` is run
+* (HOOK) `self.afterDelete( request, doc, fullDoc )` is run
 * Empty result is sent (status: 204)/data is returned. Party!
 
 ### `_makePost()` (for POST requests)
 
 * (ATTR) `self.handlePost` is checked. If false, send `NotImplementedError`
-* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
 * (HOOK) `self.prepareBody( body, 'post' )` is run against the record just fetched
 * Body is cast against the schema. If fail, send `UnprocessableEntityError`
 * (HOOK) `self.postValidate( body, 'post' )` is run against the record just fetched
-* (HOOK) `self.checkPermissionsPost( params, body, options )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.checkPermissionsPost( request )` is run. If fail, send `ForbiddenError`
 * Body is cleaned up of fields with `doNotSave: true` in schema
 * record is written to the DB.
 * record is re-fetched from DB -> `fullDoc`
@@ -1320,16 +1320,16 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * Set the `Location:` header
 * IF `self.echoAfterPost`:
   * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
-  * (HOOK) `self.afterPost( params, body, options, doc, fullDoc )` is run
+  * (HOOK) `self.afterPost( request, doc, fullDoc )` is run
   * `doc` is sent (status: 200)/returned. Party!
 * ELSE:
-  * (HOOK) `self.afterPost( params, body, options, doc, fullDoc )` is run
+  * (HOOK) `self.afterPost( request, doc, fullDoc )` is run
   * Empty result is sent (status: 200)/data is returned. Party!
 
 ### `_makePut()` (for PUT requests)
 
 * (ATTR) `self.handlePut` is checked. If false, send `NotImplementedError`
-* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
 * (HOOK) `self.prepareBody( body, 'put' )` is run against the record just fetched
 * Body is cast against the schema. If fail, send `UnprocessableEntityError`
 * (HOOK) `self.postValidate( body, 'put' )` is run against the record just fetched
@@ -1338,7 +1338,7 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 
 #### ...and then, for NEW records (fetching failed)
 
-* (HOOK) `self.checkPermissionsPutNew( params, body, options )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.checkPermissionsPutNew( request )` is run. If fail, send `ForbiddenError`
 * `body` is cleaned up of fields with `doNotSave: true` in schema
 * record is written to the DB.
 * record is re-fetched from DB -> `fullDoc`
@@ -1347,17 +1347,17 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * Set the `Location:` header
 * IF `self.echoAfterPut`:
   * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
-  * (HOOK) `self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite )` is run
+  * (HOOK) `self.afterPutNew( request, doc, fullDoc, options.overwrite )` is run
   * `doc` is sent (status: 200)/returned. Party!
 * ELSE:
-  * (HOOK) `self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite )` is run
+  * (HOOK) `self.afterPutNew( request, doc, fullDoc, options.overwrite )` is run
   * Empty result is sent (status: 200)/data is returned. Party!
 
 #### ...or then, for EXISTING records (fetching worked)
 
 * (HOOK) `self.extrapolateDoc( fullDoc )` is run against the record just fetched -> `doc`
 * `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.checkPermissionsPutExisting( params, body, options, doc, fullDoc )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.checkPermissionsPutExisting( request, doc, fullDoc )` is run. If fail, send `ForbiddenError`
 * `doc` is cleaned up of fields with `doNotSave: true` in schema
 * record is updated to the DB.
 * record is re-fetched from DB. If fail, send `NotFoundError` -> fullDocAfter
@@ -1366,10 +1366,10 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * Set the `Location:` header
 * IF `self.echoAfterPut`:
   * (HOOK) `self.prepareBeforeSend( docAfter )` is run.
-  * (HOOK) `self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite )` is run
+  * (HOOK) `self.afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, options.overwrite )` is run
   * `docAfter` is sent (status: 200)/returned. Party!
 * ELSE:
-  * (HOOK) `self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite )` is run
+  * (HOOK) `self.afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, options.overwrite )` is run
   * Empty result is sent (status: 200)/data is returned. Party!
 
 

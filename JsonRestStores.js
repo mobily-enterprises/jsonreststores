@@ -43,21 +43,31 @@ var
 
 var Store = declare( null,  {
 
-  // ****************************************************
-  // *** ATTRIBUTES THAT NEED TO BE DEFINED IN PROTOTYPE
-  // ****************************************************
+  // ***********************************************************
+  // *** ATTRIBUTES THAT ALWAYS NEED TO BE DEFINED IN PROTOTYPE
+  // ***********************************************************
 
-  paramIds: null,
-  schema: null,
-  storeName: null, // Must be defined in prototype
+  DbLayer: null,
+  storeName: null,
 
   // ****************************************************
   // *** ATTRIBUTES THAT CAN TO BE DEFINED IN PROTOTYPE
   // ****************************************************
 
-  DbLayer: null, // If not set in prototype, NEEDS to be passed as the constructor parameter
-  onlineSearchSchema: null, // If not set in prototype, is set as `schema` by constructor
+  onlineSearchSchema: null, // If not set in prototype, worked out from `schema` by constructor
   collectionName: null, // If not set in prototype, is set as `storeName` by constructor
+  publicURL: null, // Not mandatory (if you want your store to be API-only for some reason)
+  paramIds: null, // Only allowed is publicURL is not set
+
+  // *****************************************************************
+  // *** ATTRIBUTES USED TO CREATE A STORE (IF NOT IN DBLAYER CACHE)
+  // *** (Note: only allowed if collectionName not already in dbLayer cache
+  // *****************************************************************
+
+  schema: null,
+  nested: [],
+  hardLimitOnQueries: 50,
+  sortableFields: [],
 
   // ****************************************************
   // *** ATTRIBUTES THAT DEFINE STORE'S BEHAVIOUR
@@ -75,21 +85,19 @@ var Store = declare( null,  {
 
   chainErrors: 'none',  // can be 'none', 'all', 'nonhttp'
 
-  hardLimitOnQueries: 50,
   deleteAfterGetQuery: false,
 
-  strictSchemaAfterRefetching: false,
+  strictSchemaAfterRefetching: false, // TO IMPLEMENT
 
-  nested: null,
-  position: false,
+  position: false, // If set, will make fields re-positionable
 
   // ****************************************************
   // *** FUNCTIONS THAT CAN BE OVERRIDDEN BY DEVELOPERS
   // ****************************************************
 
-  // Doc extrapolation calls
+  // Doc extrapolation and preparation calls
   extrapolateDoc: function( request, fullDoc, cb ){ cb( null, fullDoc ); },
-  prepareBeforeSend: function( doc, cb ){ cb( null, doc ); },
+  prepareBeforeSend: function( doc, cb ){ cb( null ); },
 
   // "after" calls
   afterPutNew: function( request, doc, fullDoc, overwrite, cb ){ cb( null ) },
@@ -108,7 +116,7 @@ var Store = declare( null,  {
   checkPermissionsDelete: function( request, doc, fullDoc, cb ){ cb( null, true ); },
 
   // Body preparation and postvalidation functions
-  prepareBody: function( body, method, cb ){ cb( null, body ); },
+  prepareBody: function( body, method, cb ){ cb( null ); },
   postValidate: function( body, method, cb ){ cb( null ); },
 
   logError: function( error ){ },
@@ -127,7 +135,9 @@ var Store = declare( null,  {
   // *** END OF FUNCTIONS/ATTRIBUTES THAT NEED/CAN BE OVERRIDDEN BY DEVELOPERS
   // **************************************************************************
 
+
   idProperty: null, // Calculated by constructor: last item of paramIds
+  dbLayer: null, // Create by constructor: an instance of dbLayer()
 
   // Default error objects which might be used by this module.
   BadRequestError: e.BadRequestError,
@@ -152,7 +162,7 @@ var Store = declare( null,  {
     // StoreName cannot be repeated amongst stores, ONE storeName per store!
     Store.registry = Store.registry || {};
     if( typeof( Store.registry[ self.storeName ] ) !== 'undefined' ){
-      throw new Error("Cannot instantiate two stores with the same name: " + storeName );
+      throw new Error("Cannot instantiate two stores with the same name: " + self.storeName );
     }
 
     // The db driver must be defined
@@ -247,8 +257,6 @@ var Store = declare( null,  {
     // fields are searchable, EXCLUDING the paramIds fields.
     if( self.onlineSearchSchema == null ){
 
-      var onlineSearchSchemaWasGenerated = true;
-
       var onlineSearchSchemaStructure = { };
       for( var k in self.schema.structure ){
         if( typeof( self.paramIds[ k ] ) === 'undefined' && self.schema.structure[ k ].searchable ){
@@ -263,8 +271,6 @@ var Store = declare( null,  {
     // searchable regardless.
     } else {
 
-      var onlineSearchSchemaWasGenerated = false;
-
       for( var k in self.onlineSearchSchema.structure ){
         self.onlineSearchSchema.structure[ k ].searchable = true;
       }
@@ -272,7 +278,7 @@ var Store = declare( null,  {
 
     // STEP #1: COMPLETE THE DB SCHEMA WITH onlineSearchSchema ENTRIES
     //          For every entry in onlineSearchSchema, add `searchable` to 
-    //          corresponding entry in `schema`.
+    //          corresponding entry in `schema`
 
     // Make sure that, for every entry present in onlineSearchSchema,
     // the corresponding DB-level schema is searchable
@@ -406,10 +412,13 @@ var Store = declare( null,  {
     // Make up the filter, based on the store's IDs (used as filters).
     var selector = {};
 
-    // Make sure the selector has request.params to shield 
-    // (Except if it's a local request, in which case it doesn't matter )
+    // Make up the selector.
+    // For remote requests, just enrich the selector with all paramIds.
+    // For local requests, just use self.idProperty.
     if( request.remote ){
-      self._enrichSelectorWithParams( selector, request.params );
+       self._enrichSelectorWithParams( selector, request.params );
+    } else {
+      selector = { conditions: { and: [ { field: self.idProperty, type: 'eq', value: request.params[ self.idProperty ] } ] } };
     }
 
     // Make the database call 
@@ -417,6 +426,7 @@ var Store = declare( null,  {
       if( err ){
         cb( err );
       } else {
+
         if( docs.length === 0 ){
           cb( null, null );
         } else if( docs.length !== 1 ){
@@ -469,7 +479,7 @@ var Store = declare( null,  {
     // Make up the filter, based on the store's IDs (used as filters).
     var selector = {};
 
-    self._enrichSelectorWithParams( selector, request.params );
+    if( request.remote) self._enrichSelectorWithParams( selector, request.params );
 
     // Make up the `updateObject` variable, based on the passed `body`
     for( var i in request.body ) updateObject[ i ] = request.body[ i ];
@@ -539,7 +549,7 @@ var Store = declare( null,  {
     var self = this;
     var selector = {};
 
-    self._enrichSelectorWithParams( selector, request.params );
+    if( request.remote) self._enrichSelectorWithParams( selector, request.params );
     self.dbLayer.delete( selector, { multi: false, skipValidation: true }, cb );
   },
 
@@ -566,10 +576,6 @@ var Store = declare( null,  {
       var searchable = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchable;
       var searchOptions = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchOptions;
 
-      //console.log("DEBUG:");
-      //console.log( self.onlineSearchSchema.structure );
-      //console.log( self.schema.structure );
-    
       if( searchable || !request.remote ) {
 
         // searchOptions is not an object/is null: just set default conditions (equality with field)
@@ -685,7 +691,7 @@ var Store = declare( null,  {
       var tokens, subTokens, subToken, subTokenClean, i;
       var sortObject = {};
 
-      tokens = q.split( '&' ).forEach( function( item ) {
+      q.split( '&' ).forEach( function( item ) {
 
         var tokens = item.split('=');
         var tokenLeft = tokens[0];
@@ -698,12 +704,14 @@ var Store = declare( null,  {
             subToken = subTokens[ i ];
             subTokenClean = subToken.replace( '+', '' ).replace( '-', '' );
 
-            if( ! request.remote || ( self.onlineSearchSchema.structure[ subTokenClean ] && self.onlineSearchSchema.structure[ subTokenClean ].sortable ) ){
-              if( subTokens[ i ][ 0 ] === '+' || subTokens[ i ][ 0 ] === '-' ){
-                var sortDirection = subTokens[ i ][ 0 ] == '-' ? -1 : 1;
-                sortField = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
-                sortObject[ sortField ] = sortDirection;
-              }
+            if( self.sortableFields.indexOf( subTokenClean ) === -1 ){
+              throw( new Error("Field selected for sorting invalid: " + subTokenClean) );
+            }
+
+            if( subTokens[ i ][ 0 ] === '+' || subTokens[ i ][ 0 ] === '-' ){
+              var sortDirection = subTokens[ i ][ 0 ] == '-' ? -1 : 1;
+              sortField = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
+              sortObject[ sortField ] = sortDirection;
             }
           }
         }
@@ -765,7 +773,6 @@ var Store = declare( null,  {
 
   },
 
-
   execGetDbQuery: function( request, next ){
 
     var self = this;
@@ -779,6 +786,7 @@ var Store = declare( null,  {
     }
 
     if( typeof( request.options.sort ) === 'undefined' || request.options.sort === null ) request.options.sort = {}; 
+    if( typeof( request.options.ranges ) === 'undefined' || request.options.ranges === null ) request.options.ranges = {}; 
 
     // Sort by self.positionField if sort is empty and self.positionField is defined
     //if( Object.keys( options.sort ).length === 0 && self.positionField ){
@@ -790,7 +798,7 @@ var Store = declare( null,  {
         next( err );
       } else {
 
-        self._enrichSelectorWithParams( selector, request.params );
+        if( request.remote) self._enrichSelectorWithParams( selector, request.params );
 
         // Run the select based on the passed parameters
         self.dbLayer.select( selector, dbLayerOptions, next );
@@ -820,7 +828,7 @@ var Store = declare( null,  {
             callback( err, null );
           } else {
 
-            self.prepareBeforeSend( doc, function( err, doc ){
+            self.prepareBeforeSend( doc, function( err ){
               if( err ){
                 callback( err, null );
               } else {
@@ -971,7 +979,7 @@ var Store = declare( null,  {
   _checkPermissionsProxy: function( request, action, doc, fulldoc, cb ){
 
     // It's an API request: permissions are totally skipped
-    if( !request.remote ) return cb( null );
+    if( !request.remote ) return cb( null, true );
 
     // Call the right function
     switch( action ){
@@ -998,29 +1006,30 @@ var Store = declare( null,  {
 
     // Check that the method is implemented
     if( ! self.handlePost && request.remote ){
-      self._sendError( next, new self.NotImplementedError( ) );
+      self._sendError( request, next, new self.NotImplementedError( ) );
       return;
     }
 
     // Check the IDs
     self._checkParamIds( request, true, function( err ){  
-      // if( err ) return this._sendError( next, err );
+      // if( err ) return this._sendError( request, next, err );
       self._sendErrorOnErr( request, err, next, function(){
 
-        self.prepareBody( request.body, 'post', function( err, body ){
+        self.prepareBody( request.body, 'post', function( err ){
           self._sendErrorOnErr( request, err, next, function(){
-     
+
             var skipParamsObject = {};
             skipParamsObject[ self.idProperty ] = [ 'required' ];
 
             self._enrichBodyWithParamIdsIfRemote( request );
 
-            self.schema.validate( body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, body, errors ){
+            self.schema.validate( request.body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, body, errors ){
               self._sendErrorOnErr( request, err, next, function(){
-        
+
+                request.body = body;
 
                 if( errors.length ){
-                  self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
+                  self._sendError( request, next, new self.UnprocessableEntityError( { errors: errors } ) );
                 } else {
      
  
@@ -1032,16 +1041,17 @@ var Store = declare( null,  {
                         self._sendErrorOnErr( request, err, next, function(){
             
                           if( ! granted ){
-                            self._sendError( next, new self.ForbiddenError() );
+                            self._sendError( request, next, new self.ForbiddenError() );
                           } else {
             
                             // Clean up body from things that are not to be submitted
                             //if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
-                            self.schema.cleanup( body, 'doNotSave' );
+                            self.schema.cleanup( request.body, 'doNotSave' );
             
-                            self.schema.makeId( body, function( err, generatedId){
+                            self.schema.makeId( request.body, function( err, generatedId){
                               self._sendErrorOnErr( request, err, next, function(){
             
+                                
                                 self.execPostDbInsertNoId( request, generatedId, function( err, fullDoc ){
                                   self._sendErrorOnErr( request, err, next, function(){
             
@@ -1049,7 +1059,7 @@ var Store = declare( null,  {
      
                                     self.extrapolateDoc( request, fullDoc, function( err, doc) {
                                       self._sendErrorOnErr( request, err, next, function(){
-            
+          
                                         // Remote request: set headers, and send the doc back (if echo is on)
                                         if( request.remote ){
                 
@@ -1059,7 +1069,7 @@ var Store = declare( null,  {
   
                                           if( self.echoAfterPost ){
             
-                                            self.prepareBeforeSend( doc, function( err, doc ){
+                                            self.prepareBeforeSend( doc, function( err ){
                                               self._sendErrorOnErr( request, err, next, function(){
                 
                                                 self.afterPost( request, doc, fullDoc, function( err ){
@@ -1087,8 +1097,8 @@ var Store = declare( null,  {
                 
                                         // Local request: simply return the doc to the asking function
                                         } else {
-                
-                                          self.prepareBeforeSend( doc, function( err, doc ){
+               
+                                          self.prepareBeforeSend( doc, function( err ){
                                             self._sendErrorOnErr( request, err, next, function(){
             
                                               self.afterPost( request, doc, fullDoc, function( err ){
@@ -1156,7 +1166,7 @@ var Store = declare( null,  {
 
     // Check that the method is implemented
     if( ! self.handlePut && request.remote ){
-      self._sendError( next, new self.NotImplementedError( ) );
+      self._sendError( request, next, new self.NotImplementedError( ) );
       return;
     }
 
@@ -1171,7 +1181,7 @@ var Store = declare( null,  {
             self._sendErrorOnErr( request, err, next, function(){
 
               if( ! fullDoc ){
-                self._sendError( next, new self.NotFoundError());
+                self._sendError( request, next, new self.NotFoundError());
               } else {
 
                 self.extrapolateDoc( request, fullDoc, function( err, doc) {
@@ -1182,12 +1192,12 @@ var Store = declare( null,  {
                       self._sendErrorOnErr( request, err, next, function(){
             
                         if( ! granted ){
-                          self._sendError( next, new self.ForbiddenError() );
+                          self._sendError( request, next, new self.ForbiddenError() );
                         } else {
 
                           self.reposition( fullDoc, request.options && request.options.beforeId ? request.options.beforeId : null );
 
-                          self.prepareBeforeSend( doc, function( err, doc ){
+                          self.prepareBeforeSend( doc, function( err ){
                             self._sendErrorOnErr( request, err, next, function(){
 
                               self.afterPutExisting( request, doc, fullDoc, doc, fullDoc, request.options.overwrite, function( err ) {
@@ -1225,13 +1235,15 @@ var Store = declare( null,  {
     self._checkParamIds( request, false, function( err ){  
       self._sendErrorOnErr( request, err, next, function(){
 
-        self.prepareBody( request.body, 'put', function( err, body ){
+        self.prepareBody( request.body, 'put', function( err ){
           self._sendErrorOnErr( request, err, next, function(){
 
             self._enrichBodyWithParamIdsIfRemote( request );
 
-            self.schema.validate( body, function( err, body, errors ) {
+            self.schema.validate( request.body, function( err, body, errors ) {
               self._sendErrorOnErr( request, err, next, function(){
+
+                request.body = body;
         
                 if( errors.length ){
                   self._sendError( request, next, new self.UnprocessableEntityError( { errors: errors } ) );
@@ -1240,7 +1252,6 @@ var Store = declare( null,  {
                   self.postValidate( body, 'put', function( err ){
                     self._sendErrorOnErr( request, err, next, function(){
  
-            
                       // Fetch the doc
                       self.execAllDbFetch( request, function( err, fullDoc ){
                         self._sendErrorOnErr( request, err, next, function(){
@@ -1248,9 +1259,9 @@ var Store = declare( null,  {
                           // Check the 'overwrite' option
                           if( typeof( request.options.overwrite ) !== 'undefined' ){
                             if( fullDoc && ! request.options.overwrite ){
-                              self._sendError( next, new self.PreconditionFailedError() );
+                              self._sendError( request, next, new self.PreconditionFailedError() );
                             } else if( !fullDoc && request.options.overwrite ) {
-                              self._sendError( next, new self.PreconditionFailedError() );
+                              self._sendError( request, next, new self.PreconditionFailedError() );
                             } else {
                               continueAfterFetch();
                             }
@@ -1259,7 +1270,7 @@ var Store = declare( null,  {
                           }
                 
                           function continueAfterFetch(){
-            
+           
                             // It's a NEW doc: it will need to be an insert, _and_ permissions will be
                             // done on inputted data
                             if( ! fullDoc ){
@@ -1270,17 +1281,17 @@ var Store = declare( null,  {
             
             
                                   if( ! granted ){
-                                    self._sendError( next, new self.ForbiddenError() );
+                                    self._sendError( request, next, new self.ForbiddenError() );
                                   } else {
             
                                     // Clean up body from things that are not to be submitted
                                     // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
-                                    self.schema.cleanup( body, 'doNotSave' );
+                                    self.schema.cleanup( request.body, 'doNotSave' );
             
                                     // Paranoid check
                                     // Make sure that the id property in the body does match
                                     // the one passed as last parameter in the list of IDs
-                                    body[ self.idProperty ] = request.params[ self.idProperty ];
+                                    request.body[ self.idProperty ] = request.params[ self.idProperty ];
             
                                     self.execPutDbInsert( request, function( err, fullDoc ){
                                       self._sendErrorOnErr( request, err, next, function(){
@@ -1297,7 +1308,7 @@ var Store = declare( null,  {
                                               request._res.setHeader( 'Location', request._req.originalUrl );
                                               if( self.echoAfterPutNew ){
                 
-                                                self.prepareBeforeSend( doc, function( err, doc ){
+                                                self.prepareBeforeSend( doc, function( err ){
                                                   self._sendErrorOnErr( request, err, next, function(){
                                                     self.afterPutNew( request, doc, fullDoc, request.options.overwrite, function( err ){
                                                       self._sendErrorOnErr( request, err, next, function(){
@@ -1320,7 +1331,7 @@ var Store = declare( null,  {
             
                                             // Local request: simply return the doc to the asking function
                                             } else {
-                                              self.prepareBeforeSend( doc, function( err, doc ){
+                                              self.prepareBeforeSend( doc, function( err ){
                                                 self._sendErrorOnErr( request, err, next, function(){
             
                                                   self.afterPutNew( request, doc, fullDoc, request.options.overwrite, function( err ){
@@ -1361,12 +1372,12 @@ var Store = declare( null,  {
                                     self._sendErrorOnErr( request, err, next, function(){
                
                                       if( ! granted ){
-                                        self._sendError( next, new self.ForbiddenError() );
+                                        self._sendError( request, next, new self.ForbiddenError() );
                                       } else {
                 
                                         // Clean up body from things that are not to be submitted
                                         // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
-                                        self.schema.cleanup( body, 'doNotSave' );
+                                        self.schema.cleanup( request.body, 'doNotSave' );
               
                                         self.execPutDbUpdate( request, function( err, fullDocAfter ){
                                           self._sendErrorOnErr( request, err, next, function(){
@@ -1384,7 +1395,7 @@ var Store = declare( null,  {
                    
                                                   if( self.echoAfterPutExisting ){
                     
-                                                    self.prepareBeforeSend( docAfter, function( err, docAfter ){
+                                                    self.prepareBeforeSend( docAfter, function( err ){
                                                       self._sendErrorOnErr( request, err, next, function(){
               
                                                         self.afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, request.options.overwrite, function( err ) {
@@ -1411,7 +1422,7 @@ var Store = declare( null,  {
                 
                                                 // Local request: simply return the doc to the asking function
                                                 } else {
-                                                  self.prepareBeforeSend( docAfter, function( err, docAfter ){
+                                                  self.prepareBeforeSend( docAfter, function( err ){
                                                     self._sendErrorOnErr( request, err, next, function(){
     
     
@@ -1489,12 +1500,11 @@ var Store = declare( null,  {
     var self = this;
     var sort, range, filters;
 
-
     if( typeof( next ) !== 'function' ) next = function(){};
 
     // Check that the method is implemented
     if( ! self.handleGetQuery && request.remote ){
-      self._sendError( next, new self.NotImplementedError( ) );
+      self._sendError( request, next, new self.NotImplementedError( ) );
       return;
     }
   
@@ -1507,7 +1517,7 @@ var Store = declare( null,  {
           self._sendErrorOnErr( request, err, next, function(){
     
             if( ! granted ){
-              self._sendError( next, new self.ForbiddenError() );
+              self._sendError( request, next, new self.ForbiddenError() );
             } else {
     
               self._validateSearchFilter( request, request.options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
@@ -1517,12 +1527,9 @@ var Store = declare( null,  {
                   // Actually assigning cast and validated filters to `options`
                   request.options.filters = filters;
 
-                if( errors.length ){
-                  console.log("ERROR VALIDATING!", self.table, request.options.filters );
-                }
                   // Errors in casting: give up, run away
                   if( errors.length ){
-                    self._sendError( next, new self.BadRequestError( { errors: errors } ) );
+                    self._sendError( request, next, new self.BadRequestError( { errors: errors } ) );
                   } else {
         
                     self.execGetDbQuery( request, function( err, queryDocs, total, grandTotal ){
@@ -1585,7 +1592,7 @@ var Store = declare( null,  {
 
     // Check that the method is implemented
     if( ! self.handleGet && request.remote ){
-      self._sendError( next, new self.NotImplementedError( ) );
+      self._sendError( request, next, new self.NotImplementedError( ) );
       return;
     }
 
@@ -1598,7 +1605,7 @@ var Store = declare( null,  {
           self._sendErrorOnErr( request, err, next, function(){
     
             if( ! fullDoc ){
-              self._sendError( next, new self.NotFoundError());
+              self._sendError( request, next, new self.NotFoundError());
             } else {
     
               self.extrapolateDoc( request, fullDoc, function( err, doc) {
@@ -1609,12 +1616,12 @@ var Store = declare( null,  {
                     self._sendErrorOnErr( request, err, next, function(){
         
                       if( ! granted ){
-                        self._sendError( next, new self.ForbiddenError() ); 
+                        self._sendError( request, next, new self.ForbiddenError() ); 
                       } else {
                         
         
                         // "preparing" the doc. The same function is used by GET for collections 
-                        self.prepareBeforeSend( doc, function( err, doc ){
+                        self.prepareBeforeSend( doc, function( err ){
                           self._sendErrorOnErr( request, err, next, function(){
         
                             self.afterGet( request, doc, fullDoc, function( err ) {
@@ -1665,7 +1672,7 @@ var Store = declare( null,  {
   
     // Check that the method is implemented
     if( ! self.handleDelete && request.remote ){
-      self._sendError( next, new self.NotImplementedError( ) );
+      self._sendError( request, next, new self.NotImplementedError( ) );
       return;
     }
   
@@ -1678,7 +1685,7 @@ var Store = declare( null,  {
           self._sendErrorOnErr( request, err, next, function(){
     
             if( ! fullDoc ){
-              self._sendError( next, new self.NotFoundError());
+              self._sendError( request, next, new self.NotFoundError());
             } else {
     
               self.extrapolateDoc( request, fullDoc, function( err, doc) {
@@ -1692,7 +1699,7 @@ var Store = declare( null,  {
                         self._sendErrorOnErr( request, err, next, function(){
         
                           if( ! granted ){
-                            self._sendError( next, new self.ForbiddenError() );
+                            self._sendError( request, next, new self.ForbiddenError() );
                           } else {
                       
         
@@ -1771,7 +1778,11 @@ var Store = declare( null,  {
 
       // Since it's an online request, options are set by "req"
       // This will set things like ranges, sort options, etc.
-      request.options = self._initOptionsFromReq( action, req );
+      try {
+        request.options = self._initOptionsFromReq( action, req );
+      } catch( e ){
+        return cb( e );
+      }
 
       // The "delete" option can apply to GetQuery
       if( action === 'GetQuery' ){
@@ -1835,7 +1846,7 @@ var Store = declare( null,  {
 
     // Make up "params" to be passed to the _makeGet function
     request.params = {};
-    params[ this._lastParamId() ] = id;
+    request.params[ this._lastParamId() ] = id;
 
     // Actually run the request
     this._makeGet( request, next );
@@ -1845,6 +1856,7 @@ var Store = declare( null,  {
 
 
   apiGetQuery: function( options, next ){
+
 
     // Make up the request
     var request = new Object();
@@ -1880,6 +1892,7 @@ var Store = declare( null,  {
     request.params = {};
     if( id !== null ){
       request.params[ this.idProperty ] = id;
+      request.body[ this.idProperty ] = id;
     } else {
       var idInBody = body[ this.idProperty ];
       if( typeof( idInBody ) !== 'undefined'){
@@ -1907,7 +1920,7 @@ var Store = declare( null,  {
     request.params = {};
 
     // Actually run the request
-    this._makePost( {}, body, options, next );
+    this._makePost( request, next );
   },
 
 
@@ -1938,6 +1951,12 @@ var Store = declare( null,  {
 Store.getStore = function( storeName ){
   return Store.registry[ storeName ];
 }
+
+// Get store from the class' registry
+Store.deleteStore = function( storeName ){
+  delete Store.registry[ storeName ];
+}
+
 
 // Get all stores as a hash
 Store.getAllStores = function(){
