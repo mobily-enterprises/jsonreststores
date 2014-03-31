@@ -97,7 +97,7 @@ var Store = declare( null,  {
 
   // Doc extrapolation and preparation calls
   extrapolateDoc: function( request, fullDoc, cb ){ cb( null, fullDoc ); },
-  prepareBeforeSend: function( doc, cb ){ cb( null ); },
+  prepareBeforeSend: function( request, doc, cb ){ cb( null ); },
 
   // "after" calls
   afterPutNew: function( request, doc, fullDoc, overwrite, cb ){ cb( null ) },
@@ -116,8 +116,8 @@ var Store = declare( null,  {
   checkPermissionsDelete: function( request, doc, fullDoc, cb ){ cb( null, true ); },
 
   // Body preparation and postvalidation functions
-  prepareBody: function( body, method, cb ){ cb( null ); },
-  postValidate: function( body, method, cb ){ cb( null ); },
+  prepareBody: function( request, body, method, cb ){ cb( null ); },
+  postValidate: function( request, body, method, cb ){ cb( null ); },
 
   logError: function( error ){ },
 
@@ -179,9 +179,11 @@ var Store = declare( null,  {
     self.collectionName = this.collectionName ? this.collectionName : this.storeName;
 
     // Cannot have paramIds set up AS WELL AS publicURL -- one or the other
+    /*
     if( self.paramIds && self.publicURL ){
        throw( new Error( "paramIds and publicURL are mutually exclusive when creating a store" ) );
     }
+    */
 
     // If paramId is not specified, takes it from publicURL
     if( self.paramIds === null ){
@@ -507,7 +509,7 @@ var Store = declare( null,  {
               cb( new self.ServiceUnavailableError({
                 message: "dbLayer.update updated more than 1 record",
                 data: { 
-                  length: doc.length,
+                  length: docs.length,
                   selector: selector,
                   store: self.storeName
                 }
@@ -553,7 +555,7 @@ var Store = declare( null,  {
     self.dbLayer.delete( selector, { multi: false, skipValidation: true }, cb );
   },
 
-  _queryMakeSelector: function( filters, sort, ranges, cb ){
+  _queryMakeSelector: function( remote, filters, sort, ranges, cb ){
 
     var self = this;
     var errors = [];
@@ -576,7 +578,7 @@ var Store = declare( null,  {
       var searchable = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchable;
       var searchOptions = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchOptions;
 
-      if( searchable || !request.remote ) {
+      if( searchable || !remote ) {
 
         // searchOptions is not an object/is null: just set default conditions (equality with field)
         if( typeof( searchOptions ) !== 'object' || searchOptions === null ){
@@ -793,7 +795,7 @@ var Store = declare( null,  {
     //  options.sort[ self.positionField ] = 1;
     //}
 
-    self._queryMakeSelector( request.options.filters, request.options.sort, request.options.ranges, function( err, selector ){
+    self._queryMakeSelector( request.remote, request.options.filters, request.options.sort, request.options.ranges, function( err, selector ){
       if( err ){
         next( err );
       } else {
@@ -828,7 +830,7 @@ var Store = declare( null,  {
             callback( err, null );
           } else {
 
-            self.prepareBeforeSend( doc, function( err ){
+            self.prepareBeforeSend( request, doc, function( err ){
               if( err ){
                 callback( err, null );
               } else {
@@ -1015,7 +1017,7 @@ var Store = declare( null,  {
       // if( err ) return this._sendError( request, next, err );
       self._sendErrorOnErr( request, err, next, function(){
 
-        self.prepareBody( request.body, 'post', function( err ){
+        self.prepareBody( request, request.body, 'post', function( err ){
           self._sendErrorOnErr( request, err, next, function(){
 
             var skipParamsObject = {};
@@ -1033,7 +1035,7 @@ var Store = declare( null,  {
                 } else {
      
  
-                   self.postValidate( body, 'post', function( err ){
+                   self.postValidate( request, body, 'post', function( err ){
                      self._sendErrorOnErr( request, err, next, function(){
   
                       // Actually check permissions
@@ -1069,7 +1071,7 @@ var Store = declare( null,  {
   
                                           if( self.echoAfterPost ){
             
-                                            self.prepareBeforeSend( doc, function( err ){
+                                            self.prepareBeforeSend( request, doc, function( err ){
                                               self._sendErrorOnErr( request, err, next, function(){
                 
                                                 self.afterPost( request, doc, fullDoc, function( err ){
@@ -1098,7 +1100,7 @@ var Store = declare( null,  {
                                         // Local request: simply return the doc to the asking function
                                         } else {
                
-                                          self.prepareBeforeSend( doc, function( err ){
+                                          self.prepareBeforeSend( request, doc, function( err ){
                                             self._sendErrorOnErr( request, err, next, function(){
             
                                               self.afterPost( request, doc, fullDoc, function( err ){
@@ -1197,7 +1199,7 @@ var Store = declare( null,  {
 
                           self.reposition( fullDoc, request.options && request.options.beforeId ? request.options.beforeId : null );
 
-                          self.prepareBeforeSend( doc, function( err ){
+                          self.prepareBeforeSend( request, doc, function( err ){
                             self._sendErrorOnErr( request, err, next, function(){
 
                               self.afterPutExisting( request, doc, fullDoc, doc, fullDoc, request.options.overwrite, function( err ) {
@@ -1235,7 +1237,7 @@ var Store = declare( null,  {
     self._checkParamIds( request, false, function( err ){  
       self._sendErrorOnErr( request, err, next, function(){
 
-        self.prepareBody( request.body, 'put', function( err ){
+        self.prepareBody( request, request.body, 'put', function( err ){
           self._sendErrorOnErr( request, err, next, function(){
 
             self._enrichBodyWithParamIdsIfRemote( request );
@@ -1249,7 +1251,7 @@ var Store = declare( null,  {
                   self._sendError( request, next, new self.UnprocessableEntityError( { errors: errors } ) );
                 } else {
    
-                  self.postValidate( body, 'put', function( err ){
+                  self.postValidate( request, body, 'put', function( err ){
                     self._sendErrorOnErr( request, err, next, function(){
  
                       // Fetch the doc
@@ -1308,7 +1310,7 @@ var Store = declare( null,  {
                                               request._res.setHeader( 'Location', request._req.originalUrl );
                                               if( self.echoAfterPutNew ){
                 
-                                                self.prepareBeforeSend( doc, function( err ){
+                                                self.prepareBeforeSend( request, doc, function( err ){
                                                   self._sendErrorOnErr( request, err, next, function(){
                                                     self.afterPutNew( request, doc, fullDoc, request.options.overwrite, function( err ){
                                                       self._sendErrorOnErr( request, err, next, function(){
@@ -1331,7 +1333,7 @@ var Store = declare( null,  {
             
                                             // Local request: simply return the doc to the asking function
                                             } else {
-                                              self.prepareBeforeSend( doc, function( err ){
+                                              self.prepareBeforeSend( request, doc, function( err ){
                                                 self._sendErrorOnErr( request, err, next, function(){
             
                                                   self.afterPutNew( request, doc, fullDoc, request.options.overwrite, function( err ){
@@ -1395,7 +1397,7 @@ var Store = declare( null,  {
                    
                                                   if( self.echoAfterPutExisting ){
                     
-                                                    self.prepareBeforeSend( docAfter, function( err ){
+                                                    self.prepareBeforeSend( request, docAfter, function( err ){
                                                       self._sendErrorOnErr( request, err, next, function(){
               
                                                         self.afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, request.options.overwrite, function( err ) {
@@ -1422,7 +1424,7 @@ var Store = declare( null,  {
                 
                                                 // Local request: simply return the doc to the asking function
                                                 } else {
-                                                  self.prepareBeforeSend( docAfter, function( err ){
+                                                  self.prepareBeforeSend( request, docAfter, function( err ){
                                                     self._sendErrorOnErr( request, err, next, function(){
     
     
@@ -1621,7 +1623,7 @@ var Store = declare( null,  {
                         
         
                         // "preparing" the doc. The same function is used by GET for collections 
-                        self.prepareBeforeSend( doc, function( err ){
+                        self.prepareBeforeSend( request, doc, function( err ){
                           self._sendErrorOnErr( request, err, next, function(){
         
                             self.afterGet( request, doc, fullDoc, function( err ) {
@@ -1801,9 +1803,9 @@ var Store = declare( null,  {
     }
   },
  
-  setAllRoutes: function( app ){
+  setAllRoutes: function( app, urlParameter ){
 
-    var url = this.publicURL;
+    var url = urlParameter || this.publicURL;
     var idName;
 
     // Public URL must be set

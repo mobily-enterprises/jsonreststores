@@ -19,6 +19,7 @@ Tests for:
   * Check that paramId have priority over body for putExisting, putNew, post
   * Check that indexing works
   * Test hook bodyPostValidate
+  * Check postValidate
 */
 
 var 
@@ -466,7 +467,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
   
-          prepareBody: function( body, method, done ){
+          prepareBody: function( request, body, method, done ){
             
             if( method === 'post' ){
               body.name = body.name + "_prepareBodyPost";
@@ -646,7 +647,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
    
-          prepareBeforeSend: function( doc, done ){
+          prepareBeforeSend: function( request, doc, done ){
             doc.beforeSend = '_prepareBeforeSend';
   
             done( null );
@@ -683,7 +684,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-          prepareBeforeSend: function( doc, done ){
+          prepareBeforeSend: function( request, doc, done ){
             doc.beforeSend = '_prepareBeforeSend';
 
             done( null );
@@ -1039,7 +1040,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-          prepareBody: function( body, method, done ){
+          prepareBody: function( request, body, method, done ){
             if( method === 'put' ){
               body.name = body.name.toUpperCase();
             }
@@ -1214,7 +1215,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
   
-          prepareBeforeSend: function( doc, done ){
+          prepareBeforeSend: function( request, doc, done ){
             doc.beforeSend = '_prepareBeforeSend';
   
             done( null );
@@ -1247,7 +1248,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-          prepareBeforeSend: function( doc, done ){
+          prepareBeforeSend: function( request, doc, done ){
             doc.beforeSend = '_prepareBeforeSend';
   
             done( null );
@@ -1517,7 +1518,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-            prepareBeforeSend: function( doc, done ){
+            prepareBeforeSend: function( request, doc, done ){
               doc.beforeSend = '_prepareBeforeSend';
 
               done( null );
@@ -1554,7 +1555,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
    
-            prepareBeforeSend: function( doc, done ){
+            prepareBeforeSend: function( request, doc, done ){
               doc.beforeSend = '_prepareBeforeSend';
 
               done( null );
@@ -1851,7 +1852,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
   
-            prepareBeforeSend: function( doc, done ){
+            prepareBeforeSend: function( request, doc, done ){
               doc.beforeSend = '_prepareBeforeSend';
   
               done( null );
@@ -2564,7 +2565,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-          prepareBeforeSend: function( doc, done ){
+          prepareBeforeSend: function( request, doc, done ){
            doc.prepared = 10;
 
            done( null );
@@ -2597,7 +2598,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
     'testing _queryMakeSelector': function( test ){
   
-       g.people._queryMakeSelector( { name: 'Tony', surname: 'Mobily' }, {}, {}, function( err, selector ){
+       g.people._queryMakeSelector( true, { name: 'Tony', surname: 'Mobily' }, {}, {}, function( err, selector ){
 
          test.ifError( err );
          test.deepEqual( selector,
@@ -2610,7 +2611,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   sort: {}  }
          );
       
-         g.people._queryMakeSelector( { nameSt: 'Mob', ageGt: 20 }, {}, {}, function( err, selector) {
+         g.people._queryMakeSelector( true, { nameSt: 'Mob', ageGt: 20 }, {}, {}, function( err, selector) {
 
            test.ifError( err );
            test.deepEqual( selector,
@@ -2624,7 +2625,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
            );
   
-           g.people._queryMakeSelector( { name: 'Tony' }, { name: -1, surname: 1 }, {}, function( err, selector ){
+           g.people._queryMakeSelector( true, { name: 'Tony' }, { name: -1, surname: 1 }, {}, function( err, selector ){
   
              test.ifError( err );
              test.deepEqual( selector, 
@@ -2635,7 +2636,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
              );
   
-             var selector = g.people._queryMakeSelector( { name: 'Tony' }, { name: -1, surname: 1 }, { from: 0, to: 10, limit: 5}, function( err, selector ){
+             var selector = g.people._queryMakeSelector( true, { name: 'Tony' }, { name: -1, surname: 1 }, { from: 0, to: 10, limit: 5}, function( err, selector ){
   
                test.ifError( err );
                test.deepEqual( selector, 

@@ -758,7 +758,7 @@ It's important that you create a copy of `fullDoc` rather than changing it direc
     }
 
 
-### `prepareBeforeSend( doc, cb )`(
+### `prepareBeforeSend( request, doc, cb )`(
 
 The method `prepareBeforeSend()` does exactly what it says: it will manipulate `doc` just before it's sent over to the client who requested it. This is especialy useful if you want to apply last minute changes to the data you send.
 
@@ -766,8 +766,9 @@ An important difference between `prepareBeforeSend()` and `extrapolateDoc()` is 
 
 The method's signature is:
 
-    prepareBeforeSend( doc, cb )
+    prepareBeforeSend( request, doc, cb )
 
+The function will manipulate `doc` directly, and will just run `cb( err )` (no extra parameters)
 
 ## Indexing functions
 
@@ -873,8 +874,8 @@ These hooks are there so that you can manpulate the data passed to your store bo
 
 When data is submitted to the store, sometimes you want to manipulate it *before* it gets validated against the schema. For example, your application might pass extra parameters (which are not part of the schema) that will influence the actual schema fields. Or, you might want to manipulate the passed data _after_ validation (which is useful if you want to make absolute sure that all the fields are cast and valid).
 
-* `prepareBody( body, method, cb )`
-* `postValidate( body, method, cb )`
+* `prepareBody( request, body, method, cb )`
+* `postValidate( request, body, method, cb )`
 
 In both hooks, `method` can be either `"put"` or `"post"`.
 
@@ -1274,7 +1275,7 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * (HOOK) `self.extrapolateDoc( fullDoc )` is run against the record just fetched -> `doc`
 * `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
 * (HOOK) `self.checkPermissionsGet( request, doc, fullDoc )` is run. If fail, send `ForbiddenError`
-* (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
+* (HOOK) `self.prepareBeforeSend( request, doc )` is run -> `doc`
 * (HOOK) `self.afterGet( request, doc, fullDoc )` is run
 * `doc` is sent (status: 200)/returned. Party!
 
@@ -1288,7 +1289,7 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * FOR EACH RECORD -> `queryDocs`
  * (HOOK) `self.extrapolateDoc( fulldoc )` is run against each `fullDoc` -> `doc`
  * Each `doc` is cast against the schema. If ONE fails, everything fails: send `UnprocessableEntityError`
- * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
+ * (HOOK) `self.prepareBeforeSend( request, doc )` is run
 * (HOOK) `self.afterGetQueries( request, queryDocs )` is run
 * `queryDocs` is sent as array (status: 200)/returned as array. Party!
 
@@ -1308,9 +1309,9 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 
 * (ATTR) `self.handlePost` is checked. If false, send `NotImplementedError`
 * incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* (HOOK) `self.prepareBody( body, 'post' )` is run against the record just fetched
+* (HOOK) `self.prepareBody( request, body, 'post' )` is run against the record just fetched
 * Body is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.postValidate( body, 'post' )` is run against the record just fetched
+* (HOOK) `self.postValidate( request, body, 'post' )` is run against the record just fetched
 * (HOOK) `self.checkPermissionsPost( request )` is run. If fail, send `ForbiddenError`
 * Body is cleaned up of fields with `doNotSave: true` in schema
 * record is written to the DB.
@@ -1319,7 +1320,7 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
 * Set the `Location:` header
 * IF `self.echoAfterPost`:
-  * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
+  * (HOOK) `self.prepareBeforeSend( request, doc )` is run 
   * (HOOK) `self.afterPost( request, doc, fullDoc )` is run
   * `doc` is sent (status: 200)/returned. Party!
 * ELSE:
@@ -1330,9 +1331,9 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 
 * (ATTR) `self.handlePut` is checked. If false, send `NotImplementedError`
 * incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* (HOOK) `self.prepareBody( body, 'put' )` is run against the record just fetched
+* (HOOK) `self.prepareBody( request, body, 'put' )` is run against the record just fetched
 * Body is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.postValidate( body, 'put' )` is run against the record just fetched
+* (HOOK) `self.postValidate( request, body, 'put' )` is run against the record just fetched
 * record is fetched from DB (ATTEMPT) -> `fullDoc`
 * `options.overwrite` is checked: if true & record not there, or false and record there, send `PreconditionFailedError`
 
@@ -1346,7 +1347,7 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
 * Set the `Location:` header
 * IF `self.echoAfterPut`:
-  * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
+  * (HOOK) `self.prepareBeforeSend( request, doc )` is run
   * (HOOK) `self.afterPutNew( request, doc, fullDoc, options.overwrite )` is run
   * `doc` is sent (status: 200)/returned. Party!
 * ELSE:
@@ -1365,7 +1366,7 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * Doc is cast against the schema. If fail, send `UnprocessableEntityError`
 * Set the `Location:` header
 * IF `self.echoAfterPut`:
-  * (HOOK) `self.prepareBeforeSend( docAfter )` is run.
+  * (HOOK) `self.prepareBeforeSend( request, docAfter )` is run.
   * (HOOK) `self.afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, options.overwrite )` is run
   * `docAfter` is sent (status: 200)/returned. Party!
 * ELSE:
