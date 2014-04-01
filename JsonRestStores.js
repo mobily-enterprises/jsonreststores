@@ -333,6 +333,7 @@ var Store = declare( null,  {
         idProperty: self.idProperty,
         schemaError: self.UnprocessableEntityError,
         hardLimitOnQueries: self.hardLimitOnQueries,
+        children: true,
       };
       if( self.position ){
         layerOptions.positionField = '__position';
@@ -415,8 +416,8 @@ var Store = declare( null,  {
     var selector = {};
 
     // Make up the selector.
-    // For remote requests, just enrich the selector with all paramIds.
-    // For local requests, just use self.idProperty.
+    // Remote requests need to have the full filter based on request.params. Local ones
+    // only have to have (and I mean HAVE TO) the idProperty
     if( request.remote ){
        self._enrichSelectorWithParams( selector, request.params );
     } else {
@@ -424,7 +425,7 @@ var Store = declare( null,  {
     }
 
     // Make the database call 
-    self.dbLayer.select( selector, function( err, docs ){
+    self.dbLayer.select( selector, { children: true}, function( err, docs ){
       if( err ){
         cb( err );
       } else {
@@ -457,7 +458,9 @@ var Store = declare( null,  {
 
     // Make up the `record` variable, based on the passed `body`
     for( var k in request.body ) record[ k ] = request.body[ k ];
+    delete record._children;
 
+    // Obsoleted by self._enrichBodyWithParamIdsIfRemote
     // Add param IDs to the record that is being written
     //self.paramIds.forEach( function( paramId ){
     //  if( typeof( request.params[ paramId ] ) !== 'undefined' ){
@@ -481,11 +484,21 @@ var Store = declare( null,  {
     // Make up the filter, based on the store's IDs (used as filters).
     var selector = {};
 
-    if( request.remote) self._enrichSelectorWithParams( selector, request.params );
+    // Make up the selector.
+    // Remote requests need to have the full filter based on request.params. Local ones
+    // only have to have (and I mean HAVE TO) the idProperty
+    if( request.remote ){
+       self._enrichSelectorWithParams( selector, request.params );
+    } else {
+      selector = { conditions: { and: [ { field: self.idProperty, type: 'eq', value: request.params[ self.idProperty ] } ] } };
+    }
+
 
     // Make up the `updateObject` variable, based on the passed `body`
     for( var i in request.body ) updateObject[ i ] = request.body[ i ];
+    delete updateObject._children;
 
+    // Obsoleted by self._enrichBodyWithParamIdsIfRemote
     // Add param IDs to the record that is being written (updated)
     //self.paramIds.forEach( function( paramId ){
     //  if( typeof( request.params[ paramId ] ) !== 'undefined' ){
@@ -498,7 +511,7 @@ var Store = declare( null,  {
         cb( err );
       } else {
 
-        self.dbLayer.select( selector, function( err, docs ){
+        self.dbLayer.select( selector, { children: true }, function( err, docs ){
           if( err ){
             cb( err );
           } else {
@@ -533,7 +546,9 @@ var Store = declare( null,  {
 
     // Make up the `record` variable, based on the passed `body`
     for( var k in request.body ) record[ k ] = request.body[ k ];
+    delete request.body._children;
 
+    // Obsoleted by self._enrichBodyWithParamIdsIfRemote
     // Add param IDs to the record that is being written
     //self.paramIds.forEach( function( paramId ){
     //  if( typeof( request.params[ paramId ] ) !== 'undefined' ){
@@ -551,7 +566,15 @@ var Store = declare( null,  {
     var self = this;
     var selector = {};
 
-    if( request.remote) self._enrichSelectorWithParams( selector, request.params );
+    // Make up the selector.
+    // Remote requests need to have the full filter based on request.params. Local ones
+    // only have to have (and I mean HAVE TO) the idProperty
+    if( request.remote ){
+       self._enrichSelectorWithParams( selector, request.params );
+    } else {
+      selector = { conditions: { and: [ { field: self.idProperty, type: 'eq', value: request.params[ self.idProperty ] } ] } };
+    }
+
     self.dbLayer.delete( selector, { multi: false, skipValidation: true }, cb );
   },
 
@@ -786,6 +809,7 @@ var Store = declare( null,  {
     if( request.options.delete || self.deleteAfterGetQuery ){
       dbLayerOptions.delete = true;
     }
+    dbLayerOptions.children = true;
 
     if( typeof( request.options.sort ) === 'undefined' || request.options.sort === null ) request.options.sort = {}; 
     if( typeof( request.options.ranges ) === 'undefined' || request.options.ranges === null ) request.options.ranges = {}; 
@@ -802,6 +826,7 @@ var Store = declare( null,  {
 
         if( request.remote) self._enrichSelectorWithParams( selector, request.params );
 
+        
         // Run the select based on the passed parameters
         self.dbLayer.select( selector, dbLayerOptions, next );
       }
@@ -1276,6 +1301,7 @@ var Store = declare( null,  {
                             // It's a NEW doc: it will need to be an insert, _and_ permissions will be
                             // done on inputted data
                             if( ! fullDoc ){
+
                             
                               // Actually check permissions
                               self._checkPermissionsProxy( request, 'PutNew', null, null, function( err, granted ){
@@ -1783,7 +1809,7 @@ var Store = declare( null,  {
       try {
         request.options = self._initOptionsFromReq( action, req );
       } catch( e ){
-        return cb( e );
+        return next( e );
       }
 
       // The "delete" option can apply to GetQuery
@@ -1887,6 +1913,8 @@ var Store = declare( null,  {
     request.body = body;
     request.options = options;
 
+    delete body._children;
+
     // Sets only idProperty in the params hash. Note that
     // you might well decide to pass the whole object in body, and
     // pass `null` as the object ID: in that case, this function
@@ -1920,6 +1948,8 @@ var Store = declare( null,  {
     request.body = body;
     request.options = options;
     request.params = {};
+
+    delete body._children;
 
     // Actually run the request
     this._makePost( request, next );
