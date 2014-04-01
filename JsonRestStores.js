@@ -22,6 +22,15 @@ Funnily enough, it didn't catch a bug as big as the sky with the Range headers r
 
 */
 
+/* 
+KEEP IN MIND:
+
+- SimpleDbLayer MUST enforce the one-object=one-table rule, otherwise its registry won't work
+- JsonRestStores must be passed schema, nested, idproperty to create the layer with
+- If two stores have the same collectionName, the second one will reuse the existing one.
+- This means that you can create the stores beforehand, and then get JsonRestStores to use them (nice!)
+- In case of reusing, schema, nested, and hardLimitOnQueries mustn't be declared, and idProperty needs to match
+*/
 
 var 
   dummy
@@ -32,26 +41,33 @@ var
 , async = require('async')
 ;
 
-
-var DbLayerFactory = function( 
-
 var Store = declare( null,  {
 
-  // ****************************************************
-  // *** ATTRIBUTES THAT NEED TO BE DEFINED IN PROTOTYPE
-  // ****************************************************
+  // ***********************************************************
+  // *** ATTRIBUTES THAT ALWAYS NEED TO BE DEFINED IN PROTOTYPE
+  // ***********************************************************
 
-  paramIds: null,
-  schema: null,
-  storeName: null, // Must be defined in prototype
+  DbLayer: null,
+  storeName: null,
 
   // ****************************************************
   // *** ATTRIBUTES THAT CAN TO BE DEFINED IN PROTOTYPE
   // ****************************************************
 
-  DbLayer: null, // If not set in prototype, NEEDS to be passed as the constructor parameter
-  onlineSearchSchema: null, // If not set in prototype, is set as `schema` by constructor
-  //collectionName: null, // If not set in prototype, is set as `storeName` by constructor
+  onlineSearchSchema: null, // If not set in prototype, worked out from `schema` by constructor
+  collectionName: null, // If not set in prototype, is set as `storeName` by constructor
+  publicURL: null, // Not mandatory (if you want your store to be API-only for some reason)
+  paramIds: null, // Only allowed is publicURL is not set
+
+  // *****************************************************************
+  // *** ATTRIBUTES USED TO CREATE A STORE (IF NOT IN DBLAYER CACHE)
+  // *** (Note: only allowed if collectionName not already in dbLayer cache
+  // *****************************************************************
+
+  schema: null,
+  nested: [],
+  hardLimitOnQueries: 50,
+  sortableFields: [],
 
   // ****************************************************
   // *** ATTRIBUTES THAT DEFINE STORE'S BEHAVIOUR
@@ -69,42 +85,39 @@ var Store = declare( null,  {
 
   chainErrors: 'none',  // can be 'none', 'all', 'nonhttp'
 
-  hardLimitOnQueries: 50,
   deleteAfterGetQuery: false,
 
-  strictSchemaAfterRefetching: false,
+  strictSchemaAfterRefetching: false, // TO IMPLEMENT
 
-
-  nested: null,
-  position: false,
+  position: false, // If set, will make fields re-positionable
 
   // ****************************************************
   // *** FUNCTIONS THAT CAN BE OVERRIDDEN BY DEVELOPERS
   // ****************************************************
 
-  // Doc extrapolation calls
-  extrapolateDoc: function( params, body, options, fullDoc, cb ){ cb( null, fullDoc ); },
-  prepareBeforeSend: function( doc, cb ){ cb( null, doc ); },
+  // Doc extrapolation and preparation calls
+  extrapolateDoc: function( request, fullDoc, cb ){ cb( null, fullDoc ); },
+  prepareBeforeSend: function( request, doc, cb ){ cb( null ); },
 
   // "after" calls
-  afterPutNew: function( params, body, options, doc, fullDoc, overwrite, cb ){ cb( null ) },
-  afterPutExisting: function( params, body, options, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb ){ cb( null ) },
-  afterPost: function( params, body, options, doc, fullDoc, cb){ cb( null ); },
-  afterDelete: function( params, body, options, doc, fullDoc, cb ){ cb( null ); },
-  afterGet: function( params, body, options, doc, fullDoc, cb ) { cb( null ); },
-  afterGetQuery: function( params, body, options, queryDocs, cb ) { cb( null ); },
+  afterPutNew: function( request, doc, fullDoc, overwrite, cb ){ cb( null ) },
+  afterPutExisting: function( request, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb ){ cb( null ) },
+  afterPost: function( request, doc, fullDoc, cb){ cb( null ); },
+  afterDelete: function( request, doc, fullDoc, cb ){ cb( null ); },
+  afterGet: function( request, doc, fullDoc, cb ) { cb( null ); },
+  afterGetQuery: function( request, queryDocs, cb ) { cb( null ); },
 
   // Permission stock functions
-  checkPermissionsPost: function( params, body, options, cb ){ cb( null, true ); },
-  checkPermissionsPutNew: function( params, body, options, cb ){ cb( null, true ); },
-  checkPermissionsPutExisting: function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); },
-  checkPermissionsGet: function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); },
-  checkPermissionsGetQuery: function( params, body, options, cb ){ cb( null, true ); },
-  checkPermissionsDelete: function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); },
+  checkPermissionsPost: function( request, cb ){ cb( null, true ); },
+  checkPermissionsPutNew: function( request, cb ){ cb( null, true ); },
+  checkPermissionsPutExisting: function( request, doc, fullDoc, cb ){ cb( null, true ); },
+  checkPermissionsGet: function( request, doc, fullDoc, cb ){ cb( null, true ); },
+  checkPermissionsGetQuery: function( request, cb ){ cb( null, true ); },
+  checkPermissionsDelete: function( request, doc, fullDoc, cb ){ cb( null, true ); },
 
   // Body preparation and postvalidation functions
-  prepareBody: function( body, method, cb ){ cb( null, body ); },
-  postValidate: function( body, method, cb ){ cb( null ); },
+  prepareBody: function( request, body, method, cb ){ cb( null ); },
+  postValidate: function( request, body, method, cb ){ cb( null ); },
 
   logError: function( error ){ },
 
@@ -122,7 +135,9 @@ var Store = declare( null,  {
   // *** END OF FUNCTIONS/ATTRIBUTES THAT NEED/CAN BE OVERRIDDEN BY DEVELOPERS
   // **************************************************************************
 
+
   idProperty: null, // Calculated by constructor: last item of paramIds
+  dbLayer: null, // Create by constructor: an instance of dbLayer()
 
   // Default error objects which might be used by this module.
   BadRequestError: e.BadRequestError,
@@ -144,46 +159,80 @@ var Store = declare( null,  {
 
     var self = this;
 
-    // Accept the DB driver from the constructor. If it's not passed through the
-    // constructor, then it must be already in the prototype (inherited or set)
-    /*
-    if( typeof( DbLayer ) !== 'undefined' ){
-      self.DbLayer = DbLayer;
-    }
-    */
-    
-    // The db driver must be defined
-    if( typeof( self.DbLayer ) === 'undefined' || self.DbLayer == null ){
-      throw( new Error("You must define a db driver, via constructor or via prototype (creating " + self.storeName + ')' ));
+    // StoreName cannot be repeated amongst stores, ONE storeName per store!
+    Store.registry = Store.registry || {};
+    if( typeof( Store.registry[ self.storeName ] ) !== 'undefined' ){
+      throw new Error("Cannot instantiate two stores with the same name: " + self.storeName );
     }
 
+    // The db driver must be defined
+    if( self.DbLayer == null ){
+      throw( new Error("You must define a db driver in constructor class (creating " + self.storeName + ')' ));
+    }
+
+    // the store name must be defined
+    if( self.storeName === null  ){
+      throw( new Error("You must define a store name for a store in constructor class") );
+    }
+
+    // If collectionName is not specified, it will deduct it from storeName
     self.collectionName = this.collectionName ? this.collectionName : this.storeName;
+
+    // Cannot have paramIds set up AS WELL AS publicURL -- one or the other
+    /*
+    if( self.paramIds && self.publicURL ){
+       throw( new Error( "paramIds and publicURL are mutually exclusive when creating a store" ) );
+    }
+    */
 
     // If paramId is not specified, takes it from publicURL
     if( self.paramIds === null ){
       self.paramIds =  ( self.publicURL + '/').match(/:.*?\/+/g).map( function(i){return i.substr(1, i.length - 2 )  } );
     }
    
-    // Sets proto.paramId, which (as for the principle of 
+    // Sets self.idProperty, which (as for the principle of 
     // least surprise) must be the last paramId passed to
     // the store.
     self.idProperty = self._lastParamId();
 
-    // The schema must be defined
-    if( typeof( self.schema ) === 'undefined' || self.schema == null ){
-      throw( new Error("You must define a schema") );
+    // The db layer already has a layer called 'collectionName' in the registry!
+    // This store will reuse it
+    var dbLayer = self.DbLayer.getLayer( self.collectionName );
+    if( dbLayer ){
+      
+      // idProperty must match
+      if( self.idProperty != dbLayer.idProperty ){
+        throw( new Error("When reusing a db layer, idProperties must match.", self.storeName, 'is reusing', dbLayer.table ) );
+      }
+
+      // TODO: check that `nested` and `schema` are NOT defined in the direct prototype
+      //if( self.__proto__.hasOwnProperty( 'schema' ){
+      //  throw( new Error("When reusing a db layer, schema must not be defined in derived constructor.", self.storeName, 'is reusing', dbLayer.table ) );
+      //}
+      //if( self.__proto__.hasOwnProperty( 'nested' ){
+      //  throw( new Error("When reusing a db layer, nested must not be defined in derived constructor.", self.storeName, 'is reusing', dbLayer.table ) );
+      //}
+      //if( self.__proto__.hasOwnProperty( 'hardLimitOnQueries' ){
+      //  throw( new Error("When reusing a db layer, hardLimitOnQueries must not be defined in derived constructor.", self.storeName, 'is reusing', dbLayer.table ) );
+      //}
+
+      self.schema = dbLayer.schema;
+      self.nested = dbLayer.nested;
+      self.hardLimitOnQueries = dbLayer.hardLimitOnQueries;
+
+      self.dbLayer = dbLayer;
     }
 
-    // the store name must be defined
-    if( self.storeName === null  ){
-      throw( new Error("You must define a store name for a store") );
+    // The schema must be defined
+    if( self.schema == null ){
+      throw( new Error("You must define a schema") );
     }
 
 
     //                   *** SETTING THE SCHEMAS ***
 
 
-    // STEP #1: COMPLETE THE DB SCHEMA.
+    // STEP #1: COMPLETE THE DB SCHEMA WITH PARAMIDs
     //          Complete the DB `schema` with paramIds set as 'id', and make paramIds searchable
 
     // By default, paramIds are set in schema as { type: 'id' } so that developers
@@ -210,8 +259,6 @@ var Store = declare( null,  {
     // fields are searchable, EXCLUDING the paramIds fields.
     if( self.onlineSearchSchema == null ){
 
-      var onlineSearchSchemaWasGenerated = true;
-
       var onlineSearchSchemaStructure = { };
       for( var k in self.schema.structure ){
         if( typeof( self.paramIds[ k ] ) === 'undefined' && self.schema.structure[ k ].searchable ){
@@ -226,17 +273,14 @@ var Store = declare( null,  {
     // searchable regardless.
     } else {
 
-      var onlineSearchSchemaWasGenerated = false;
-
       for( var k in self.onlineSearchSchema.structure ){
         self.onlineSearchSchema.structure[ k ].searchable = true;
       }
     }
 
-
-    // STEP #3: MAKE SURE THAT Db-LEVEL SCHEMA WILL INDEX PROPERLY  
+    // STEP #1: COMPLETE THE DB SCHEMA WITH onlineSearchSchema ENTRIES
     //          For every entry in onlineSearchSchema, add `searchable` to 
-    //          corresponding entry in `schema`.
+    //          corresponding entry in `schema`
 
     // Make sure that, for every entry present in onlineSearchSchema,
     // the corresponding DB-level schema is searchable
@@ -281,27 +325,26 @@ var Store = declare( null,  {
 
     //                *** DONE: SETTING THE SCHEMAS ***
 
+    // If dbLayer didn't exist already, then create one (using the passed schema, nested, idProperty )
+    if( ! dbLayer ){
+      var layerOptions = {
+        schema: self.schema,
+        nested: self.nested,
+        idProperty: self.idProperty,
+        schemaError: self.UnprocessableEntityError,
+        hardLimitOnQueries: self.hardLimitOnQueries,
+        children: true,
+      };
+      if( self.position ){
+        layerOptions.positionField = '__position';
+        layerOptions.positionBase = self.paramIds.slice( 1, -1 );
+      }
 
-    var layerOptions = {
-      schema: self.schema,
-      nested: self.nested,
-      idProperty: self.idProperty,
-      schemaError: self.UnprocessableEntityError,
-    };
-    if( self.position ){
-      layerOptions.positionField = '__position';
-      layerOptions.positionBase = self.paramIds.slice( 1, -1 );
+      // Actually create the layer with the given parameters
+      self.dbLayer = new self.DbLayer( self.collectionName, layerOptions );
     }
 
-    // Actually create the layer with the given parameters
-    self.dbLayer = new self.DbLayer( self.collectionName, layerOptions );
-
-    console.log("ASSOCIATED DB LAYER", self.dbLayer.table, "WHICH IS:", self.dbLayer );
-
-    // Set the DB's hard limit on queries. DB-specific implementations will
-    // set this to `true` if the query is not cursor-based (this will prevent
-    // a million results from being returned)
-    self.dbLayer.hardLimitOnQueries = self.hardLimitOnQueries;
+    Store.registry[ self.storeName ] = self;
 
   },
 
@@ -323,7 +366,7 @@ var Store = declare( null,  {
       // * MAYBE for each sortable, create paramIds + field
 
       cb( null );
-    } );
+    });
   },
 
   // *********************************************************************
@@ -365,20 +408,28 @@ var Store = declare( null,  {
   },
 
 
-  execAllDbFetch: function( params, body, options, cb ){
+  execAllDbFetch: function( request, cb ){
 
     var self = this;
 
     // Make up the filter, based on the store's IDs (used as filters).
     var selector = {};
 
-    self._enrichSelectorWithParams( selector, params );
+    // Make up the selector.
+    // Remote requests need to have the full filter based on request.params. Local ones
+    // only have to have (and I mean HAVE TO) the idProperty
+    if( request.remote ){
+       self._enrichSelectorWithParams( selector, request.params );
+    } else {
+      selector = { conditions: { and: [ { field: self.idProperty, type: 'eq', value: request.params[ self.idProperty ] } ] } };
+    }
 
     // Make the database call 
-    self.dbLayer.select( selector, function( err, docs ){
+    self.dbLayer.select( selector, { children: true}, function( err, docs ){
       if( err ){
         cb( err );
       } else {
+
         if( docs.length === 0 ){
           cb( null, null );
         } else if( docs.length !== 1 ){
@@ -399,21 +450,23 @@ var Store = declare( null,  {
 
   }, 
 
-  execPostDbInsertNoId: function( params, body, options, generatedId, cb ){
+  execPostDbInsertNoId: function( request, generatedId, cb ){
    
     var self = this;
 
     var record = {};
 
     // Make up the `record` variable, based on the passed `body`
-    for( var k in body ) record[ k ] = body[ k ];
+    for( var k in request.body ) record[ k ] = request.body[ k ];
+    delete record._children;
 
+    // Obsoleted by self._enrichBodyWithParamIdsIfRemote
     // Add param IDs to the record that is being written
-    self.paramIds.forEach( function( paramId ){
-      if( typeof( params[ paramId ] ) !== 'undefined' ){
-        record[ paramId ] = params[ paramId ];
-      }
-    });
+    //self.paramIds.forEach( function( paramId ){
+    //  if( typeof( request.params[ paramId ] ) !== 'undefined' ){
+    //    record[ paramId ] = request.params[ paramId ];
+    //  }
+    //});
 
     // The last parameter is missing since it
     // wasn't passed: assign an ObjectId to it
@@ -423,7 +476,7 @@ var Store = declare( null,  {
 
   },
 
-  execPutDbUpdate: function( params, body, options, doc, fullDoc, cb ){
+  execPutDbUpdate: function( request, cb ){
 
     var self = this;
     var updateObject = {};
@@ -431,24 +484,34 @@ var Store = declare( null,  {
     // Make up the filter, based on the store's IDs (used as filters).
     var selector = {};
 
-    self._enrichSelectorWithParams( selector, params );
+    // Make up the selector.
+    // Remote requests need to have the full filter based on request.params. Local ones
+    // only have to have (and I mean HAVE TO) the idProperty
+    if( request.remote ){
+       self._enrichSelectorWithParams( selector, request.params );
+    } else {
+      selector = { conditions: { and: [ { field: self.idProperty, type: 'eq', value: request.params[ self.idProperty ] } ] } };
+    }
+
 
     // Make up the `updateObject` variable, based on the passed `body`
-    for( var i in body ) updateObject[ i ] = body[ i ];
+    for( var i in request.body ) updateObject[ i ] = request.body[ i ];
+    delete updateObject._children;
 
-    // Add param IDs to the record that is being updated
-    self.paramIds.forEach( function( paramId ){
-      if( typeof( params[ paramId ] ) !== 'undefined' ){
-        updateObject[ paramId ] = params[ paramId ];
-      }
-    });
+    // Obsoleted by self._enrichBodyWithParamIdsIfRemote
+    // Add param IDs to the record that is being written (updated)
+    //self.paramIds.forEach( function( paramId ){
+    //  if( typeof( request.params[ paramId ] ) !== 'undefined' ){
+    //    updateObject[ paramId ] = request.params[ paramId ];
+    //  }
+    //});
 
     self.dbLayer.update( selector, updateObject, { deleteUnsetFields: true, multi: false, skipValidation: true }, function( err, howMany ){
       if( err ){
         cb( err );
       } else {
 
-        self.dbLayer.select( selector, function( err, docs ){
+        self.dbLayer.select( selector, { children: true }, function( err, docs ){
           if( err ){
             cb( err );
           } else {
@@ -459,7 +522,7 @@ var Store = declare( null,  {
               cb( new self.ServiceUnavailableError({
                 message: "dbLayer.update updated more than 1 record",
                 data: { 
-                  length: doc.length,
+                  length: docs.length,
                   selector: selector,
                   store: self.storeName
                 }
@@ -475,37 +538,47 @@ var Store = declare( null,  {
   },
 
 
-  execPutDbInsert: function( params, body, options, cb ){
+  execPutDbInsert: function( request, cb ){
   
     var self = this;
 
     var record = {};
 
     // Make up the `record` variable, based on the passed `body`
-    for( var k in body ) record[ k ] = body[ k ];
+    for( var k in request.body ) record[ k ] = request.body[ k ];
+    delete request.body._children;
 
+    // Obsoleted by self._enrichBodyWithParamIdsIfRemote
     // Add param IDs to the record that is being written
-    self.paramIds.forEach( function( paramId ){
-      if( typeof( params[ paramId ] ) !== 'undefined' ){
-        record[ paramId ] = params[ paramId ];
-      }
-    });
+    //self.paramIds.forEach( function( paramId ){
+    //  if( typeof( request.params[ paramId ] ) !== 'undefined' ){
+    //    record[ paramId ] = request.params[ paramId ];
+    //  }
+    //});
 
     self.dbLayer.insert( record, { returnRecord: true, skipValidation: true }, cb );
 
   },
 
 
-  execDeleteDbDelete: function( params, body, options, cb ){
+  execDeleteDbDelete: function( request, cb ){
 
     var self = this;
     var selector = {};
 
-    self._enrichSelectorWithParams( selector, params );
+    // Make up the selector.
+    // Remote requests need to have the full filter based on request.params. Local ones
+    // only have to have (and I mean HAVE TO) the idProperty
+    if( request.remote ){
+       self._enrichSelectorWithParams( selector, request.params );
+    } else {
+      selector = { conditions: { and: [ { field: self.idProperty, type: 'eq', value: request.params[ self.idProperty ] } ] } };
+    }
+
     self.dbLayer.delete( selector, { multi: false, skipValidation: true }, cb );
   },
 
-  _queryMakeSelector: function( filters, sort, ranges, cb ){
+  _queryMakeSelector: function( remote, filters, sort, ranges, cb ){
 
     var self = this;
     var errors = [];
@@ -528,11 +601,7 @@ var Store = declare( null,  {
       var searchable = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchable;
       var searchOptions = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchOptions;
 
-      //console.log("DEBUG:");
-      //console.log( self.onlineSearchSchema.structure );
-      //console.log( self.schema.structure );
-    
-      if( searchable || !self.remote ) {
+      if( searchable || !remote ) {
 
         // searchOptions is not an object/is null: just set default conditions (equality with field)
         if( typeof( searchOptions ) !== 'object' || searchOptions === null ){
@@ -647,7 +716,7 @@ var Store = declare( null,  {
       var tokens, subTokens, subToken, subTokenClean, i;
       var sortObject = {};
 
-      tokens = q.split( '&' ).forEach( function( item ) {
+      q.split( '&' ).forEach( function( item ) {
 
         var tokens = item.split('=');
         var tokenLeft = tokens[0];
@@ -660,12 +729,14 @@ var Store = declare( null,  {
             subToken = subTokens[ i ];
             subTokenClean = subToken.replace( '+', '' ).replace( '-', '' );
 
-            if( ! self.remote || ( self.onlineSearchSchema.structure[ subTokenClean ] && self.onlineSearchSchema.structure[ subTokenClean ].sortable ) ){
-              if( subTokens[ i ][ 0 ] === '+' || subTokens[ i ][ 0 ] === '-' ){
-                var sortDirection = subTokens[ i ][ 0 ] == '-' ? -1 : 1;
-                sortField = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
-                sortObject[ sortField ] = sortDirection;
-              }
+            if( self.sortableFields.indexOf( subTokenClean ) === -1 ){
+              throw( new Error("Field selected for sorting invalid: " + subTokenClean) );
+            }
+
+            if( subTokens[ i ][ 0 ] === '+' || subTokens[ i ][ 0 ] === '-' ){
+              var sortDirection = subTokens[ i ][ 0 ] == '-' ? -1 : 1;
+              sortField = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
+              sortObject[ sortField ] = sortDirection;
             }
           }
         }
@@ -713,7 +784,7 @@ var Store = declare( null,  {
         tokenRight = tokens[1];
 
         // Only add it to the filter if it's in the schema AND if it's searchable
-        //if( tokenLeft != 'sort' && ( ! self.remote || ( self.onlineSearchSchema.structure[ tokenLeft ] && self.onlineSearchSchema.structure[ tokenLeft ].searchable )) ) {
+        //if( tokenLeft != 'sort' && ( ! request.remote || ( self.onlineSearchSchema.structure[ tokenLeft ] && self.onlineSearchSchema.structure[ tokenLeft ].searchable )) ) {
         if( tokenLeft != 'sortBy' && self.onlineSearchSchema.structure[ tokenLeft ] && self.onlineSearchSchema.structure[ tokenLeft ].searchable  ) {
 
           result[ tokenLeft ] = tokenRight;
@@ -727,8 +798,7 @@ var Store = declare( null,  {
 
   },
 
-
-  execGetDbQuery: function( params, body, options, next ){
+  execGetDbQuery: function( request, next ){
 
     var self = this;
     var cursor;
@@ -736,24 +806,27 @@ var Store = declare( null,  {
 
     // If options.delete was on or if it's set at store-level
     // pass {delete: true } to the db layer
-    if( options.delete || self.deleteAfterGetQuery ){
+    if( request.options.delete || self.deleteAfterGetQuery ){
       dbLayerOptions.delete = true;
     }
+    dbLayerOptions.children = true;
 
-    if( typeof( options.sort ) === 'undefined' || options.sort === null ) options.sort = {}; 
+    if( typeof( request.options.sort ) === 'undefined' || request.options.sort === null ) request.options.sort = {}; 
+    if( typeof( request.options.ranges ) === 'undefined' || request.options.ranges === null ) request.options.ranges = {}; 
 
     // Sort by self.positionField if sort is empty and self.positionField is defined
     //if( Object.keys( options.sort ).length === 0 && self.positionField ){
     //  options.sort[ self.positionField ] = 1;
     //}
 
-    self._queryMakeSelector( options.filters, options.sort, options.ranges, function( err, selector ){
+    self._queryMakeSelector( request.remote, request.options.filters, request.options.sort, request.options.ranges, function( err, selector ){
       if( err ){
         next( err );
       } else {
 
-        self._enrichSelectorWithParams( selector, params );
+        if( request.remote) self._enrichSelectorWithParams( selector, request.params );
 
+        
         // Run the select based on the passed parameters
         self.dbLayer.select( selector, dbLayerOptions, next );
       }
@@ -768,7 +841,7 @@ var Store = declare( null,  {
   // ****************************************************
 
 
-  _extrapolateDocAndprepareBeforeSendAll: function( params, body, options, docs, cb ){
+  _extrapolateDocAndprepareBeforeSendAll: function( request, docs, cb ){
 
     var self = this;
 
@@ -777,26 +850,19 @@ var Store = declare( null,  {
 
       changeFunctions.push( function( callback ){
 
-        self.extrapolateDoc(  params, body, options, fullDoc, function( err, doc ){
+        self.extrapolateDoc(  request, fullDoc, function( err, doc ){
           if( err ){
             callback( err, null );
           } else {
 
-            //self._castDoc( doc, function( err, doc) {
-            //  if( err ){
-            //    callback( err, null );
-            //  } else {
-
-                self.prepareBeforeSend( doc, function( err, doc ){
-                  if( err ){
-                    callback( err, null );
-                  } else {
-                    docs[ index ] = doc;
-                    callback( null, null );
-                  }
-                });
-            //  }
-            //});
+            self.prepareBeforeSend( request, doc, function( err ){
+              if( err ){
+                callback( err, null );
+              } else {
+                docs[ index ] = doc;
+                callback( null, null );
+              }
+            });
 
           }
         });
@@ -812,50 +878,52 @@ var Store = declare( null,  {
     return this.paramIds[ this.paramIds.length -1 ];
   },
 
+
   // Check that paramsId are actually legal IDs using
-  // paramsSchema
-  _checkParamIds: function( params, body, skipIdProperty, next ){
+  // paramsSchema.
+  _checkParamIds: function( request, skipIdProperty, next ){
 
     var self = this;
-    var fakeRecord = {};
     var errors = [];
 
-    // This shouldn't happen
-    if( self.paramIds.length === 0 ) return next( null );
+    // Params is empty: nothing to do, optimise a little
+    if( request.params.length === 0 ) return cb( null );
 
-    // This is to optimise a little: if there is only
-    // one self.paramIds and skipIdProperty is on,
-    // the resulting fakeRecord would be empty and
-    // this would be a big waste of time
-    if( self.paramIds.length === 1 && skipIdProperty ) return next( null );
-
-    // Make up the fake schema definition, based on the paramIds of the "real" schema
-    // (In the meantime, also check that ALL paramIds are indeed required)
-    self.paramIds.forEach( function(k ) {
+    // Check that ALL paramIds do belong to the schema
+    self.paramIds.forEach( function( k ) {
       if( typeof( self.schema.structure[ k ] ) === 'undefined' ){
         throw new Error( 'This paramId must be in schema: ' + k);
-      } else {
-        if( !( skipIdProperty && k == self.idProperty ) ){
-
-          // Copy values over from params to fakeRecord. If undefined,
-          // raise an error (unless it's dealing with idProperty and it needs to be skipped)
-          if( typeof( params[ k ] ) !== 'undefined' ){
-            fakeRecord[ k ] = params[ k ];
-          } else {
-            if( !( skipIdProperty && k == self.idProperty ) ){
-              errors.push( { field: k, message: 'Field required in the URL: ' + k } ); 
-            }
-          }
-        }
       }
     });
-    
-    // If one of the key fields was missing, puke back
-    if( errors.length ) return next( new self.BadRequestError( { errors: errors } ) );
 
-    // Apply the schema (just paramIds) to the fake record (`onlyObjectValues` will ensure
-    // that only the param IDs will be checked)
-    self.schema.validate( fakeRecord, { onlyObjectValues: true }, function( err, fakeRecord, errors ){
+    // If it's a remote request, check that _all_ paramIds are in params
+    // (Local API requests can avoid passing paramIds)
+    if( request.remote ){
+      self.paramIds.forEach( function( k ) {
+
+        // "continue" if id property is to be skipped
+        if( skipIdProperty && k == self.idProperty ) return;
+
+        // Required paramId not there: puke!
+        if( typeof( request.params[ k ] ) === 'undefined' ){
+          errors.push( { field: k, message: 'Field required in the URL: ' + k } ); 
+        }
+      });
+      // If one of the key fields was missing, puke back
+      if( errors.length ) return next( new self.BadRequestError( { errors: errors } ) );
+    };
+
+
+    // Prepare skipParams and skipCast, depending on skipIdProperty
+    var skipParams = {};
+    var skipCast = [ ];
+    if( skipIdProperty ){
+      skipParams[ self.idProperty ] = [ 'required' ];
+      skipCast.push( self.idProperty );
+    }
+
+    // Validate request.params
+    self.schema.validate( request.params, { onlyObjectValues: true, skipParams: skipParams, skipCast: skipCast }, function( err, params, errors ){
 
       if( err ){
         next( err );
@@ -866,13 +934,9 @@ var Store = declare( null,  {
           next( new self.BadRequestError( { errors: errors } ) );
         } else {
 
-          // Copy those cast values back onto the params and body, so that
-          // other store calls will have ready-to-use cast
-          // elements in `params` and `body`
-          self.paramIds.forEach( function( k ) {
-            params[ k ] = fakeRecord[ k ];
-            body[ k ] = fakeRecord[ k ];
-          });
+          // Make sure request.params contains cast values
+          request.params = params;
+
           next( null );
         }
       }
@@ -880,20 +944,20 @@ var Store = declare( null,  {
 
   },
 
-  _sendErrorOnErr: function( err, next, cb ){
+  _sendErrorOnErr: function( request, err, next, cb ){
     if( err ) {
-      this._sendError( next, err );
+      this._sendError( request, next, err );
     } else {
       cb();
     }
   },
 
-  _sendError: function( next, error ){
+  _sendError: function( request, next, error ){
 
     var self = this;
 
     // It's a local call: simply call the callback passed by the caller
-    if( ! self.remote ){
+    if( ! request.remote ){
       next( error, null );
       return;
     }
@@ -926,7 +990,7 @@ var Store = declare( null,  {
 
           // Make up the response body based on the error, and send it!
           responseBody =  self.formatErrorResponse( error );
-          self._res.send( error.httpError, responseBody );
+          request._res.send( error.httpError, responseBody );
         }
       break;
 
@@ -935,133 +999,147 @@ var Store = declare( null,  {
     self.logError( error );
   },
 
-
-
-
   // ****************************************************
   // *** METHOD FUNCTIONS - THE REAL DANCE STARTS HERE
   // ****************************************************
 
+  _checkPermissionsProxy: function( request, action, doc, fulldoc, cb ){
 
-  _makePost: function( params, body, options, next ){
+    // It's an API request: permissions are totally skipped
+    if( !request.remote ) return cb( null, true );
+
+    // Call the right function
+    switch( action ){
+      case 'PutNew':
+      case 'Post':
+      case 'GetQuery':
+        this[ 'checkPermissions' + action ]( request, cb );
+      break;
+
+      case 'PutExisting':
+      case 'Get':
+      case 'Delete':
+        this[ 'checkPermissions' + action ]( request, doc, fulldoc, cb );
+      break;
+    }
+
+  },
+
+  _makePost: function( request, next ){
 
     var self = this;
-    var body;
 
     if( typeof( next ) !== 'function' ) next = function(){};
 
     // Check that the method is implemented
-    if( ! self.handlePost ){
-      self._sendError( next, new self.NotImplementedError( ) );
+    if( ! self.handlePost && request.remote ){
+      self._sendError( request, next, new self.NotImplementedError( ) );
       return;
     }
 
     // Check the IDs
-    self._checkParamIds( params, body, true, function( err ){  
-      // if( err ) return this._sendError( next, err );
-      self._sendErrorOnErr( err, next, function(){
+    self._checkParamIds( request, true, function( err ){  
+      // if( err ) return this._sendError( request, next, err );
+      self._sendErrorOnErr( request, err, next, function(){
 
-        self.prepareBody( body, 'post', function( err, body ){
-          self._sendErrorOnErr( err, next, function(){
-     
+        self.prepareBody( request, request.body, 'post', function( err ){
+          self._sendErrorOnErr( request, err, next, function(){
+
             var skipParamsObject = {};
             skipParamsObject[ self.idProperty ] = [ 'required' ];
 
-            self.schema.validate( body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, body, errors ){
-              self._sendErrorOnErr( err, next, function(){
-        
+            self._enrichBodyWithParamIdsIfRemote( request );
+
+            self.schema.validate( request.body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, body, errors ){
+              self._sendErrorOnErr( request, err, next, function(){
+
+                request.body = body;
 
                 if( errors.length ){
-                  self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
+                  self._sendError( request, next, new self.UnprocessableEntityError( { errors: errors } ) );
                 } else {
      
  
-                   self.postValidate( body, 'post', function( err ){
-                     self._sendErrorOnErr( err, next, function(){
+                   self.postValidate( request, body, 'post', function( err ){
+                     self._sendErrorOnErr( request, err, next, function(){
   
                       // Actually check permissions
-                      self.checkPermissionsPost( params, body, options, function( err, granted ){
-                        self._sendErrorOnErr( err, next, function(){
+                      self._checkPermissionsProxy( request, 'Post', null, null, function( err, granted ){
+                        self._sendErrorOnErr( request, err, next, function(){
             
                           if( ! granted ){
-                            self._sendError( next, new self.ForbiddenError() );
+                            self._sendError( request, next, new self.ForbiddenError() );
                           } else {
             
                             // Clean up body from things that are not to be submitted
                             //if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
-                            self.schema.cleanup( body, 'doNotSave' );
+                            self.schema.cleanup( request.body, 'doNotSave' );
             
-                            self.schema.makeId( body, function( err, generatedId){
-                              self._sendErrorOnErr( err, next, function(){
+                            self.schema.makeId( request.body, function( err, generatedId){
+                              self._sendErrorOnErr( request, err, next, function(){
             
-                                self.execPostDbInsertNoId( params, body, options, generatedId, function( err, fullDoc ){
-                                  self._sendErrorOnErr( err, next, function(){
+                                
+                                self.execPostDbInsertNoId( request, generatedId, function( err, fullDoc ){
+                                  self._sendErrorOnErr( request, err, next, function(){
             
-                                    self.reposition( fullDoc, options && options.beforeId ? options.beforeId : null );
+                                    self.reposition( fullDoc, request.options && request.options.beforeId ? request.options.beforeId : null );
      
-                                    self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
-                                      self._sendErrorOnErr( err, next, function(){
+                                    self.extrapolateDoc( request, fullDoc, function( err, doc) {
+                                      self._sendErrorOnErr( request, err, next, function(){
+          
+                                        // Remote request: set headers, and send the doc back (if echo is on)
+                                        if( request.remote ){
+                
+                                          // Set the Location header if it was a remote request
+   
+                                          request._res.setHeader( 'Location', request._req.originalUrl + doc[ self.idProperty ] );
+  
+                                          if( self.echoAfterPost ){
             
-                                        //self._castDoc( doc, function( err, doc) {
-                                          //self._sendErrorOnErr( err, next, function(){
-                                        
-                                            // Remote request: set headers, and send the doc back (if echo is on)
-                                            if( self.remote ){
+                                            self.prepareBeforeSend( request, doc, function( err ){
+                                              self._sendErrorOnErr( request, err, next, function(){
                 
-                                              // Set the Location header if it was a remote request
-    
-                                              self._res.setHeader( 'Location', self._req.originalUrl + doc[ self.idProperty ] );
-    
-                                              if( self.echoAfterPost ){
+                                                self.afterPost( request, doc, fullDoc, function( err ){
+                                                  self._sendErrorOnErr( request, err, next, function(){
+            
+                                                    request._res.json( 201, doc );
+                                                  }) // err
+                                                }) // self.afterPost
+            
+                                               }) // err
+                                            }) // self.prepareBeforeSend
+            
+                                          } else {
                 
-                                                self.prepareBeforeSend( doc, function( err, doc ){
-                                                  self._sendErrorOnErr( err, next, function(){
+                                            self.afterPost( request, doc, fullDoc, function( err ){
+                                              self._sendErrorOnErr( request, err, next, function(){
+ 
+                                                //request._res.send( 204, '' );
+                                                request._res.send( 201, '' );
+            
+                                              });
+                                            });
                 
-                                                    self.afterPost( params, body, options, doc, fullDoc, function( err ){
-                                                      self._sendErrorOnErr( err, next, function(){
+                                          }
                 
-                                                        self._res.json( 201, doc );
-                                                      }) // err
-                                                    }) // self.afterPost
-                
-                                                   }) // err
-                                                }) // self.prepareBeforeSend
-                
-                                              } else {
-                
-                                                self.afterPost( params, body, options, doc, fullDoc, function( err ){
-                                                  self._sendErrorOnErr( err, next, function(){
-    
-                                                    //self._res.send( 204, '' );
-                                                    self._res.send( 201, '' );
-                
-                                                  });
-                                                });
-                
-                                              }
-                
-                                            // Local request: simply return the doc to the asking function
-                                            } else {
-                
-                                              self.prepareBeforeSend( doc, function( err, doc ){
-                                                self._sendErrorOnErr( err, next, function(){
-                
-                                                  self.afterPost( params, body, options, doc, fullDoc, function( err ){
-                                                    self._sendErrorOnErr( err, next, function(){
-                
-                                                      next( null, doc );
-                
-                                                    });
-                                                  });
-                
+                                        // Local request: simply return the doc to the asking function
+                                        } else {
+               
+                                          self.prepareBeforeSend( request, doc, function( err ){
+                                            self._sendErrorOnErr( request, err, next, function(){
+            
+                                              self.afterPost( request, doc, fullDoc, function( err ){
+                                                self._sendErrorOnErr( request, err, next, function(){
+            
+                                                  next( null, doc );
+            
                                                 });
                                               });
-                                    
-                                            } 
-                
-                                       
-                                          //});
-                                        //});
+            
+                                            });
+                                          });
+                                
+                                        } 
     
                                       });
                                     });
@@ -1093,56 +1171,67 @@ var Store = declare( null,  {
 
   },
 
-  _makePut: function( params, body, options, next ){
+  _enrichBodyWithParamIdsIfRemote: function( request ){
+
+    var self = this;
+
+    if( request.remote ){
+      self.paramIds.forEach( function( paramId ){
+        if( typeof( request.params[ paramId ] ) !== 'undefined' ){
+          request.body[ paramId ] = request.params[ paramId ];
+        }
+      });
+    }
+  },
+
+  _makePut: function( request, next ){
 
     var self = this;
     var overwrite;
-    var body;
-
 
     if( typeof( next ) !== 'function' ) next = function(){};
 
     // Check that the method is implemented
-    if( ! self.handlePut ){
-      self._sendError( next, new self.NotImplementedError( ) );
+    if( ! self.handlePut && request.remote ){
+      self._sendError( request, next, new self.NotImplementedError( ) );
       return;
     }
 
     // DETOUR: It's a reposition. Simply try and relocate the record
     // (after the usual permissions etc.)
-    if( options.justReposition && typeof( options.beforeId ) !== 'undefined' ){
+    if( request.options.justReposition && typeof( request.options.beforeId ) !== 'undefined' ){
       
-      self._checkParamIds( params, body, false, function( err ){  
-        self._sendErrorOnErr( err, next, function(){
+      self._checkParamIds( request, false, function( err ){  
+        self._sendErrorOnErr( request, err, next, function(){
 
-          self.execAllDbFetch( params, body, options, function( err, fullDoc ){
-            self._sendErrorOnErr( err, next, function(){
+          self.execAllDbFetch( request, function( err, fullDoc ){
+            self._sendErrorOnErr( request, err, next, function(){
 
               if( ! fullDoc ){
-                self._sendError( next, new self.NotFoundError());
+                self._sendError( request, next, new self.NotFoundError());
               } else {
 
-                self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
-                  self._sendErrorOnErr( err, next, function(){
+                self.extrapolateDoc( request, fullDoc, function( err, doc) {
+                  self._sendErrorOnErr( request, err, next, function(){
         
                     // Actually check permissions
-                    self.checkPermissionsPutExisting( params, body, options, doc, fullDoc, function( err, granted ){
-                      self._sendErrorOnErr( err, next, function(){
+                    self._checkPermissionsProxy( request, 'PutExisting', doc, fullDoc, function( err, granted ){
+                      self._sendErrorOnErr( request, err, next, function(){
             
                         if( ! granted ){
-                          self._sendError( next, new self.ForbiddenError() );
+                          self._sendError( request, next, new self.ForbiddenError() );
                         } else {
 
-                          self.reposition( fullDoc, options && options.beforeId ? options.beforeId : null );
+                          self.reposition( fullDoc, request.options && request.options.beforeId ? request.options.beforeId : null );
 
-                          self.prepareBeforeSend( doc, function( err, doc ){
-                            self._sendErrorOnErr( err, next, function(){
+                          self.prepareBeforeSend( request, doc, function( err ){
+                            self._sendErrorOnErr( request, err, next, function(){
 
-                              self.afterPutExisting( params, body, options, doc, fullDoc, doc, fullDoc, options.overwrite, function( err ) {
-                                self._sendErrorOnErr( err, next, function(){
+                              self.afterPutExisting( request, doc, fullDoc, doc, fullDoc, request.options.overwrite, function( err ) {
+                                self._sendErrorOnErr( request, err, next, function(){
 
-                                  if( self.remote ){ 
-                                    self._res.json( 200, doc );
+                                  if( request.remote ){ 
+                                    request._res.json( 200, doc );
                                   } else {
                                     next( null, doc );
                                   }
@@ -1170,33 +1259,36 @@ var Store = declare( null,  {
     }
  
     // Check the IDs.
-    self._checkParamIds( params, body, false, function( err ){  
-      self._sendErrorOnErr( err, next, function(){
+    self._checkParamIds( request, false, function( err ){  
+      self._sendErrorOnErr( request, err, next, function(){
 
-        self.prepareBody( body, 'put', function( err, body ){
-          self._sendErrorOnErr( err, next, function(){
+        self.prepareBody( request, request.body, 'put', function( err ){
+          self._sendErrorOnErr( request, err, next, function(){
 
-            self.schema.validate(  body, function( err, body, errors ) {
-              self._sendErrorOnErr( err, next, function(){
+            self._enrichBodyWithParamIdsIfRemote( request );
+
+            self.schema.validate( request.body, function( err, body, errors ) {
+              self._sendErrorOnErr( request, err, next, function(){
+
+                request.body = body;
         
                 if( errors.length ){
-                  self._sendError( next, new self.UnprocessableEntityError( { errors: errors } ) );
+                  self._sendError( request, next, new self.UnprocessableEntityError( { errors: errors } ) );
                 } else {
    
-                  self.postValidate( body, 'put', function( err ){
-                    self._sendErrorOnErr( err, next, function(){
+                  self.postValidate( request, body, 'put', function( err ){
+                    self._sendErrorOnErr( request, err, next, function(){
  
-            
                       // Fetch the doc
-                      self.execAllDbFetch( params, body, options, function( err, fullDoc ){
-                        self._sendErrorOnErr( err, next, function(){
+                      self.execAllDbFetch( request, function( err, fullDoc ){
+                        self._sendErrorOnErr( request, err, next, function(){
               
                           // Check the 'overwrite' option
-                          if( typeof( options.overwrite ) !== 'undefined' ){
-                            if( fullDoc && ! options.overwrite ){
-                              self._sendError( next, new self.PreconditionFailedError() );
-                            } else if( !fullDoc && options.overwrite ) {
-                              self._sendError( next, new self.PreconditionFailedError() );
+                          if( typeof( request.options.overwrite ) !== 'undefined' ){
+                            if( fullDoc && ! request.options.overwrite ){
+                              self._sendError( request, next, new self.PreconditionFailedError() );
+                            } else if( !fullDoc && request.options.overwrite ) {
+                              self._sendError( request, next, new self.PreconditionFailedError() );
                             } else {
                               continueAfterFetch();
                             }
@@ -1205,60 +1297,61 @@ var Store = declare( null,  {
                           }
                 
                           function continueAfterFetch(){
-            
+           
                             // It's a NEW doc: it will need to be an insert, _and_ permissions will be
                             // done on inputted data
                             if( ! fullDoc ){
+
                             
                               // Actually check permissions
-                              self.checkPermissionsPutNew( params, body, options, function( err, granted ){
-                                self._sendErrorOnErr( err, next, function(){
+                              self._checkPermissionsProxy( request, 'PutNew', null, null, function( err, granted ){
+                                self._sendErrorOnErr( request, err, next, function(){
             
             
                                   if( ! granted ){
-                                    self._sendError( next, new self.ForbiddenError() );
+                                    self._sendError( request, next, new self.ForbiddenError() );
                                   } else {
             
                                     // Clean up body from things that are not to be submitted
                                     // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
-                                    self.schema.cleanup( body, 'doNotSave' );
+                                    self.schema.cleanup( request.body, 'doNotSave' );
             
                                     // Paranoid check
                                     // Make sure that the id property in the body does match
                                     // the one passed as last parameter in the list of IDs
-                                    body[ self.idProperty ] = params[ self.idProperty ];
+                                    request.body[ self.idProperty ] = request.params[ self.idProperty ];
             
-                                    self.execPutDbInsert( params, body, options, function( err, fullDoc ){
-                                      self._sendErrorOnErr( err, next, function(){
+                                    self.execPutDbInsert( request, function( err, fullDoc ){
+                                      self._sendErrorOnErr( request, err, next, function(){
             
-                                        self.reposition( fullDoc, options && options.beforeId ? options.beforeId : null );
+                                        self.reposition( fullDoc, request.options && request.options.beforeId ? request.options.beforeId : null );
     
-                                        self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
-                                          self._sendErrorOnErr( err, next, function(){
+                                        self.extrapolateDoc( request, fullDoc, function( err, doc) {
+                                          self._sendErrorOnErr( request, err, next, function(){
             
                                             // Remote request: set headers, and send the doc back (if echo is on)
-                                            if( self.remote ){
+                                            if( request.remote ){
                 
                                               // Set the Location header if it was a remote request
-                                              self._res.setHeader( 'Location', self._req.originalUrl );
+                                              request._res.setHeader( 'Location', request._req.originalUrl );
                                               if( self.echoAfterPutNew ){
                 
-                                                self.prepareBeforeSend( doc, function( err, doc ){
-                                                  self._sendErrorOnErr( err, next, function(){
-                                                    self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
-                                                      self._sendErrorOnErr( err, next, function(){
+                                                self.prepareBeforeSend( request, doc, function( err ){
+                                                  self._sendErrorOnErr( request, err, next, function(){
+                                                    self.afterPutNew( request, doc, fullDoc, request.options.overwrite, function( err ){
+                                                      self._sendErrorOnErr( request, err, next, function(){
                
-                                                        self._res.json( 201, doc );
+                                                        request._res.json( 201, doc );
                                                       });
                                                     });
                                                   });
                                                 });
                                               } else {
                 
-                                                self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
-                                                  self._sendErrorOnErr( err, next, function(){
+                                                self.afterPutNew( request, doc, fullDoc, request.options.overwrite, function( err ){
+                                                  self._sendErrorOnErr( request, err, next, function(){
               
-                                                    self._res.send( 201, '' );
+                                                    request._res.send( 201, '' );
              
                                                   });
                                                 });
@@ -1266,11 +1359,11 @@ var Store = declare( null,  {
             
                                             // Local request: simply return the doc to the asking function
                                             } else {
-                                              self.prepareBeforeSend( doc, function( err, doc ){
-                                                self._sendErrorOnErr( err, next, function(){
+                                              self.prepareBeforeSend( request, doc, function( err ){
+                                                self._sendErrorOnErr( request, err, next, function(){
             
-                                                  self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite, function( err ){
-                                                    self._sendErrorOnErr( err, next, function(){
+                                                  self.afterPutNew( request, doc, fullDoc, request.options.overwrite, function( err ){
+                                                    self._sendErrorOnErr( request, err, next, function(){
             
                                                       next( null, doc );
             
@@ -1299,44 +1392,44 @@ var Store = declare( null,  {
                             // done on inputted data AND existing doc
                             } else {
         
-                              self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
-                                self._sendErrorOnErr( err, next, function(){
+                              self.extrapolateDoc( request, fullDoc, function( err, doc) {
+                                self._sendErrorOnErr( request, err, next, function(){
             
                                   // Actually check permissions
-                                  self.checkPermissionsPutExisting( params, body, options, doc, fullDoc, function( err, granted ){
-                                    self._sendErrorOnErr( err, next, function(){
+                                  self._checkPermissionsProxy( request, 'PutExisting', doc, fullDoc, function( err, granted ){
+                                    self._sendErrorOnErr( request, err, next, function(){
                
                                       if( ! granted ){
-                                        self._sendError( next, new self.ForbiddenError() );
+                                        self._sendError( request, next, new self.ForbiddenError() );
                                       } else {
                 
                                         // Clean up body from things that are not to be submitted
                                         // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
-                                        self.schema.cleanup( body, 'doNotSave' );
+                                        self.schema.cleanup( request.body, 'doNotSave' );
               
-                                        self.execPutDbUpdate( params, body, options, doc, fullDoc, function( err, fullDocAfter ){
-                                          self._sendErrorOnErr( err, next, function(){
+                                        self.execPutDbUpdate( request, function( err, fullDocAfter ){
+                                          self._sendErrorOnErr( request, err, next, function(){
           
-                                           self.reposition( fullDoc, options && options.beforeId ? options.beforeId : null );
+                                           self.reposition( fullDoc, request.options && request.options.beforeId ? request.options.beforeId : null );
      
-                                            self.extrapolateDoc( params, body, options, fullDocAfter, function( err, docAfter ) {
-                                              self._sendErrorOnErr( err, next, function(){
+                                            self.extrapolateDoc( request, fullDocAfter, function( err, docAfter ) {
+                                              self._sendErrorOnErr( request, err, next, function(){
    
                                                 // Remote request: set headers, and send the doc back (if echo is on)
-                                                if( self.remote ){
+                                                if( request.remote ){
                 
                                                   // Set the Location header if it was a remote request
-                                                  self._res.setHeader( 'Location', self._req.originalUrl );
+                                                  request._res.setHeader( 'Location', request._req.originalUrl );
                    
                                                   if( self.echoAfterPutExisting ){
                     
-                                                    self.prepareBeforeSend( docAfter, function( err, docAfter ){
-                                                      self._sendErrorOnErr( err, next, function(){
+                                                    self.prepareBeforeSend( request, docAfter, function( err ){
+                                                      self._sendErrorOnErr( request, err, next, function(){
               
-                                                        self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite, function( err ) {
-                                                          self._sendErrorOnErr( err, next, function(){
+                                                        self.afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, request.options.overwrite, function( err ) {
+                                                          self._sendErrorOnErr( request, err, next, function(){
              
-                                                            self._res.json( 200, docAfter );
+                                                            request._res.json( 200, docAfter );
                 
                                                           });
                                                         });
@@ -1345,10 +1438,10 @@ var Store = declare( null,  {
                                                     });
                                                   } else {
                 
-                                                    self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite, function( err ) {
-                                                      self._sendErrorOnErr( err, next, function(){
+                                                    self.afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, request.options.overwrite, function( err ) {
+                                                      self._sendErrorOnErr( request, err, next, function(){
                 
-                                                        self._res.send( 200, '' );
+                                                        request._res.send( 200, '' );
                                                         //res.send( 204, '' );
             
                                                       });
@@ -1357,12 +1450,12 @@ var Store = declare( null,  {
                 
                                                 // Local request: simply return the doc to the asking function
                                                 } else {
-                                                  self.prepareBeforeSend( docAfter, function( err, docAfter ){
-                                                    self._sendErrorOnErr( err, next, function(){
+                                                  self.prepareBeforeSend( request, docAfter, function( err ){
+                                                    self._sendErrorOnErr( request, err, next, function(){
     
     
-                                                      self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite, function( err ) {
-                                                        self._sendErrorOnErr( err, next, function(){
+                                                      self.afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, request.options.overwrite, function( err ) {
+                                                        self._sendErrorOnErr( request, err, next, function(){
   
                                                           next( null, docAfter );
  
@@ -1411,12 +1504,12 @@ var Store = declare( null,  {
   },
 
   // Helper function for _makeGetQuery
-  _validateSearchFilter: function( filters, options, cb ){
+  _validateSearchFilter: function( request, filters, options, cb ){
 
     var self = this;
 
     // If it's a remote call, then simply validate using the onlineSearchSchema
-    if( self.remote ){
+    if( request.remote ){
       return self.onlineSearchSchema.validate( filters, options, cb);
     }
 
@@ -1430,69 +1523,63 @@ var Store = declare( null,  {
     newSchema.validate( filters, options, cb );
   },
 
-  _makeGetQuery: function( params, body, options, next ){
+  _makeGetQuery: function( request, next ){
 
     var self = this;
     var sort, range, filters;
 
-    //console.log("OPTIONS:");
-    //console.log( options );
-
     if( typeof( next ) !== 'function' ) next = function(){};
 
     // Check that the method is implemented
-    if( ! self.handleGetQuery ){
-      self._sendError( next, new self.NotImplementedError( ) );
+    if( ! self.handleGetQuery && request.remote ){
+      self._sendError( request, next, new self.NotImplementedError( ) );
       return;
     }
   
     // Check the IDs. If there is a problem, it means an ID is broken:
     // return a BadRequestError
-    self._checkParamIds( params, body, true, function( err ){  
-      self._sendErrorOnErr( err, next, function(){
+    self._checkParamIds( request, true, function( err ){  
+      self._sendErrorOnErr( request, err, next, function(){
     
-        self.checkPermissionsGetQuery( params, body, options, function( err, granted ){
-          self._sendErrorOnErr( err, next, function(){
+        self._checkPermissionsProxy( request, 'GetQuery', null, null, function( err, granted ){
+          self._sendErrorOnErr( request, err, next, function(){
     
             if( ! granted ){
-              self._sendError( next, new self.ForbiddenError() );
+              self._sendError( request, next, new self.ForbiddenError() );
             } else {
     
-              self._validateSearchFilter( options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
+              self._validateSearchFilter( request, request.options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
 
-                self._sendErrorOnErr( err, next, function(){
+                self._sendErrorOnErr( request, err, next, function(){
 
                   // Actually assigning cast and validated filters to `options`
-                  options.filters = filters;
+                  request.options.filters = filters;
 
-                if( errors.length ){
-                  console.log("ERROR VALIDATING!", self.table, options.filters );
-                }
                   // Errors in casting: give up, run away
                   if( errors.length ){
-                    self._sendError( next, new self.BadRequestError( { errors: errors } ) );
+                    self._sendError( request, next, new self.BadRequestError( { errors: errors } ) );
                   } else {
         
-                    self.execGetDbQuery( params, body, options, function( err, queryDocs, total, grandTotal ){
-                      self._sendErrorOnErr( err, next, function(){
+                    self.execGetDbQuery( request, function( err, queryDocs, total, grandTotal ){
+                      self._sendErrorOnErr( request, err, next, function(){
        
-                        self._extrapolateDocAndprepareBeforeSendAll( params, body, options, queryDocs, function( err ){
-                          self._sendErrorOnErr( err, next, function(){
+                        self._extrapolateDocAndprepareBeforeSendAll( request, queryDocs, function( err ){
+                          self._sendErrorOnErr( request, err, next, function(){
         
-                            self.afterGetQuery( params, body, options, queryDocs, function( err ) {
-                              self._sendErrorOnErr( err, next, function(){
+                            self.afterGetQuery( request, queryDocs, function( err ) {
+                              self._sendErrorOnErr( request, err, next, function(){
 
                                 // Remote request: set headers, and send the doc back (if echo is on)
-                                if( self.remote ){
+                                if( request.remote ){
 
-                                  if( options.ranges ){
+                                  if( request.options.ranges ){
                                     var from, to, of;
-                                    from = total ? options.ranges.from : 0;
-                                    to = total ? options.ranges.from + total - 1 : 0 ;
+                                    from = total ? request.options.ranges.from : 0;
+                                    to = total ? request.options.ranges.from + total - 1 : 0 ;
                                     of = grandTotal;
-                                    self._res.setHeader('Content-Range', 'items ' + from + '-' + to + '/' + of );
+                                    request._res.setHeader('Content-Range', 'items ' + from + '-' + to + '/' + of );
                                   }
-                                  self._res.json( 200, queryDocs );
+                                  request._res.json( 200, queryDocs );
                                 // Local request: simply return the doc to the asking function
                                 } else {
                                   next( null, queryDocs );
@@ -1524,7 +1611,7 @@ var Store = declare( null,  {
   },
 
 
-  _makeGet: function( params, body, options, next ){
+  _makeGet: function( request, next ){
 
     var self = this;
 
@@ -1532,47 +1619,47 @@ var Store = declare( null,  {
     if( typeof( next ) !== 'function' ) next = function(){};
 
     // Check that the method is implemented
-    if( ! self.handleGet ){
-      self._sendError( next, new self.NotImplementedError( ) );
+    if( ! self.handleGet && request.remote ){
+      self._sendError( request, next, new self.NotImplementedError( ) );
       return;
     }
 
     // Check the IDs
-    self._checkParamIds( params, body, false, function( err ){  
-      self._sendErrorOnErr( err, next, function(){
+    self._checkParamIds( request, false, function( err ){  
+      self._sendErrorOnErr( request, err, next, function(){
 
         // Fetch the doc.
-        self.execAllDbFetch( params, body, options, function( err, fullDoc ){
-          self._sendErrorOnErr( err, next, function(){
+        self.execAllDbFetch( request, function( err, fullDoc ){
+          self._sendErrorOnErr( request, err, next, function(){
     
             if( ! fullDoc ){
-              self._sendError( next, new self.NotFoundError());
+              self._sendError( request, next, new self.NotFoundError());
             } else {
     
-              self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
-                self._sendErrorOnErr( err, next, function(){
+              self.extrapolateDoc( request, fullDoc, function( err, doc) {
+                self._sendErrorOnErr( request, err, next, function(){
     
                   // Check the permissions 
-                  self.checkPermissionsGet( params, body, options, doc, fullDoc, function( err, granted ){
-                    self._sendErrorOnErr( err, next, function(){
+                  self._checkPermissionsProxy( request, 'Get', doc, fullDoc, function( err, granted ){
+                    self._sendErrorOnErr( request, err, next, function(){
         
                       if( ! granted ){
-                        self._sendError( next, new self.ForbiddenError() ); 
+                        self._sendError( request, next, new self.ForbiddenError() ); 
                       } else {
                         
         
                         // "preparing" the doc. The same function is used by GET for collections 
-                        self.prepareBeforeSend( doc, function( err, doc ){
-                          self._sendErrorOnErr( err, next, function(){
+                        self.prepareBeforeSend( request, doc, function( err ){
+                          self._sendErrorOnErr( request, err, next, function(){
         
-                            self.afterGet( params, body, options, doc, fullDoc, function( err ) {
-                              self._sendErrorOnErr( err, next, function(){
+                            self.afterGet( request, doc, fullDoc, function( err ) {
+                              self._sendErrorOnErr( request, err, next, function(){
                     
                                 // Remote request: set headers, and send the doc back (if echo is on)
-                                if( self.remote ){
+                                if( request.remote ){
         
                                   // Send "prepared" doc
-                                  self._res.json( 200, doc );
+                                  request._res.json( 200, doc );
         
                                 // Local request: simply return the doc to the asking function
                                  } else {
@@ -1605,56 +1692,56 @@ var Store = declare( null,  {
   },
 
 
-  _makeDelete: function( params, body, options, next ){
+  _makeDelete: function( request, next ){
 
     var self = this;
     
     if( typeof( next ) !== 'function' ) next = function(){};
   
     // Check that the method is implemented
-    if( ! self.handleDelete ){
-      self._sendError( next, new self.NotImplementedError( ) );
+    if( ! self.handleDelete && request.remote ){
+      self._sendError( request, next, new self.NotImplementedError( ) );
       return;
     }
   
     // Check the IDs
-    self._checkParamIds( params, body, false, function( err ){ 
-      self._sendErrorOnErr( err, next, function(){
+    self._checkParamIds( request, false, function( err ){ 
+      self._sendErrorOnErr( request, err, next, function(){
     
         // Fetch the doc.
-        self.execAllDbFetch( params, body, options, function( err, fullDoc ){
-          self._sendErrorOnErr( err, next, function(){
+        self.execAllDbFetch( request, function( err, fullDoc ){
+          self._sendErrorOnErr( request, err, next, function(){
     
             if( ! fullDoc ){
-              self._sendError( next, new self.NotFoundError());
+              self._sendError( request, next, new self.NotFoundError());
             } else {
     
-              self.extrapolateDoc( params, body, options, fullDoc, function( err, doc) {
-                self._sendErrorOnErr( err, next, function(){
+              self.extrapolateDoc( request, fullDoc, function( err, doc) {
+                self._sendErrorOnErr( request, err, next, function(){
     
                   //self._castDoc( doc, function( err, doc) {
-                    //self._sendErrorOnErr( err, next, function(){
+                    //self._sendErrorOnErr( request, err, next, function(){
         
                       // Check the permissions 
-                      self.checkPermissionsDelete( params, body, options, doc, fullDoc, function( err, granted ){
-                        self._sendErrorOnErr( err, next, function(){
+                      self._checkPermissionsProxy( request, 'Delete', doc, fullDoc, function( err, granted ){
+                        self._sendErrorOnErr( request, err, next, function(){
         
                           if( ! granted ){
-                            self._sendError( next, new self.ForbiddenError() );
+                            self._sendError( request, next, new self.ForbiddenError() );
                           } else {
                       
         
                             // Actually delete the document
-                            self.execDeleteDbDelete( params, body, options, function( err ){
-                              self._sendErrorOnErr( err, next, function(){
+                            self.execDeleteDbDelete( request, function( err ){
+                              self._sendErrorOnErr( request, err, next, function(){
         
-                                self.afterDelete( params, body, options, doc, fullDoc, function( err ) {
-                                  self._sendErrorOnErr( err, next, function(){
+                                self.afterDelete( request, doc, fullDoc, function( err ) {
+                                  self._sendErrorOnErr( request, err, next, function(){
         
                                     // Remote request: send a 204 back
-                                    if( self.remote ){
+                                    if( request.remote ){
                                       // Return 204 and empty contents as requested by RFC
-                                      self._res.send( 204, '' );
+                                      request._res.send( 204, '' );
         
                                     // Local request: simply return the doc's ID to the asking function
                                     } else {
@@ -1687,28 +1774,25 @@ var Store = declare( null,  {
       });
     });
   },
-    
-});
+
 
 
 // ****************************************************
-// *** ONLINE USE OF FUNCTIONS
+// *** HTTP REQUEST HANDLER
 // ****************************************************
+  
+  getRequestHandler: function( action ){
 
+    var self = this;
 
-// Make up the class method "online.XXX"
-Store.online = {};
+    if( [ 'Get', 'GetQuery', 'Put', 'Post', 'Delete' ].indexOf( action ) === -1 ){
+      throw( new Error("action can be Get, GetQuery, Put, Post, Delete") );
+    }
 
-// Make Store.makeGet(Class), Store.makeGetQuery(Class), etc.
-[ 'Get', 'GetQuery', 'Put', 'Post', 'Delete' ].forEach( function(mn){
-  Store.online[mn] = function( Class ){
     return function( req, res, next ){
 
-      var request = new Class();
+      var request = new Object();
   
-      console.log("REQUEST OBJECT:");
-      console.log( request );
- 
       // It's definitely remote
       request.remote = true;
 
@@ -1717,297 +1801,201 @@ Store.online = {};
       request._res = res;
 
       // Set the params and body options, copying them from `req`
-      var params = {}; for( var k in req.params) params[ k ] = req.params[ k ];
-      var body = {}; for( var k in req.body) body[ k ] = req.body[ k ];
+      request.params = {}; for( var k in req.params) request.params[ k ] = req.params[ k ];
+      request.body = {}; for( var k in req.body) request.body[ k ] = req.body[ k ];
 
       // Since it's an online request, options are set by "req"
       // This will set things like ranges, sort options, etc.
-      var options = request._initOptionsFromReq( mn, req );
+      try {
+        request.options = self._initOptionsFromReq( action, req );
+      } catch( e ){
+        return next( e );
+      }
 
       // The "delete" option can apply to GetQuery
-      if( mn === 'GetQuery' ){
-        options.delete = !!request.deleteAfterGetQuery;
+      if( action === 'GetQuery' ){
+        request.options.delete = !!self.deleteAfterGetQuery;
       }
 
       if(Store.artificialDelay ) {
         setTimeout( function(){
           // Actually run the request
-          request['_make' + mn ]( params, body, options, next );
+          self['_make' + action ]( request, next );
         }, Store.artificialDelay );
       } else {
-        request['_make' + mn ]( params, body, options, next );
+        self['_make' + action ]( request, next );
       }
 
     }
-  }
+  },
+ 
+  setAllRoutes: function( app, urlParameter ){
+
+    var url = urlParameter || this.publicURL;
+    var idName;
+
+    // Public URL must be set
+    if( ! url ){
+      throw( new Error( "setAllRoutes must be called on a store with a public URL" ) );
+    }
+
+    // OK, everything is dandy: work out base URL and id, and create the Express routes
+    var idName = url.match( /:\w*$/ )[0];
+    url = url.replace( /:\w*$/, '');
+
+    // Make entries in "app", so that the application
+    // will give the right responses
+    app.get(      url + idName, this.getRequestHandler( 'Get' ) );
+    app.get(      url,          this.getRequestHandler( 'GetQuery') );
+    app.put(      url + idName, this.getRequestHandler( 'Put') );
+    app.post(     url,          this.getRequestHandler( 'Post') );
+    app.delete(   url + idName, this.getRequestHandler( 'Delete') );
+  },
+
+
+
+  // ****************************************************
+  // *** API (REST FUNCTIONS AS OBJECT METHODS)
+  // ****************************************************
+
+
+  apiGet: function( id, options, next){
+
+    // Make `options` argument optional
+    var len =  arguments.length;
+
+    if( len == 2 ) { next = options; options = {}; };
+
+    var request = new Object();
+
+    request.remote = false;
+    request.body = {};
+    request.options = options;
+
+    // Make up "params" to be passed to the _makeGet function
+    request.params = {};
+    request.params[ this._lastParamId() ] = id;
+
+    // Actually run the request
+    this._makeGet( request, next );
+
+  },
+
+
+
+  apiGetQuery: function( options, next ){
+
+
+    // Make up the request
+    var request = new Object();
+
+    request.remote = false;
+    request.body = {};
+    request.params = {};
+    request.options = options;
+
+    // Actually run the request
+    this._makeGetQuery( request, next );
+
+  },
+
+  apiPut: function( id, body, options, next ){
+
+    var Class = this;
+
+    // Make `options` argument optional
+    var len =  arguments.length;
+    if( len == 3 ) { next = options; options = {}; };
+
+    // Make up the request
+    var request = new Object();
+    request.remote = false;
+    request.body = body;
+    request.options = options;
+
+    delete body._children;
+
+    // Sets only idProperty in the params hash. Note that
+    // you might well decide to pass the whole object in body, and
+    // pass `null` as the object ID: in that case, this function
+    // will sort out `params` with the `id` set
+    request.params = {};
+    if( id !== null ){
+      request.params[ this.idProperty ] = id;
+      request.body[ this.idProperty ] = id;
+    } else {
+      var idInBody = body[ this.idProperty ];
+      if( typeof( idInBody ) !== 'undefined'){
+        request.params[ this.idProperty ] = body[ this.idProperty ];
+      } else {
+        throw( new Error("When calling Store.Put with an ID of null, id MUST be in body") );
+      }
+    }
+
+    // Actually run the request
+    this._makePut( request, next );
+  },
+
+  apiPost: function( body, options, next ){
+
+    // Make `options` argument optional
+    var len =  arguments.length;
+    if( len == 2 ) { next = options; options = {}; };
+
+    // Make up the request
+    var request = new Object();
+    request.remote = false;
+    request.body = body;
+    request.options = options;
+    request.params = {};
+
+    delete body._children;
+
+    // Actually run the request
+    this._makePost( request, next );
+  },
+
+
+  apiDelete: function( id, options, next ){
+
+    // Make `options` argument optional
+    var len =  arguments.length;
+    if( len == 2 ) { next = options; options = {}; };
+
+    // Make up the request
+    var request = new Object();
+    request.body = {};
+    request.options = options;
+
+    // Make up "params" to be passed to the _makeDelete function
+    request.params = {};
+    request.params[ this._lastParamId() ] = id;
+
+    // Actually run the request
+    this._makeDelete( request, next );
+  },
+
+ 
 });
 
 
-Store.onlineAll = function( app, url ){
+// Get store from the class' registry
+Store.getStore = function( storeName ){
+  return Store.registry[ storeName ];
+}
 
-  // Class is `this`. Since Store is the constructor, and onlineAll is
-  // a method, `this` is the contructor. 
-  var Class = this;
-
-  // If needed (no url parameter), Instance the class in order to get the stores'
-  // publicURL attribute. Maybe I should get it straight from the prototype,
-  // but what if the constructor got subclassed?
-  if( ! url ){ 
-    var o = new Class();
-    var url = o.publicURL;
-  }
-
-  // We need a URL, or it's all bananas and pears
-  if( ! url ){
-    throw( new Error("Store " + o.storeName + " had onlineAll() called, but no suitable URL could be found" ) );
-  }
-
-  // OK, everything is dandy: work out base URL and id, and create the Express routes
-  var idName = url.match( /:\w*$/ )[0];
-  url = url.replace( /:\w*$/, '');
-
-  // Make entries in "app", so that the application
-  // will give the right responses
-  app.get(      url + idName, Store.online.Get( Class ) );
-  app.get(      url,          Store.online.GetQuery( Class ) );
-  app.put(      url + idName, Store.online.Put( Class ) );
-  app.post(     url,          Store.online.Post( Class ) );
-  app.delete(   url + idName, Store.online.Delete( Class ) );
+// Get store from the class' registry
+Store.deleteStore = function( storeName ){
+  delete Store.registry[ storeName ];
 }
 
 
-
-// ****************************************************
-// *** REST FUNCTIONS AS CLASS METHODS
-// ****************************************************
-
-
-Store.Get = function( id, options, next ){
-
-  var Class = this;
-
-  // Make `options` argument optional
-  var len =  arguments.length;
-  if( len == 2 ) { next = options; options = {}; };
-
-  // Make up the request
-  try {
-
-  var request = new Class();
-  } catch (e ){
-    console.log("ERROR: " , e );
-  }
-
-  // Fix it for the API
-  _fixRequestForApi( request );
-
-  // Make up "params" to be passed to the _makeGet function
-  var params = {};
-  params[ request._lastParamId() ] = id;
-
-  // Turn off permissions etc.
-  request.checkPermissionsGet = function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); };
-
-  // Actually run the request
-  request._makeGet( params, {}, options, next );
+// Get all stores as a hash
+Store.getAllStores = function(){
+  return Store.registry;
 }
 
-
-
-Store.GetQuery = function( options, next ){
-
-  var Class = this;
-
-  // Make up the request
-  var request = new Class();
-
-  // Fix it for the API
-  _fixRequestForApi( request );
-
-  // Turn off permissions etc.
-  request.checkPermissionsGetQuery = function( params, body, options, cb ){ cb( null, true ); };
-
-  // Actually run the request
-  request._makeGetQuery( {}, {}, options, next );
-}
-
-
-
-Store.Put = function( id, body, options, next ){
-
-  var Class = this;
-
-  // Make `options` argument optional
-  var len =  arguments.length;
-  if( len == 3 ) { next = options; options = {}; };
-
-  // Make up the request
-  var request = new Class();
-
-  // Make sure all paramIds ARE in body (normal checks
-  // in _makePut will not work as paramIds will get zapped
-  var errors = _checkThatParamIdsArePresent( body, request.paramIds, 0 );
-  if( errors.length ) return next( new request.BadRequestError( { errors: errors } ) );
-
-  // Fix it for the API (will also zap request.paramIds)
-  _fixRequestForApi( request );
-
-  // Make up "params" to be passed to the _makeGet function
-  var params = {};
-
-  // Sets only idProperty in the params hash. Note that
-  // you might well decide to pass the whole object in body, and
-  // pass `null` as the object ID: in that case, this function
-  // will sort out `params` with the `id` set
-  if( id !== null ){
-    params[ request.idProperty ] = id;
-  } else {
-    var idInBody = body[ request.idProperty ];
-    if( typeof( idInBody ) !== 'undefined'){
-      params[ request.idProperty ] = body[ request.idProperty ];
-    } else {
-      throw( new Error("When calling Store.Put with an ID of null, id MUST be in body") );
-    }
-  }
-
-  // Turn off permissions etc.
-  request.checkPermissionsPutExisting = function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); };
-  request.checkPermissionsPutNew = function(  params, body, options, cb ){ cb( null, true ); };
-
-  // Actually run the request
-  request._makePut( params, body, options, next );
-}
-
-Store.Post = function( body, options, next ){
-
-  var Class = this;
-
-  // Make `options` argument optional
-  var len =  arguments.length;
-  if( len == 2 ) { next = options; options = {}; };
-
-  // Make up the request
-  var request = new Class();
-
-  // Make sure all paramIds ARE in body (normal checks
-  // in _makePost will not work as paramIds will get zapped in a second
-  var errors = _checkThatParamIdsArePresent( body, request.paramIds, 1 );
-  if( errors.length ) return next( new request.BadRequestError( { errors: errors } ) );
-
-  // Fix it for the API (will also zap request.paramIds)
-  _fixRequestForApi( request );
-
-  // Enrich `options` with `queryFilterType` and `searchConditions`
-  // request._enrichOptionsFromClassDefaults( options );
-
-  // Turn off permissions etc.
-  request.checkPermissionsPost = function( params, body, options, cb ){ cb( null, true ); };
-
-  // Actually run the request
-  request._makePost( {}, body, options, next );
-}
-
-Store.Delete = function( id, options, next ){
-
-  var Class = this;
-
-  // Make `options` argument optional
-  var len =  arguments.length;
-  if( len == 2 ) { next = options; options = {}; };
-
-  // Make up the request
-  var request = new Class();
-
-  // Fix it for the API
-  _fixRequestForApi( request );
-
-  // Make up "params" to be passed to the _makeDelete function
-  var params = {};
-  params[ request._lastParamId() ] = id;
-
-  // Turn off permissions etc.
-  request.checkPermissionsDelete = function( params, body, options, doc, fullDoc, cb ){ cb( null, true ); };
-
-  // Actually run the request
-  request._makeDelete( params, {}, options, next );
-}
-
-
-function _fixRequestForApi( request ){
-
-    // Strip all of the paramIds dictated by the original
-    // definition, just leaves the last one
-    request.paramIds = Array( request._lastParamId() );
-
-    // Makes sure it handles all types of requests
-    request.handlePut = true;
-    request.handlePost = true;
-    request.handleGet = true;
-    request.handleGetQuery = true;
-    request.handleDelete = true;
-
-    // It's not a remote request
-    request.remote = false;   
-}
-
-
-function _checkThatParamIdsArePresent( body, paramIds, skipLast ){
-  var errors = [], k;
-
-  // Check all of them except the last skipLast (this will be set to 1 for Post()
-  // as in Post() the ID won't be in the body
-  var l = paramIds.length - skipLast;
-
-  for( var i = 0; i < l; i ++){
-     k = paramIds[ i ];
-
-    // Suspicion starts: the body is undefined!
-    if( typeof( body[ k ] ) === 'undefined' ){
-
-      // Last escape: it might be a Put() and we might be checking
-      // for the ID (the last item in paramIds): in this case, it WON'T
-      // add the error as you can do Store.Put( 10, { name: 'Tony', surname: 'Mobily' } ) without
-      // the ID in the body
-      if( !skipLast && k !== paramIds[ l - 1 ] ){
-        errors.push( { field: k, message: 'Field required in the URL (API): ' + k } );
-      }
-    } 
-  };
-
-  return errors;
-}
 
 exports = module.exports = Store;
 Store.artificialDelay = 0;
-
-/*
-  _castDoc: function( doc, next ){
-
-    var self = this;
-
-    // Cast the values. This is a relaxed check: if a field is missing, it won't
-    // complain. This way, applications won't start failing when adding fields
-    var skipCast = [];
-    if( self.positionField ) {
-      skipCast.push( self.positionField );
-    }
-
-    self.schema.validate( doc, { onlyObjectValues: true, deserialize: true, skipCast: skipCast }, function( err, doc, errors ) {
-      if( err ){
-        next( err );
-      } else {
-
-        // There was a problem: return the errors
-        // (but only if strictSchemaAfterRefetching is on)
-        // TODO: maybe, in case of errors, if **params** have errors, it should still chuck
-        // an error since things could go quite wrong if one of the params doesn't cast
-        if( self.strictSchemaAfterRefetching && errors.length ){
-          next( new self.UnprocessableEntityError( { errors: errors, whileRefetching: true } ) );
-        } else {
-          next( null, doc );
-        }
-      }
-    });
-
-  },
-*/
+Store.registry = {};

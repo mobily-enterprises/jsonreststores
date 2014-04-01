@@ -43,7 +43,7 @@ It sounds simple enough (although it's only two tables and it already looks rath
 * When implementing `GET /bookings/`, you need to return the right `Content-Range` HTTP headers in your results
 * When implementing `GET /bookings/`, you also need to make sure you take into account any `Range` header set by the client, who might only want to receive a subset of the data
 * With `POST` and `PUT`, you need to make sure that data is validated against some kind of schema, and return the appropriate errors if it's not.
-* With `PUT`, you need to consider the HTTP headersd `If-match` and `If-none-match` to see if you can/should/must overwrite existing records
+* With `PUT`, you need to consider the HTTP headers `If-match` and `If-none-match` to see if you can//should//must overwrite existing records
 * You must remember to get your filters right: when implementing `GET /bookings/:bookingId/users/:userId`, you must make sure that you are making queries to the database without forgetting `:bookingId`. This sounds pretty obvious with only 2 stores, gets tricky when you have a few dozens.
 * Don't forget about URL format validation: you need to make sure that anything submitted by the user is sanitised etc.
 * You need to create database indexes the right way, so that searches are not slow.
@@ -115,13 +115,13 @@ Here is how you would change a stock `app.js` file if you used MongoDb:
     var http = require('http');
     var path = require('path');
 
-    var dbSpecific = require('./dbSpecific-mongo.js'); // ADDED
-    var storesRoutes = require('./storesRoutes.js'); // ADDED
    
     var app = express();
     
-    // ADDED 8 lines:
+    // ADDED 11 lines:
     // The whole app will be wrapped around the connecton
+    var dbSpecific = require('./dbSpecific-mongo.js'); // ADDED
+    var storesRoutes = require('./storesRoutes.js'); // ADDED
     dbSpecific.connect( 'mongodb://localhost/tests', {}, function( err ){
       if( err ){
         console.error("Could not connect to the database server");
@@ -141,7 +141,7 @@ Here is how you would change a stock `app.js` file if you used MongoDb:
         app.use(app.router);
         app.use(express.static(path.join(__dirname, 'public')));
     
-        // Set JsonRestStore routes for REST stores
+        // ADDED 1 line: Set JsonRestStore routes for REST stores
         storesRoutes( app ); // ADDED
     
         // development only
@@ -155,6 +155,8 @@ Here is how you would change a stock `app.js` file if you used MongoDb:
         http.createServer(app).listen(app.get('port'), function(){
           console.log('Express server listening on port ' + app.get('port'));
         });
+
+      // ADDED 2 lines: extra closing brackets
       }
     });
 
@@ -200,8 +202,7 @@ It's basically just a module that exports all of the db-specific constructor, an
 Your `storesRoutes.js` file will then use `dbSpecific-mongo.js` to get the those variables:
 
     var declare = require('simpledeclare'); // Declare module
-
-    var dbSpecific = require('./dbSpecific-tingo.js');
+    var dbSpecific = require('./dbSpecific-mingo.js');
 
     exports = module.exports = function( app ){
 
@@ -216,7 +217,7 @@ Your `storesRoutes.js` file will then use `dbSpecific-mongo.js` to get the those
         }),
     
         storeName: 'managers',
-        publicURL: '/manages/:id',
+        publicURL: '/managers/:id',
     
         handlePut: true,
         handlePost: true,
@@ -226,8 +227,9 @@ Your `storesRoutes.js` file will then use `dbSpecific-mongo.js` to get the those
     
         hardLimitOnQueries: 50,
       });
-    
-      Managers.onlineAll( app );
+   
+      var managers = new Managers(); 
+      managers.setAllRoutes( app );
     }
 
 ## TingoDB
@@ -266,7 +268,7 @@ What if you want to use TingoDB instead? since everything is encapsulated, all y
 At this point you are nearly good to go; you only need some minor modifications:
 
 * In `storesRoutes.js` and `app.js`, change `require('./dbSpecific-mongo.js');` into `require('./dbSpecific-tingo.js');`
-* In `app.js`, change the connection string into `dbSpecific.connect( '/tmp/tests', {}, function( err ){`
+* In `app.js`, change the connection function into `dbSpecific.connect( '/tmp/tests', {}, function( err ){`
 
 In the rest of the documentation, I will assume that your `db`, `JRS` and `Schema` variables are set and will focus on the code that actually creates the stores.
 
@@ -285,7 +287,7 @@ Here is how you make a fully compliant store:
           surname: { type: 'string', trim: 60 },
         }),
 
-        storeName: 'Managers',
+        storeName: 'managers',
         publicURL: '/managers/:id',
 
         handlePut: true,
@@ -297,30 +299,29 @@ Here is how you make a fully compliant store:
         hardLimitOnQueries: 50,
       });
 
-      Managers.onlineAll( app );
+      var managers = new Managers(); 
+      managers.setAllRoutes( app );
  
 
 That's it: this is enough to make a full store which will handly properly all of the HTTP calls. Try it if you don't believe me!
 
 * `Managers` is a new class that inherits from `JRS`. Creating the derived class is the first step towards creating a store
-* `schema` (_mandatory_) is an object of type Schema. 
+* `schema` is an object of type Schema that will define what's acceptable in a REST call
 * `publicURL` is the URL the store is reachable at. ***The last one ID is the most important one***: the last ID in `publicURL` (in this case it's also the only one: `id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
 * `storeName` (_mandatory_) needs to be a unique name for your store. It is mandatory to have one, as (when used with a database) it will define the name of the DB table/collection
 * `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error
-* `Managers.onlineAll()` creates the right Express routes to actually activate your stores. Specifically:
+* `managers.setAllRoutes( app )` creates the right Express routes to actually activate your stores. Specifically:
 
 .
 
-    // get (specific ID)
-    app.get(    url + idName,  function( req, res, next ){ /* ... */ } );
-    // getQuery (array of objects, no ID)
-    app.get(    url,          function( req, res, next ){ /* ... */ } );
-    // put (specific ID)
-    app.put(    url + idName, function( req, res, next ){ /* ... */ } );
-    // post (new record, no ID)
-    app.post(   url,          function( req, res, next ){ /* ... */ } );
-    // delete (specific ID)
-    app.delete( url + idName, function( req, res, next ){ /* ... */ } );
+    // Make entries in "app", so that the application
+    // will give the right responses
+    app.get(      url + idName, this.getRequestHandler( 'Get' ) );
+    app.get(      url,          this.getRequestHandler( 'GetQuery') );
+    app.put(      url + idName, this.getRequestHandler( 'Put') );
+    app.post(     url,          this.getRequestHandler( 'Post') );
+    app.delete(   url + idName, this.getRequestHandler( 'Delete') );
+
 
 So, the following routes will be defined:
 
@@ -433,66 +434,66 @@ It all works!
 
 When you define a store like this:
 
-      var Managers = declare( JRS, {
+    var Managers = declare( JRS, {
 
-        schema: new Schema({
-          name   : { type: 'string', trim: 60 },
-          surname: { type: 'string', trim: 60 },
-        }),
+      schema: new Schema({
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', trim: 60 },
+      }),
 
-        storeName: 'Managers',
-        publicURL: '/managers/:id',
+      storeName: 'managers',
+      publicURL: '/managers/:id',
 
-        handlePut: true,
-        handlePost: true,
-        handleGet: true,
-        handleGetQuery: true,
-        handleDelete: true,
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
 
-        hardLimitOnQueries: 50,
-      });
+      hardLimitOnQueries: 50,
+    });
 
-      Managers.onlineAll( app );
+    managers.setAllRoutes( app );
 
 The `publicURL` is used to:
 
 * Add `id: { type: id }` to the schema automatically. This is done so that you don't have to do the grunt work of defining id fields both in `publicURL` and in the schema
-* Creates the `paramIds` array for the store. In this case, `paramIds` will be `[ 'id' ]`.
+* Create the `paramIds` array for the store. In this case, `paramIds` will be `[ 'id' ]`.
 
 So, you could reach the same goal without `publicURL`:
 
-      var Managers = declare( JRS, {
+    var Managers = declare( JRS, {
 
-        schema: new Schema({
-          id     : { type: 'id' },
-          name   : { type: 'string', trim: 60 },
-          surname: { type: 'string', trim: 60 },
-        }),
+      schema: new Schema({
+        id     : { type: 'id' },
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', trim: 60 },
+      }),
 
-        storeName: 'Managers',
-        paramIds: [ 'id' ],
+      storeName: 'Managers',
+      paramIds: [ 'id' ],
 
-        handlePut: true,
-        handlePost: true,
-        handleGet: true,
-        handleGetQuery: true,
-        handleDelete: true,
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
 
-        hardLimitOnQueries: 50,
-      });
+      hardLimitOnQueries: 50,
+    });
 
-      Managers.onlineAll( app, '/managers/:id' );
+    var managers = new Managers();
+    managers.setAllRoutes( app ); // This will throw()
 
 Note that:
  * The `id` parameter had to be defined in the schema
  * The `paramIds` array had to be defined by hand
- * `Managers.onlineAll()` had to be passed the URL explicitely.
+ * `managers.setAllRoutes( app )` couldn't be used as the public URL is not there
+ * You cannot define, in the prototype, both publicURL and paramIds
 
-This pattern is much more verbose, it repeats information in three spots (!), and should obviously be avoided. However, it has its place when you want to define generic base classes without a `publicURL`.
+This pattern is much more verbose, and it doesn't allow the store to be placed online.
 
 In the documentation, I will often refers to `paramIds`, which is an array of element in the schema which match the ones in the route. However, in all examples I will use the "shortened" version without repeating IDs unnecessarily.
-
-Note that you can use the `url` parameter in `onlineAll()` to force the stores' URLs to something different than `publicURL`.
 
 ## A nested store
 
@@ -516,6 +517,8 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
 
         hardLimitOnQueries: 50,
       });
+      var managers = new Managers();
+      managers.setAllRoutes( app );
 
 
       var ManagersCars = declare( JRS, {
@@ -525,7 +528,7 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
           model    : { type: 'string', trim: 60, required: true },
         }),
 
-        storeName: 'ManagersCars',
+        storeName: 'managersCars',
         publicURL: '/managers/:managerId/cars/:id',
 
         handlePut: true,
@@ -537,22 +540,23 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
         hardLimitOnQueries: 50,
       });
 
-      ManagersCars.onlineAll( app );
+      var managersCars = new ManagersCars();
+      managersCars.setAllRoutes( app );
  
 
-You have two stores: one is the simple `Managers` store with a list of names and surname; the other one is the `ManagersCars` store: note how the URL for `ManagersCars` includes `managerId`.
+You have two stores: one is the simple `managers` store with a list of names and surname; the other one is the `managersCars` store: note how the URL for `managersCars` includes `managerId`.
 
-The ManagersCars store will will respond to `GET /managers/2222/cars/3333` (to fetch car 3333 of manager 2222), `GET /workspace/2222/users` (to get all cars of manager 2222), and so on.
+The managersCars store will will respond to `GET /managers/2222/cars/3333` (to fetch car 3333 of manager 2222), `GET /workspace/2222/users` (to get all cars of manager 2222), and so on.
 
-Remember that in `ManagersCars`:
+Remember that in `managersCars`:
 
-* Queries will _always_ honour the filter on `managerId`, both in queries and single-record operations.
+* Remote queries will _always_ honour the filter on `managerId`, both in queries and single-record operations.
 
 ### On naming conventions
 
 It's important to be consistent in naming conventions while creating stores. In this case, code is cleared than a thousand bullet points:
 
-#### Simple stores
+#### Naming convertions for simple stores
 
     var Managers = declare( JRS, { 
 
@@ -561,10 +565,11 @@ It's important to be consistent in naming conventions while creating stores. In 
       });
 
       // ...
-      storeName: `Managers`
+      storeName: `managers`
       // ...
     }
-    Managers.onlineAll( app );
+    var managers = new Managers();
+    managers.setAllRoutes( app );
 
 
 
@@ -575,18 +580,22 @@ It's important to be consistent in naming conventions while creating stores. In 
       });
 
       // ...
-      storeName: `People`
+      storeName: `people`
       // ...
     }
-    People.onlineAll( app );
+    var people = new People();
+    people.setAllRoutes( app );
 
-* Store name is plural
-* Irregulars (Person => People) is a fact of life
-* Store name variable in capital letters (it's a constructor)
-* storeName attribute in capital letters (follows the store name)
-* URL in small letters (Capitalised/Urls/Are/Lame)
+* Store names anywhere are plural (they are collections representing multiple entries)
+* Irregulars (Person => People) are a fact of life
+* Store constructors (derived from JRS) are in capital letters (as constructors, they should be)
+* Store variables are in small letters (they are normal variables)
+* storeName attributes are in small letters (to follow the lead of variables)
+* URL are in small letters (following the stores' names, plus `/Capital/Urls/Are/Silly`)
 
-#### Nested stores    
+# YOU ARE HERE (REDOCUMENTING)
+
+#### Naming conventions for nested stores    
 
     var Cars = declare( JRS, { 
 
@@ -725,13 +734,13 @@ Note that permission functions have both `doc` and `fullDoc` so that they can ea
 
 The method's signature is:
 
-    extrapolateDoc( params, body, options, fullDoc, cb( err, doc ) )`
+    extrapolateDoc( request, fullDoc, cb( err, doc ) )`
 
 It's important that you create a copy of `fullDoc` rather than changing it directly. E.g.:
 
 ...this is wrong:
     
-    extrapolateDoc: function( params, body, options, fullDoc, cb){
+    extrapolateDoc: function( request, fullDoc, cb){
       // WRONG!!! This will effectively change fullDoc, which IS a side-effect
       doc = fullDoc;
       doc.name = doc.name.toUpperCase();
@@ -740,7 +749,7 @@ It's important that you create a copy of `fullDoc` rather than changing it direc
 
 ...this is correct:
 
-    extrapolateDoc: function( params, body, options, fullDoc, cb){
+    extrapolateDoc: function( request, fullDoc, cb){
       // CORRECT! This will create a copy of fullDoc, and THEN manipulate it
       var doc = {};
       for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
@@ -749,7 +758,7 @@ It's important that you create a copy of `fullDoc` rather than changing it direc
     }
 
 
-### `prepareBeforeSend( doc, cb )`(
+### `prepareBeforeSend( request, doc, cb )`(
 
 The method `prepareBeforeSend()` does exactly what it says: it will manipulate `doc` just before it's sent over to the client who requested it. This is especialy useful if you want to apply last minute changes to the data you send.
 
@@ -757,8 +766,9 @@ An important difference between `prepareBeforeSend()` and `extrapolateDoc()` is 
 
 The method's signature is:
 
-    prepareBeforeSend( doc, cb )
+    prepareBeforeSend( request, doc, cb )
 
+The function will manipulate `doc` directly, and will just run `cb( err )` (no extra parameters)
 
 ## Indexing functions
 
@@ -789,12 +799,12 @@ Each permission function needs to call the callback: if everything went fine, `c
 
 Here are the functions:
 
- * `checkPermissionsPost( params, body, options, cb )` 
- * `checkPermissionsPutNew( params, body, options, cb )`
- * `checkPermissionsPutExisting( params, body, options, doc, fullDoc, cb )`
- * `checkPermissionsGet( params, body, options, doc, fullDoc, cb )`
- * `checkPermissionsGetQuery( params, body, options, cb )`
- * `checkPermissionsDelete( params, body, options, doc, fullDoc, cb )`
+ * `checkPermissionsPost( request, cb )` 
+ * `checkPermissionsPutNew( request, cb )`
+ * `checkPermissionsPutExisting( request, doc, fullDoc, cb )`
+ * `checkPermissionsGet( request, doc, fullDoc, cb )`
+ * `checkPermissionsGetQuery( request, cb )`
+ * `checkPermissionsDelete( request, doc, fullDoc, cb )`
 
 Here is an example of a store only allowing deletion only to specific admin users:
 
@@ -815,7 +825,7 @@ Here is an example of a store only allowing deletion only to specific admin user
       handleGetQuery: true,
       handleDelete: true,
       
-      checkPermissionsDelete: function( params, body, options, doc, fullDoc, cb ){
+      checkPermissionsDelete: function( request, doc, fullDoc, cb ){
 
         // User is logged in: all good
         if( this._req.session.user ){
@@ -836,7 +846,7 @@ Permission checking can be as simple, or as complex, as you need it to be.
 
 Note that if your store is derived from another one, and you want to preserve your master store's permission model, you can run `this.inheritedAsync(arguments)` like so:
 
-      checkPermissionsDelete: function( params, body, options, doc, fullDoc, cb ){
+      checkPermissionsDelete: function( request, doc, fullDoc, cb ){
 
         this.inheritedAsync( arguments, function( err, granted ) {
 
@@ -864,8 +874,8 @@ These hooks are there so that you can manpulate the data passed to your store bo
 
 When data is submitted to the store, sometimes you want to manipulate it *before* it gets validated against the schema. For example, your application might pass extra parameters (which are not part of the schema) that will influence the actual schema fields. Or, you might want to manipulate the passed data _after_ validation (which is useful if you want to make absolute sure that all the fields are cast and valid).
 
-* `prepareBody( body, method, cb )`
-* `postValidate( body, method, cb )`
+* `prepareBody( request, body, method, cb )`
+* `postValidate( request, body, method, cb )`
 
 In both hooks, `method` can be either `"put"` or `"post"`.
 
@@ -879,11 +889,11 @@ These functions are handy where, in your own applications, you want "something" 
 
 You can redefine them as you wish.
 
- * `afterPutNew( params, body, options, doc, fullDoc, overwrite, cb )` (Called after a new record is PUT)
- * `afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb )` (After a record is overwritten with PUT)
- * `afterPost( params, body, options, doc, fullDoc, cb )` (After a new record is POSTed)
- * `afterDelete( params, body, options, doc, fullDoc, cb )` (After a record is deleted)
- * `afterGet( params, body, options, doc, fullDoc, cb  )` (After a record is retrieved)
+ * `afterPutNew( request, doc, fullDoc, overwrite, cb )` (Called after a new record is PUT)
+ * `afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb )` (After a record is overwritten with PUT)
+ * `afterPost( request, doc, fullDoc, cb )` (After a new record is POSTed)
+ * `afterDelete( request, doc, fullDoc, cb )` (After a record is deleted)
+ * `afterGet( request, doc, fullDoc, cb  )` (After a record is retrieved)
 
 Note that these hooks are run **after** data has been written to the database, but **before** a response is provided to the user.
 
@@ -1235,7 +1245,7 @@ This is what happens in that route handler:
       var options = request._initOptionsFromReq( mn, req );
 
       // Actually run the request
-      request._makePut( params, body, options, next );
+      request._makePut( request, next );
 
     }
 
@@ -1260,49 +1270,49 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 ### `_makeGet()` (for `GET` requests, with ID)
 
 * (ATTR) `self.handleGet` is checked. If false, send `NotImplementedError`
-* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
 * record is fetched from DB. If fail, send `NotFoundError` -> `fullDoc`
 * (HOOK) `self.extrapolateDoc( fullDoc )` is run against the record just fetched -> `doc`
 * `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.checkPermissionsGet( params, body, options, doc, fullDoc )` is run. If fail, send `ForbiddenError`
-* (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
-* (HOOK) `self.afterGet( params, body, options, doc, fullDoc )` is run
+* (HOOK) `self.checkPermissionsGet( request, doc, fullDoc )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.prepareBeforeSend( request, doc )` is run -> `doc`
+* (HOOK) `self.afterGet( request, doc, fullDoc )` is run
 * `doc` is sent (status: 200)/returned. Party!
 
 ### `_makeGetQuery()` (for GET requests, no ID)
 
 * (ATTR) `self.handleGetQuery` is checked. If false, send `NotImplementedError`
-* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* (HOOK) `self.checkPermissionsGetQuery( params, body, options )` is run. If fail, send `ForbiddenError`
+* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* (HOOK) `self.checkPermissionsGetQuery( request )` is run. If fail, send `ForbiddenError`
 * Search terms (from GET data) are cast against the onlineSearchSchema. If fail, send `BadRequestError`
 * docs are fetched from DB.
 * FOR EACH RECORD -> `queryDocs`
  * (HOOK) `self.extrapolateDoc( fulldoc )` is run against each `fullDoc` -> `doc`
  * Each `doc` is cast against the schema. If ONE fails, everything fails: send `UnprocessableEntityError`
- * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
-* (HOOK) `self.afterGetQueries( params, body, options, queryDocs )` is run
+ * (HOOK) `self.prepareBeforeSend( request, doc )` is run
+* (HOOK) `self.afterGetQueries( request, queryDocs )` is run
 * `queryDocs` is sent as array (status: 200)/returned as array. Party!
 
 ### `_makeDelete()` (for DELETE requests)
 
 * (ATTR) `self.handleDelete` is checked. If false, send `NotImplementedError`
-* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
 * `fullDoc` is fetched from DB. If fail, send `NotFoundError`
 * (HOOK) `self.extrapolateDoc( doc )` is run against the record just fetched -> `doc`
 * `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.checkPermissionsDelete( params, body, options, doc, fullDoc )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.checkPermissionsDelete( request, doc, fullDoc )` is run. If fail, send `ForbiddenError`
 * Record is deleted!
-* (HOOK) `self.afterDelete( params, body, options, doc, fullDoc )` is run
+* (HOOK) `self.afterDelete( request, doc, fullDoc )` is run
 * Empty result is sent (status: 204)/data is returned. Party!
 
 ### `_makePost()` (for POST requests)
 
 * (ATTR) `self.handlePost` is checked. If false, send `NotImplementedError`
-* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* (HOOK) `self.prepareBody( body, 'post' )` is run against the record just fetched
+* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* (HOOK) `self.prepareBody( request, body, 'post' )` is run against the record just fetched
 * Body is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.postValidate( body, 'post' )` is run against the record just fetched
-* (HOOK) `self.checkPermissionsPost( params, body, options )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.postValidate( request, body, 'post' )` is run against the record just fetched
+* (HOOK) `self.checkPermissionsPost( request )` is run. If fail, send `ForbiddenError`
 * Body is cleaned up of fields with `doNotSave: true` in schema
 * record is written to the DB.
 * record is re-fetched from DB -> `fullDoc`
@@ -1310,26 +1320,26 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
 * Set the `Location:` header
 * IF `self.echoAfterPost`:
-  * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
-  * (HOOK) `self.afterPost( params, body, options, doc, fullDoc )` is run
+  * (HOOK) `self.prepareBeforeSend( request, doc )` is run 
+  * (HOOK) `self.afterPost( request, doc, fullDoc )` is run
   * `doc` is sent (status: 200)/returned. Party!
 * ELSE:
-  * (HOOK) `self.afterPost( params, body, options, doc, fullDoc )` is run
+  * (HOOK) `self.afterPost( request, doc, fullDoc )` is run
   * Empty result is sent (status: 200)/data is returned. Party!
 
 ### `_makePut()` (for PUT requests)
 
 * (ATTR) `self.handlePut` is checked. If false, send `NotImplementedError`
-* incoming paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* (HOOK) `self.prepareBody( body, 'put' )` is run against the record just fetched
+* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
+* (HOOK) `self.prepareBody( request, body, 'put' )` is run against the record just fetched
 * Body is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.postValidate( body, 'put' )` is run against the record just fetched
+* (HOOK) `self.postValidate( request, body, 'put' )` is run against the record just fetched
 * record is fetched from DB (ATTEMPT) -> `fullDoc`
 * `options.overwrite` is checked: if true & record not there, or false and record there, send `PreconditionFailedError`
 
 #### ...and then, for NEW records (fetching failed)
 
-* (HOOK) `self.checkPermissionsPutNew( params, body, options )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.checkPermissionsPutNew( request )` is run. If fail, send `ForbiddenError`
 * `body` is cleaned up of fields with `doNotSave: true` in schema
 * record is written to the DB.
 * record is re-fetched from DB -> `fullDoc`
@@ -1337,18 +1347,18 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
 * Set the `Location:` header
 * IF `self.echoAfterPut`:
-  * (HOOK) `self.prepareBeforeSend( doc )` is run -> `doc`
-  * (HOOK) `self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite )` is run
+  * (HOOK) `self.prepareBeforeSend( request, doc )` is run
+  * (HOOK) `self.afterPutNew( request, doc, fullDoc, options.overwrite )` is run
   * `doc` is sent (status: 200)/returned. Party!
 * ELSE:
-  * (HOOK) `self.afterPutNew( params, body, options, doc, fullDoc, options.overwrite )` is run
+  * (HOOK) `self.afterPutNew( request, doc, fullDoc, options.overwrite )` is run
   * Empty result is sent (status: 200)/data is returned. Party!
 
 #### ...or then, for EXISTING records (fetching worked)
 
 * (HOOK) `self.extrapolateDoc( fullDoc )` is run against the record just fetched -> `doc`
 * `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.checkPermissionsPutExisting( params, body, options, doc, fullDoc )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.checkPermissionsPutExisting( request, doc, fullDoc )` is run. If fail, send `ForbiddenError`
 * `doc` is cleaned up of fields with `doNotSave: true` in schema
 * record is updated to the DB.
 * record is re-fetched from DB. If fail, send `NotFoundError` -> fullDocAfter
@@ -1356,11 +1366,11 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * Doc is cast against the schema. If fail, send `UnprocessableEntityError`
 * Set the `Location:` header
 * IF `self.echoAfterPut`:
-  * (HOOK) `self.prepareBeforeSend( docAfter )` is run.
-  * (HOOK) `self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite )` is run
+  * (HOOK) `self.prepareBeforeSend( request, docAfter )` is run.
+  * (HOOK) `self.afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, options.overwrite )` is run
   * `docAfter` is sent (status: 200)/returned. Party!
 * ELSE:
-  * (HOOK) `self.afterPutExisting( params, body, options, doc, fullDoc, docAfter, fullDocAfter, options.overwrite )` is run
+  * (HOOK) `self.afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, options.overwrite )` is run
   * Empty result is sent (status: 200)/data is returned. Party!
 
 
