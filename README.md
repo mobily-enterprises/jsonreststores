@@ -13,6 +13,14 @@ It's really simple to develop more layers (e.g. MariaDb, Postgresql, CouchDb, et
 
 And don't worry, after an overly long introduction, I do have a [quickstart](https://github.com/mercmobily/JsonRestStores#quick-start)!
 
+# DOCUMENTATION REWRITE IN PROGRESS
+
+Please look for "YOU ARE HERE (REDOCUMENTING)" -- that's where I am at in terms of redocumenting JsonRestStores.
+
+I rewrote big chunks of it: a Json REST store is now identified by an object, rather than a constructor. This ensures really high performances, since the "request" object I create is minimal.
+
+The change in API is really small, and it should be the last one in a while (if I see that it's stable enough, I will turn _this_ into 1.0 so that it will ensure no more API changes).
+
 # Introduction to (JSON) REST stores
 
 Here is an introduction on REST, JSON REST, and this module. If you are a veteran of REST stores, you can probably just skim through this.
