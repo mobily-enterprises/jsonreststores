@@ -425,7 +425,7 @@ var Store = declare( null,  {
     }
 
     // Make the database call 
-    self.dbLayer.select( selector, { children: true}, function( err, docs ){
+    self.dbLayer.select( selector, { children: true }, function( err, docs ){
       if( err ){
         cb( err );
       } else {
@@ -589,7 +589,6 @@ var Store = declare( null,  {
     conditions.and = [];
     conditions.or = [];
 
-
     // Add filters to the selector
     for( var filterField in filters ){
 
@@ -658,7 +657,7 @@ var Store = declare( null,  {
   /*
       * FIRST:
       *   REMOTE: options.filters, options.sort, options.ranges are created by _initOptionsFromReq
-      *   LOCAL: user sets options.filters, options.sort and options.ranges
+      *   LOCAL: user sets options.filters, options.sort, options.ranges, options.skipHardLimitOnQueries
 
       * AND THEN:
       *   self._queryMakeSelector( filters, sort, ranges ) is called, and returns the full db selector for those options
@@ -809,8 +808,14 @@ var Store = declare( null,  {
     if( request.options.delete || self.deleteAfterGetQuery ){
       dbLayerOptions.delete = true;
     }
+
+    // Pass on skipHardLimitOnQueries to the dbLayer
+    dbLayerOptions.skipHardLimitOnQueries = request.options.skipHardLimitOnQueries;
+
+    // Children is always true
     dbLayerOptions.children = true;
 
+    // Paranoidchecks
     if( typeof( request.options.sort ) === 'undefined' || request.options.sort === null ) request.options.sort = {}; 
     if( typeof( request.options.ranges ) === 'undefined' || request.options.ranges === null ) request.options.ranges = {}; 
 
@@ -826,7 +831,6 @@ var Store = declare( null,  {
 
         if( request.remote) self._enrichSelectorWithParams( selector, request.params );
 
-        
         // Run the select based on the passed parameters
         self.dbLayer.select( selector, dbLayerOptions, next );
       }

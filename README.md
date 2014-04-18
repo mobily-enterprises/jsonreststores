@@ -1121,10 +1121,11 @@ When a request comes from a remote operation, the `options` object is populated 
 * `filters` for `GetQuery` requests; (if used as remote store, taken from URL)
 * `ranges` for `GetQuery` requests; (if used as remote store, taken from HTTP headers)
 * `sort` for `GetQuery` requests (if used as remote store, taken from URL)
+* `skipHardLimitOnQueries` for `GetQuery` requests (if used as remote store, _always_ false)
 
-When querying from the API, can pass `overwrite`, `sort`, `ranges`, `filters`.
+When using API functions, can pass directly pass `overwrite`, `sort`, `ranges`, `filters`, `skipHardLimitOnQueries`.
 
-When using `GetQuery()` from the API, you are not limited to searching for fields defined in the `onlineSearchSchema` (a limitation that is present for all remote queries for obvious security reasons). When using `GetQuery()` from the API, you can search for any field _either_ in the `schema` _or_ in the `onlineSearchSchema`.
+**Note:** When using `GetQuery()` from the API, you are not limited to searching for fields defined in the `onlineSearchSchema` (a limitation that is present for all remote queries for obvious security reasons). When using `GetQuery()` from the API, you can search for any field _either_ in the `schema` _or_ in the `onlineSearchSchema`.
 
 Here is a detailed explanation of these options:
 
@@ -1154,7 +1155,7 @@ The deletion is more of an "attempt" to delete them. If deletion fails, GetQuery
 
 If `delete` is not passed, then the store's default, set by `deleteAfterGetQuery`, will be used.
 
-# filters
+## filters
 
 This option applies to GetQuery calls.
 
@@ -1170,6 +1171,8 @@ A typical example could be:
 For non-API calls, this option is set by the query string in the URL.
 
 ## ranges
+
+This option applies to GetQuery calls.
 
 Ranges are important as they allow you to define a limit on the number of records returned.
 
@@ -1187,6 +1190,8 @@ For non-API calls, ranges are set by the 'range' headers. For example `Range: it
 
 ## sort
 
+This option applies to GetQuery calls.
+
 This option is an object where each key is the key you want to sort by, and that key's value is either `1` (ascending order) or `-1` (descending order).
 
 For example:
@@ -1200,6 +1205,12 @@ For example:
     });
 
 For non-API calls, this option is set by the query string in the URL. E.g. `/workspaces/?workspaceName=something&sortBy=+workspaceName,-score`.
+
+## skipHardLimitOnQueries
+
+This option applies to GetQuery calls.
+
+If set to `true`, then the `hardLimitOnQueries` will be ignored. Use with care: returning large number of records will result in memory hogging.
 
 # Behind the scenes
 
