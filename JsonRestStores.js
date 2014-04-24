@@ -1226,7 +1226,7 @@ var Store = declare( null,  {
                           self._sendError( request, next, new self.ForbiddenError() );
                         } else {
 
-                          self.reposition( fullDoc, request.options && request.options.beforeId ? request.options.beforeId : null );
+                          self.reposition( fullDoc, request.options.beforeId );
 
                           self.prepareBeforeSend( request, doc, function( err ){
                             self._sendErrorOnErr( request, err, next, function(){
@@ -1414,7 +1414,7 @@ var Store = declare( null,  {
                                         self.execPutDbUpdate( request, function( err, fullDocAfter ){
                                           self._sendErrorOnErr( request, err, next, function(){
           
-                                           self.reposition( fullDoc, request.options && request.options.beforeId ? request.options.beforeId : null );
+                                           self.reposition( fullDoc, request.options && request.options.beforeId ? request.options.beforeId : undefined );
      
                                             self.extrapolateDoc( request, fullDocAfter, function( err, docAfter ) {
                                               self._sendErrorOnErr( request, err, next, function(){
