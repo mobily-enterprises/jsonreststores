@@ -472,7 +472,7 @@ var Store = declare( null,  {
     // wasn't passed: assign an ObjectId to it
     record[ self.idProperty ] = generatedId;
 
-    self.dbLayer.insert( record, { returnRecord: true, skipValidation: true }, cb );
+    self.dbLayer.insert( record, { returnRecord: true, skipValidation: true, children: true }, cb );
 
   },
 
@@ -1037,8 +1037,7 @@ var Store = declare( null,  {
 
     // Check that the method is implemented
     if( ! self.handlePost && request.remote ){
-      self._sendError( request, next, new self.NotImplementedError( ) );
-      return;
+      return self._sendError( request, next, new self.NotImplementedError( ) );
     }
 
     // Check the IDs
@@ -1076,7 +1075,7 @@ var Store = declare( null,  {
                                 
                 self.execPostDbInsertNoId( request, generatedId, function( err, fullDoc ){
                   if( err ) return self._sendError( request, next, err );
-            
+
                   self.reposition( fullDoc, request.options && request.options.beforeId ? request.options.beforeId : null, function( err ){
                     if( err ) return self._sendError( request, next, err );
 
@@ -1096,7 +1095,7 @@ var Store = declare( null,  {
                 
                             self.afterPost( request, doc, fullDoc, function( err ){
                               if( err ) return self._sendError( request, next, err );
-            
+           
                               request._res.json( 201, doc );
            
                             }) 
@@ -1246,7 +1245,6 @@ var Store = declare( null,  {
               } else { 
                 continueAfterFetch();
               }
-               
  
               function continueAfterFetch(){
            
