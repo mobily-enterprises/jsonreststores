@@ -556,7 +556,7 @@ var Store = declare( null,  {
     //  }
     //});
 
-    self.dbLayer.insert( record, { returnRecord: true, skipValidation: true }, cb );
+    self.dbLayer.insert( record, { children: true, returnRecord: true, skipValidation: true }, cb );
 
   },
 
@@ -1266,7 +1266,7 @@ var Store = declare( null,  {
                     // Make sure that the id property in the body does match
                     // the one passed as last parameter in the list of IDs
                     request.body[ self.idProperty ] = request.params[ self.idProperty ];
-            
+                    
                     self.execPutDbInsert( request, function( err, fullDoc ){
                       if( err ) return self._sendError( request, next, err );
             
