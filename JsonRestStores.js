@@ -261,7 +261,7 @@ var Store = declare( null,  {
 
       var onlineSearchSchemaStructure = { };
       for( var k in self.schema.structure ){
-        if( typeof( self.paramIds[ k ] ) === 'undefined' && self.schema.structure[ k ].searchable ){
+        if( self.schema.structure[ k ].searchable && self.paramIds.indexOf( k ) ===  -1  ){
           onlineSearchSchemaStructure[ k ] = self.schema.structure[ k ];
         }
       }
@@ -294,7 +294,7 @@ var Store = declare( null,  {
       // the same as `k`.
       if( typeof( entry.searchOptions ) === 'undefined' ){
 
-        if( typeof( self.paramIds[ k ] ) === 'undefined' ){
+        if( self.paramIds.indexOf( k ) === -1 ){
           self.schema.structure[ k ].searchable = true;
         } 
 
@@ -506,7 +506,11 @@ var Store = declare( null,  {
     //  }
     //});
 
-    self.dbLayer.update( selector, updateObject, { deleteUnsetFields: true, multi: false, skipValidation: true }, function( err, howMany ){
+    // Only delete unset fields if there is no piggyField.
+    // If piggyField is there, this is a single-record update
+    var deleteUnsetFields = ! self.piggyField;
+
+    self.dbLayer.update( selector, updateObject, { deleteUnsetFields: deleteUnsetFields, multi: false, skipValidation: true }, function( err, howMany ){
       if( err ){
         cb( err );
       } else {
@@ -1051,6 +1055,14 @@ var Store = declare( null,  {
         skipParamsObject[ self.idProperty ] = [ 'required' ];
         self._enrichBodyWithParamIdsIfRemote( request );
 
+        // Protected field are not allowed here
+        for( var field in request.body ){
+          if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
+            errors.push( { field: field, message: 'Field not allowed because protected: ' + filterField + ' in ' + self.storeName } );
+          }
+        } 
+
+
         self.schema.validate( request.body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, body, errors ){
           if( err ) return self._sendError( request, next, err );
 
@@ -1222,6 +1234,13 @@ var Store = declare( null,  {
         self.schema.validate( request.body, function( err, body, errors ) {
           if( err ) return self._sendError( request, next, err );
 
+          // Protected field are not allowed here
+          for( var field in request.body ){
+            if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
+              errors.push( { field: field, message: 'Field not allowed because protected: ' + field + ' in ' + self.storeName } );
+            }
+          } 
+          
           request.body = body;
         
           if( errors.length ) return self._sendError( request, next, new self.UnprocessableEntityError( { errors: errors } ) );
