@@ -1244,7 +1244,7 @@ var Store = declare( null,  {
               }
             } 
           }
-           
+
           request.body = body;
         
           if( errors.length ) return self._sendError( request, next, new self.UnprocessableEntityError( { errors: errors } ) );
@@ -2109,8 +2109,6 @@ Store.OneFieldStoreMixin = declare( null,  {
   },    
 
   constructor: function(){
-
-
     // * Check that paramIds match?
   }
 
