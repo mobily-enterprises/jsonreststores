@@ -26,10 +26,10 @@ Funnily enough, it didn't catch a bug as big as the sky with the Range headers r
 KEEP IN MIND:
 
 - SimpleDbLayer MUST enforce the one-object=one-table rule, otherwise its registry won't work
-- JsonRestStores must be passed schema, nested, idproperty to create the layer with
+- JsonRestStores must be passed schema, nested, idproperty  to create the layer with
 - If two stores have the same collectionName, the second one will reuse the existing one.
 - This means that you can create the stores beforehand, and then get JsonRestStores to use them (nice!)
-- In case of reusing, schema, nested, and hardLimitOnQueries mustn't be declared, and idProperty needs to match
+- In case of reusing, schema, nested, and hardLimitOnQueries, sortableFields mustn't be declared, and idProperty needs to match
 */
 
 var 
@@ -205,7 +205,8 @@ var Store = declare( null,  {
         throw( new Error("When reusing a db layer, idProperties must match.", self.storeName, 'is reusing', dbLayer.table ) );
       }
 
-      // TODO: check that `nested` and `schema` are NOT defined in the direct prototype
+      // TODO: check that `nested`, `schema` `hardLimitOnQueries`, `sortableFields`
+      // are NOT defined in the direct prototype
       //if( self.__proto__.hasOwnProperty( 'schema' ){
       //  throw( new Error("When reusing a db layer, schema must not be defined in derived constructor.", self.storeName, 'is reusing', dbLayer.table ) );
       //}
@@ -214,6 +215,9 @@ var Store = declare( null,  {
       //}
       //if( self.__proto__.hasOwnProperty( 'hardLimitOnQueries' ){
       //  throw( new Error("When reusing a db layer, hardLimitOnQueries must not be defined in derived constructor.", self.storeName, 'is reusing', dbLayer.table ) );
+      //}
+      //if( self.__proto__.hasOwnProperty( 'sortableFields' ){
+      //  throw( new Error("When reusing a db layer, sortableFields must not be defined in derived constructor.", self.storeName, 'is reusing', dbLayer.table ) );
       //}
 
       self.schema = dbLayer.schema;
@@ -249,7 +253,6 @@ var Store = declare( null,  {
       var k = self.paramIds[ i ];
       self.schema.structure[ k ].searchable = true;
     }
-
    
     // STEP #2: MAKE SURE onlineSearchSchema IS DEFINED AND GOOD
     //          If not there, create it as a copy of `schema` where `searchable is there.
@@ -278,7 +281,7 @@ var Store = declare( null,  {
       }
     }
 
-    // STEP #1: COMPLETE THE DB SCHEMA WITH onlineSearchSchema ENTRIES
+    // STEP #3: COMPLETE THE DB SCHEMA WITH onlineSearchSchema ENTRIES
     //          For every entry in onlineSearchSchema, add `searchable` to 
     //          corresponding entry in `schema`
 
@@ -2109,7 +2112,7 @@ Store.OneFieldStoreMixin = declare( null,  {
   },    
 
   constructor: function(){
-    // * Check that paramIds match?
+    // * TODO: Check that paramIds match?
   }
 
 });
