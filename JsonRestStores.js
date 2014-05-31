@@ -1058,7 +1058,6 @@ var Store = declare( null,  {
         skipParamsObject[ self.idProperty ] = [ 'required' ];
         self._enrichBodyWithParamIdsIfRemote( request );
 
-
         self.schema.validate( request.body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, body, errors ){
           if( err ) return self._sendError( request, next, err );
 
