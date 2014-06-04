@@ -758,16 +758,24 @@ var Store = declare( null,  {
 
       // If there was a range request, then set the range to the
       // query and return the count
-      if( (hr = req.headers['range']) && ( tokens = hr.match(/items=([0-9]+)\-([0-9]+)$/))  ){
+      if( (hr = req.headers['range']) && ( tokens = hr.match(/items=([0-9]+)\-(([0-9]+)||(Infinity))$/))  ){
         rangeFrom = tokens[1] - 0;
         rangeTo = tokens[2] - 0;
-        limit =  rangeTo - rangeFrom + 1;
+        if( rangeTo == 'Infinity' ){
+          return ({
+            from: rangeFrom
+          })
+        } else {
 
-        return( {
-          from: rangeFrom,
-          to: rangeTo,
-          limit:  limit,
-        });
+          limit =  rangeTo - rangeFrom + 1;
+
+          return( {
+            from: rangeFrom,
+            to: rangeTo,
+            limit:  limit,
+          });
+
+        }
       } 
 
       // Range headers not found or not valid, return null 
@@ -1058,6 +1066,9 @@ var Store = declare( null,  {
         skipParamsObject[ self.idProperty ] = [ 'required' ];
         self._enrichBodyWithParamIdsIfRemote( request );
 
+        // Delete _children which mustn't be here regardless
+        delete request.body._children;
+
         self.schema.validate( request.body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, body, errors ){
           if( err ) return self._sendError( request, next, err );
 
@@ -1234,6 +1245,9 @@ var Store = declare( null,  {
         if( err ) return self._sendError( request, next, err );
 
         self._enrichBodyWithParamIdsIfRemote( request );
+
+        // Delete _children which mustn't be here regardless
+        delete request.body._children;
 
         self.schema.validate( request.body, function( err, body, errors ) {
           if( err ) return self._sendError( request, next, err );
