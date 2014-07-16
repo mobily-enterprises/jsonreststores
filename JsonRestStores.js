@@ -82,6 +82,7 @@ var Store = declare( null,  {
   echoAfterPutNew: true,
   echoAfterPutExisting: true,
   echoAfterPost: true,
+  echoAfterDelete: true,
 
   chainErrors: 'none',  // can be 'none', 'all', 'nonhttp'
 
@@ -149,10 +150,12 @@ var Store = declare( null,  {
   NotImplementedError: e.NotImplementedError,
   ServiceUnavailableError: e.ServiceUnavailableError,
 
-  reposition: function( doc, beforeId, cb ){
+
+  
+  reposition: function( doc, beforeId, defaultNewToStart, cb ){
     if( typeof( cb ) === 'undefined' ) cb = function(){};
 
-    this.dbLayer.reposition( doc, beforeId, cb );
+    this.dbLayer.reposition( doc, beforeId, defaultNewToStart, cb );
   },
 
   constructor: function(){
@@ -679,27 +682,36 @@ var Store = declare( null,  {
     // Set the 'overwrite' option if the right header
     // is there
     if( mn == 'Put' ){
-
       if( req.headers[ 'if-match' ] === '*' )
         options.overwrite = true;
       if( req.headers[ 'if-none-match' ] === '*' )
-        options.overwrite = false;
-
+        options.overwrite = false;      
     }
 
     // Put and Post can come with extra headers which will set
-    // options.beforeId and options.justReposition
+    // options.beforeId and options.defaultNewToStart
     if( mn === 'Put' || mn === "Post" ){
 
-      if( typeof( req.headers[ 'x-rest-before' ] ) !== 'undefined' )
-        options.beforeId = req.headers[ 'x-rest-before' ];
+      // The header `x-put-default-position` always wins
+      if( typeof( req.headers[ 'x-put-default-position' ]) !== 'undefined'){
 
-      // If it's empty, it means "place at the end". Note the "null is special" exception,
-      // there because Dojo (and others) do not allow empty headers.
-      if( options.beforeId === 'null' || options.beforeId === '' ) options.beforeId = null;
+        // Set options.defaultNewToStart depending on passed header. Default is `false`
+        if( req.headers[ 'x-put-default-position' ] === 'start' ){
+          options.defaultNewToStart = true;
+        } else {
+          options.defaultNewToStart = false;
+        }
 
-      if( typeof( req.headers[ 'x-rest-just-reposition' ] ) !== 'undefined' )
-        options.justReposition = true;
+      // There is no `x-put-default-position`: see if x-put-before is set
+      // and if it is, set options.beforeId
+      // NOTE: in the server context, beforeId ALWAYS needs to be an id, and NEVER null
+      } else {
+
+        if( typeof( req.headers[ 'x-put-before' ] ) !== 'undefined' )
+          options.beforeId = req.headers[ 'x-put-before' ];
+
+      }
+
     }
 
     // Set the 'SortBy', 'ranges' and 'filters' in
@@ -1103,7 +1115,7 @@ var Store = declare( null,  {
                 self.execPostDbInsertNoId( request, generatedId, function( err, fullDoc ){
                   if( err ) return self._sendError( request, next, err );
 
-                  self.reposition( fullDoc, request.options && request.options.beforeId ? request.options.beforeId : null, function( err ){
+                  self.reposition( fullDoc, request.options.beforeId, request.options.defaultNewToStart, function( err ){
                     if( err ) return self._sendError( request, next, err );
 
                     self.extrapolateDoc( request, fullDoc, function( err, doc) {
@@ -1190,53 +1202,9 @@ var Store = declare( null,  {
       return self._sendError( request, next, new self.NotImplementedError( ) );
     }
 
-    // DETOUR: It's a reposition. Simply try and relocate the record
-    // (after the usual permissions etc.)
-    if( request.options.justReposition && typeof( request.options.beforeId ) !== 'undefined' ){
-      
-      self._checkParamIds( request, false, function( err ){  
-        if( err ) return self._sendError( request, next, err );
+    /* CHUNK #44 */
 
-        self.execAllDbFetch( request, function( err, fullDoc ){
-          if( err ) return self._sendError( request, next, err );
 
-          if( ! fullDoc ) return self._sendError( request, next, new self.NotFoundError());
-
-          self.extrapolateDoc( request, fullDoc, function( err, doc) {
-            if( err ) return self._sendError( request, next, err );
-        
-            // Actually check permissions
-            self._checkPermissionsProxy( request, 'PutExisting', doc, fullDoc, function( err, granted ){
-              if( err ) return self._sendError( request, next, err );
-            
-              if( ! granted ) return self._sendError( request, next, new self.ForbiddenError() );
-
-              self.reposition( fullDoc, request.options.beforeId, function( err ){
-                if( err ) return self._sendError( request, next, err );
-
-                self.prepareBeforeSend( request, doc, function( err ){
-                  if( err ) return self._sendError( request, next, err );
-
-                  self.afterPutExisting( request, doc, fullDoc, doc, fullDoc, request.options.overwrite, function( err ) {
-                    if( err ) return self._sendError( request, next, err );
-
-                    if( request.remote ){ 
-                       request._res.json( 200, doc );
-                    } else {
-                      next( null, doc );
-                    }
-                  });
-                });
-              });
-            });
-          });
-        });
-      });
-
-      // That's it -- don't do anything else.
-      return;
-    }
- 
     // Check the IDs.
     self._checkParamIds( request, false, function( err ){  
       if( err ) return self._sendError( request, next, err );
@@ -1309,7 +1277,8 @@ var Store = declare( null,  {
                     self.execPutDbInsert( request, function( err, fullDoc ){
                       if( err ) return self._sendError( request, next, err );
             
-                      self.reposition( fullDoc, request.options && request.options.beforeId ? request.options.beforeId : null, function( err ){
+                        self.reposition( fullDoc, request.options.beforeId, request.options.defaultNewToStart, function( err ){
+
                         if( err ) return self._sendError( request, next, err );
 
                         self.extrapolateDoc( request, fullDoc, function( err, doc) {
@@ -1381,7 +1350,8 @@ var Store = declare( null,  {
                       self.execPutDbUpdate( request, function( err, fullDocAfter ){
                         if( err ) return self._sendError( request, next, err );
           
-                          self.reposition( fullDoc, request.options && request.options.beforeId ? request.options.beforeId : undefined, function( err ){
+                          self.reposition( fullDoc, request.options.beforeId, request.options.defaultNewToStart, function( err ){
+
                             if( err ) return self._sendError( request, next, err );
   
        
@@ -1629,21 +1599,39 @@ var Store = declare( null,  {
             self.execDeleteDbDelete( request, function( err ){
               if( err ) return self._sendError( request, next, err );
         
-              self.afterDelete( request, doc, fullDoc, function( err ) {
-                if( err ) return self._sendError( request, next, err );
-        
-                // Remote request: send a 204 back
-                if( request.remote ){
+              // Remote request: send a 204 (contents) or 201 (no contents) back
+              if( request.remote ){
 
-                  // Return 204 and empty contents as requested by RFC
-                  request._res.send( 204, '' );
+                if( self.echoAfterDelete ){
+
+                  self.prepareBeforeSend( request, doc, function( err ){
+                    if( err ) return self._sendError( request, next, err );
         
-                // Local request: simply return the doc's ID to the asking function
+                    self.afterDelete( request, doc, fullDoc, function( err ){
+                      if( err ) return self._sendError( request, next, err );
+   
+                      request._res.json( 201, doc );
+   
+                    }) 
+                  }) 
+
                 } else {
-                  next( null, doc );
-                }
+        
+                  self.afterDelete( request, doc, fullDoc, function( err ){
+                    if( err ) return self._sendError( request, next, err );
 
-              });
+                    request._res.send( 204, '' );
+                    //request._res.send( 201, '' );
+
+                  });
+        
+                }
+                
+              // Local request: simply return the doc's ID to the asking function
+              } else {
+                next( null, doc );
+              }
+
             });
           });
         });
@@ -1983,8 +1971,8 @@ Store.OneFieldStoreMixin = declare( null,  {
     }
 
     // DETOUR: It's a reposition. Not allowed here!
-    if( request.options.justReposition && typeof( request.options.beforeId ) !== 'undefined' ){
-      return cb( new Error("Repositioning not allowed in OneFieldStore"));
+    if( typeof( request.options.beforeId ) !== 'undefined' ){
+      return cb( new Error("Option beforeId not allowed in OneFieldStore"));
     }
  
     // Check the IDs.
@@ -2133,3 +2121,56 @@ Store.OneFieldStoreMixin = declare( null,  {
 exports = module.exports = Store;
 Store.artificialDelay = 0;
 Store.registry = {};
+
+
+/* CHUNK #44 */
+/*
+
+    // DETOUR: It's a reposition. Simply try and relocate the record
+    // (after the usual permissions etc.)
+    if( request.options.justReposition && typeof( request.options.beforeId ) !== 'undefined' ){
+
+      self._checkParamIds( request, false, function( err ){  
+        if( err ) return self._sendError( request, next, err );
+
+        self.execAllDbFetch( request, function( err, fullDoc ){
+          if( err ) return self._sendError( request, next, err );
+
+          if( ! fullDoc ) return self._sendError( request, next, new self.NotFoundError());
+
+          self.extrapolateDoc( request, fullDoc, function( err, doc) {
+            if( err ) return self._sendError( request, next, err );
+        
+            // Actually check permissions
+            self._checkPermissionsProxy( request, 'PutExisting', doc, fullDoc, function( err, granted ){
+              if( err ) return self._sendError( request, next, err );
+            
+              if( ! granted ) return self._sendError( request, next, new self.ForbiddenError() );
+
+              self.reposition( fullDoc, request.options.beforeId, function( err ){
+                if( err ) return self._sendError( request, next, err );
+
+                self.prepareBeforeSend( request, doc, function( err ){
+                  if( err ) return self._sendError( request, next, err );
+
+                  self.afterPutExisting( request, doc, fullDoc, doc, fullDoc, request.options.overwrite, function( err ) {
+                    if( err ) return self._sendError( request, next, err );
+
+                    if( request.remote ){ 
+                       request._res.json( 200, doc );
+                    } else {
+                      next( null, doc );
+                    }
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+
+      // That's it -- don't do anything else.
+      return;
+    }
+ 
+*/
