@@ -150,12 +150,41 @@ var Store = declare( null,  {
   NotImplementedError: e.NotImplementedError,
   ServiceUnavailableError: e.ServiceUnavailableError,
 
-
-  
-  reposition: function( doc, beforeId, defaultNewToStart, cb ){
+  reposition: function( doc, putBefore, putDefaultPosition, existing, cb ){
     if( typeof( cb ) === 'undefined' ) cb = function(){};
 
-    this.dbLayer.reposition( doc, beforeId, defaultNewToStart, cb );
+    console.log("CALLED REPOSITION ON:", doc, putBefore, putDefaultPosition, existing );
+
+    // No position field: nothing to do
+    if( ! this.dbLayer.positionField ){
+       console.log("JSsonRestStores skipped repositioning as layer doesn't have positionField: ", this.table );
+       return cb( null );
+    }
+    
+    // where can be `start, `end`, or `at`. If it's `at`, then beforeId will be considered
+    var where, beforeId;
+
+    // CASE #1: putBefore is set: where = at, beforeId = putBefore 
+    if( putBefore ) {
+      where = 'at';
+      beforeId = putBefore;
+
+    // CASE #2: putDefaultPosition is set: where = putDefaultPosition, beforeId = null
+    } else if( putDefaultPosition ){
+      where = putDefaultPosition;
+      beforeId = null;
+
+    // CASE #3: putBefore and putDefaultPosition are not set. IF it's a new record, where = end, beforeId = null
+    } else {
+      if( !existing ){
+        where = 'end';
+        beforeId = null;
+      }
+    }
+
+    console.log("LAYER'S REPOSITION PARAMETERS BASED ON CALL:", where, beforeId );
+
+    this.dbLayer.reposition( doc, where, beforeId, cb );
   },
 
   constructor: function(){
@@ -689,26 +718,26 @@ var Store = declare( null,  {
     }
 
     // Put and Post can come with extra headers which will set
-    // options.beforeId and options.defaultNewToStart
+    // options.putBefore and options.putDefaultPosition
     if( mn === 'Put' || mn === "Post" ){
 
       // The header `x-put-default-position` always wins
       if( typeof( req.headers[ 'x-put-default-position' ]) !== 'undefined'){
 
-        // Set options.defaultNewToStart depending on passed header. Default is `false`
+        // Set options.putDefaultPosition depending on passed header. Default is `false`
         if( req.headers[ 'x-put-default-position' ] === 'start' ){
-          options.defaultNewToStart = true;
+          options.putDefaultPosition = 'start';
         } else {
-          options.defaultNewToStart = false;
+          options.putDefaultPosition = 'end';
         }
 
       // There is no `x-put-default-position`: see if x-put-before is set
-      // and if it is, set options.beforeId
-      // NOTE: in the server context, beforeId ALWAYS needs to be an id, and NEVER null
+      // and if it is, set options.putBefore
+      // NOTE: in the server context, putBefore ALWAYS needs to be an id, and NEVER null
       } else {
 
         if( typeof( req.headers[ 'x-put-before' ] ) !== 'undefined' )
-          options.beforeId = req.headers[ 'x-put-before' ];
+          options.putBefore = req.headers[ 'x-put-before' ];
 
       }
 
@@ -1115,7 +1144,7 @@ var Store = declare( null,  {
                 self.execPostDbInsertNoId( request, generatedId, function( err, fullDoc ){
                   if( err ) return self._sendError( request, next, err );
 
-                  self.reposition( fullDoc, request.options.beforeId, request.options.defaultNewToStart, function( err ){
+                  self.reposition( fullDoc, request.options.putBefore, request.options.putDefaultPosition, false, function( err ){
                     if( err ) return self._sendError( request, next, err );
 
                     self.extrapolateDoc( request, fullDoc, function( err, doc) {
@@ -1277,7 +1306,7 @@ var Store = declare( null,  {
                     self.execPutDbInsert( request, function( err, fullDoc ){
                       if( err ) return self._sendError( request, next, err );
             
-                        self.reposition( fullDoc, request.options.beforeId, request.options.defaultNewToStart, function( err ){
+                        self.reposition( fullDoc, request.options.putBefore, request.options.putDefaultPosition, false, function( err ){
 
                         if( err ) return self._sendError( request, next, err );
 
@@ -1350,7 +1379,7 @@ var Store = declare( null,  {
                       self.execPutDbUpdate( request, function( err, fullDocAfter ){
                         if( err ) return self._sendError( request, next, err );
           
-                          self.reposition( fullDoc, request.options.beforeId, request.options.defaultNewToStart, function( err ){
+                          self.reposition( fullDoc, request.options.putBefore, request.options.putDefaultPosition, true, function( err ){
 
                             if( err ) return self._sendError( request, next, err );
   
@@ -1971,8 +2000,8 @@ Store.OneFieldStoreMixin = declare( null,  {
     }
 
     // DETOUR: It's a reposition. Not allowed here!
-    if( typeof( request.options.beforeId ) !== 'undefined' ){
-      return cb( new Error("Option beforeId not allowed in OneFieldStore"));
+    if( typeof( request.options.putBefore ) !== 'undefined' ){
+      return cb( new Error("Option putBefore not allowed in OneFieldStore"));
     }
  
     // Check the IDs.
@@ -2105,7 +2134,7 @@ Store.OneFieldStoreMixin = declare( null,  {
       // TODO: run a _broadcast on the *parent* store, 
       //self._broadcast( request, 'storeRecordUpdate', docAfter[ self.idProperty], docAfter, done );
 
-      //stores.workspacesContacts.broadcastStoreChanges( request, 'storeRecordUpdate', contact.id, contact, { tabId: null, suppressReload: true }, cb );
+      //stores.workspacesContacts.broadcastStoreChanges( request, 'storeRecordUpdate', contact.id, contact, { tabId: null, cb );
 
       done( null );
       
@@ -2122,55 +2151,3 @@ exports = module.exports = Store;
 Store.artificialDelay = 0;
 Store.registry = {};
 
-
-/* CHUNK #44 */
-/*
-
-    // DETOUR: It's a reposition. Simply try and relocate the record
-    // (after the usual permissions etc.)
-    if( request.options.justReposition && typeof( request.options.beforeId ) !== 'undefined' ){
-
-      self._checkParamIds( request, false, function( err ){  
-        if( err ) return self._sendError( request, next, err );
-
-        self.execAllDbFetch( request, function( err, fullDoc ){
-          if( err ) return self._sendError( request, next, err );
-
-          if( ! fullDoc ) return self._sendError( request, next, new self.NotFoundError());
-
-          self.extrapolateDoc( request, fullDoc, function( err, doc) {
-            if( err ) return self._sendError( request, next, err );
-        
-            // Actually check permissions
-            self._checkPermissionsProxy( request, 'PutExisting', doc, fullDoc, function( err, granted ){
-              if( err ) return self._sendError( request, next, err );
-            
-              if( ! granted ) return self._sendError( request, next, new self.ForbiddenError() );
-
-              self.reposition( fullDoc, request.options.beforeId, function( err ){
-                if( err ) return self._sendError( request, next, err );
-
-                self.prepareBeforeSend( request, doc, function( err ){
-                  if( err ) return self._sendError( request, next, err );
-
-                  self.afterPutExisting( request, doc, fullDoc, doc, fullDoc, request.options.overwrite, function( err ) {
-                    if( err ) return self._sendError( request, next, err );
-
-                    if( request.remote ){ 
-                       request._res.json( 200, doc );
-                    } else {
-                      next( null, doc );
-                    }
-                  });
-                });
-              });
-            });
-          });
-        });
-      });
-
-      // That's it -- don't do anything else.
-      return;
-    }
- 
-*/
