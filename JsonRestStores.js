@@ -136,7 +136,6 @@ var Store = declare( null,  {
   // *** END OF FUNCTIONS/ATTRIBUTES THAT NEED/CAN BE OVERRIDDEN BY DEVELOPERS
   // **************************************************************************
 
-
   idProperty: null, // Calculated by constructor: last item of paramIds
   dbLayer: null, // Create by constructor: an instance of dbLayer()
 
@@ -378,6 +377,10 @@ var Store = declare( null,  {
       // Actually create the layer with the given parameters
       self.dbLayer = new self.DbLayer( self.collectionName, layerOptions );
     }
+
+    // TODO: Check that each entry in self.sortableFields is actually marked as "searchable" in
+    // self.schema; otherwise, stop with an error. This is important as any sortable field MUST
+    // be searchable
 
     Store.registry[ self.storeName ] = self;
 
