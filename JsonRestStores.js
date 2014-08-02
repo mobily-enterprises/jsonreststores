@@ -835,6 +835,8 @@ var Store = declare( null,  {
       var result = {};
       var failedCasts;
 
+      if( q == '') return;
+
       q.split( '&' ).forEach( function( item ) {
 
         tokens = item.split('=');
@@ -843,8 +845,11 @@ var Store = declare( null,  {
 
         // Only add it to the filter if it's in the schema AND if it's searchable
         //if( tokenLeft != 'sort' && ( ! request.remote || ( self.onlineSearchSchema.structure[ tokenLeft ] && self.onlineSearchSchema.structure[ tokenLeft ].searchable )) ) {
-        if( tokenLeft != 'sortBy' && self.onlineSearchSchema.structure[ tokenLeft ] && self.onlineSearchSchema.structure[ tokenLeft ].searchable  ) {
 
+        // MERC: This is the original one. I took it out as there is validation on this happening very soon
+        //if( tokenLeft != 'sortBy' && self.onlineSearchSchema.structure[ tokenLeft ] && self.onlineSearchSchema.structure[ tokenLeft ].searchable  ) {
+
+        if( tokenLeft != 'sortBy'  ) {
           result[ tokenLeft ] = tokenRight;
 
         }
