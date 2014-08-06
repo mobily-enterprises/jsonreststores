@@ -351,7 +351,10 @@ var Store = declare( null,  {
         elements.forEach( function( element ){
           var fieldName = element.field ? element.field : k;
 
-          self.schema.structure[ fieldName ].searchable = true;
+          if( self.schema.structure[ fieldName ]) {
+            self.schema.structure[ fieldName ].searchable = true;
+          }
+
         });
 
       }
@@ -631,10 +634,12 @@ var Store = declare( null,  {
     conditions.and = [];
     conditions.or = [];
 
+
     // Add filters to the selector
     for( var filterField in filters ){
 
       var filterValue = filters[ filterField ];
+
 
       // There is a slim chance that  self.onlineSearchSchema.structure[ filterField ] is not there:
       // it happens in case the request is from API and it required a field available
@@ -662,6 +667,7 @@ var Store = declare( null,  {
           }
 
           elements.forEach( function( element ){
+
             field = element.field || filterField;
             type = element.type || 'eq';
             condition = element.condition || 'and';
@@ -685,6 +691,8 @@ var Store = declare( null,  {
 
       if( conditions.and.length === 0 ) delete conditions.and;
       if( conditions.or.length === 0 ) delete conditions.or;
+
+      console.log("CONDITIONS: ", conditions );
 
       cb( null, {
         conditions: conditions,
@@ -879,7 +887,7 @@ var Store = declare( null,  {
     // Children is always true
     dbLayerOptions.children = true;
 
-    // Paranoidchecks
+    // Paranoid checks
     if( typeof( request.options.sort ) === 'undefined' || request.options.sort === null ) request.options.sort = {}; 
     if( typeof( request.options.ranges ) === 'undefined' || request.options.ranges === null ) request.options.ranges = {}; 
 
@@ -887,6 +895,9 @@ var Store = declare( null,  {
     //if( Object.keys( options.sort ).length === 0 && self.positionField ){
     //  options.sort[ self.positionField ] = 1;
     //}
+
+
+    console.log("FILTERS: ", request.options.filters );
 
     self._queryMakeSelector( request.remote, request.options.filters, request.options.sort, request.options.ranges, function( err, selector ){
       if( err ){
