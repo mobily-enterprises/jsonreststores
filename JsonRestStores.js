@@ -39,6 +39,7 @@ var
 , Schema = require('simpleschema')
 , url = require('url')
 , async = require('async')
+, querystring = require('querystring')
 ;
 
 var Store = declare( null,  {
@@ -57,7 +58,9 @@ var Store = declare( null,  {
   onlineSearchSchema: null, // If not set in prototype, worked out from `schema` by constructor
   collectionName: null, // If not set in prototype, is set as `storeName` by constructor
   publicURL: null, // Not mandatory (if you want your store to be API-only for some reason)
-  paramIds: null, // Only allowed is publicURL is not set
+  idProperty: null, // If not set in prototype, taken as last item of paramIds)
+  paramIds: [], // Only allowed if publicURL is not set
+
 
   // *****************************************************************
   // *** ATTRIBUTES USED TO CREATE A STORE (IF NOT IN DBLAYER CACHE)
@@ -136,7 +139,6 @@ var Store = declare( null,  {
   // *** END OF FUNCTIONS/ATTRIBUTES THAT NEED/CAN BE OVERRIDDEN BY DEVELOPERS
   // **************************************************************************
 
-  idProperty: null, // Calculated by constructor: last item of paramIds
   dbLayer: null, // Create by constructor: an instance of dbLayer()
 
   // Default error objects which might be used by this module.
@@ -217,14 +219,19 @@ var Store = declare( null,  {
     */
 
     // If paramId is not specified, takes it from publicURL
-    if( self.paramIds === null ){
+    if( self.paramIds.length === 0 && typeof( self.publicURL ) === 'string' ){
       self.paramIds =  ( self.publicURL + '/').match(/:.*?\/+/g).map( function(i){return i.substr(1, i.length - 2 )  } );
     }
    
+    // idProperty needs to be set; if it's not, and it's not possible to take it from paramIds, throw
+    if( ! self.idProperty && self.paramIds.length === 0 ){
+      throw( new Error("Your store needs to set idProperty, or alternatively set paramIds (idProperty will be the last paramId). Store: " + self.storeName ) );
+    }
+
     // Sets self.idProperty, which (as for the principle of 
     // least surprise) must be the last paramId passed to
     // the store.
-    self.idProperty = self._lastParamId();
+    if( ! self.idProperty ) self.idProperty = self._lastParamId();
 
     // The db layer already has a layer called 'collectionName' in the registry!
     // This store will reuse it
@@ -329,7 +336,7 @@ var Store = declare( null,  {
       if( typeof( entry.searchOptions ) === 'undefined' ){
 
         if( self.paramIds.indexOf( k ) === -1 ){
-          self.schema.structure[ k ].searchable = true;
+          if( self.schema.structure[ k ] ) self.schema.structure[ k ].searchable = true;
         } 
 
       }
@@ -839,13 +846,24 @@ var Store = declare( null,  {
 
       var url_parts = url.parse( req.url, false );
       var q = url_parts.query || '';
+      var result;
+
+      result = querystring.decode( q );
+      delete result.sortBy;
+
+      return result;
+    }
+
+
+      /*
+      // Original code where I parsed the query string manually.
+
       var tokens, tokenLeft, tokenRight;
-      var result = {};
       var failedCasts;
 
-      if( q == '') return;
 
       q.split( '&' ).forEach( function( item ) {
+
 
         tokens = item.split('=');
         tokenLeft  = tokens[0];
@@ -862,11 +880,9 @@ var Store = declare( null,  {
 
         }
       });
+*/
 
-
-      return result;
-    }
-
+      
   },
 
   execGetDbQuery: function( request, next ){
@@ -1786,7 +1802,8 @@ var Store = declare( null,  {
 
     // Make up "params" to be passed to the _makeGet function
     request.params = {};
-    request.params[ this._lastParamId() ] = id;
+    //request.params[ this._lastParamId() ] = id;
+    request.params[ this.idProperty ] = id;
 
     // Actually run the request
     this._makeGet( request, next );
@@ -1881,7 +1898,8 @@ var Store = declare( null,  {
 
     // Make up "params" to be passed to the _makeDelete function
     request.params = {};
-    request.params[ this._lastParamId() ] = id;
+    //request.params[ this._lastParamId() ] = id;
+    request.params[ this.idProperty ] = id;
 
     // Actually run the request
     this._makeDelete( request, next );
