@@ -93,7 +93,8 @@ var Store = declare( null,  {
 
   strictSchemaAfterRefetching: false, // TO IMPLEMENT
 
-  position: false, // If set, will make fields re-positionable
+  position: false,    // If set, will make fields re-positionable
+  defaultSort: null,  // If set, it will be applied to all getQuery calls
 
   // ****************************************************
   // *** FUNCTIONS THAT CAN BE OVERRIDDEN BY DEVELOPERS
@@ -641,12 +642,10 @@ var Store = declare( null,  {
     conditions.and = [];
     conditions.or = [];
 
-
     // Add filters to the selector
     for( var filterField in filters ){
 
       var filterValue = filters[ filterField ];
-
 
       // There is a slim chance that  self.onlineSearchSchema.structure[ filterField ] is not there:
       // it happens in case the request is from API and it required a field available
@@ -700,6 +699,7 @@ var Store = declare( null,  {
       if( conditions.or.length === 0 ) delete conditions.or;
 
       console.log("CONDITIONS: ", conditions );
+      console.log("SORT: ", sort );
 
       cb( null, {
         conditions: conditions,
@@ -907,13 +907,12 @@ var Store = declare( null,  {
     if( typeof( request.options.sort ) === 'undefined' || request.options.sort === null ) request.options.sort = {}; 
     if( typeof( request.options.ranges ) === 'undefined' || request.options.ranges === null ) request.options.ranges = {}; 
 
-    // Sort by self.positionField if sort is empty and self.positionField is defined
-    //if( Object.keys( options.sort ).length === 0 && self.positionField ){
-    //  options.sort[ self.positionField ] = 1;
-    //}
-
-
     console.log("FILTERS: ", request.options.filters );
+
+    // Add the default sort if no sorting options were passed
+    if(Object.getOwnPropertyNames( request.options.sort ).length === 0 && self.defaultSort){
+      request.options.sort = self.defaultSort;
+    }
 
     self._queryMakeSelector( request.remote, request.options.filters, request.options.sort, request.options.ranges, function( err, selector ){
       if( err ){
