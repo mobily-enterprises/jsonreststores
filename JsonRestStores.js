@@ -677,8 +677,9 @@ var Store = declare( null,  {
             field = element.field || filterField;
             type = element.type || 'eq';
             condition = element.condition || 'and';
+            value = element.value || filters[ filterField ];
 
-            conditions[ condition ].push( { field: field, type: type, value: filters[ filterField ] } );
+            conditions[ condition ].push( { field: field, type: type, value: value } );
           });
 
         }
@@ -1767,7 +1768,16 @@ var Store = declare( null,  {
     }
 
     // OK, everything is dandy: work out base URL and id, and create the Express routes
-    var idName = url.match( /:\w*$/ )[0];
+    //
+    // First, look for the last /some/:word in the URL
+    var idName = url.match( /:\w*$/ );
+    if( ! idName ){
+      throw( new Error("A store's URL needs to end with a :columned token representing its ID, this is not valid: " + url ) );
+    } else {
+      // Found it: normalise it to a simple string rather than the 1 element array we received
+      idName = idName[0];
+    }
+
     url = url.replace( /:\w*$/, '');
 
     // Make entries in "app", so that the application
@@ -1779,12 +1789,9 @@ var Store = declare( null,  {
     app.delete(   url + idName, this.getRequestHandler( 'Delete') );
   },
 
-
-
   // ****************************************************
   // *** API (REST FUNCTIONS AS OBJECT METHODS)
   // ****************************************************
-
 
   apiGet: function( id, options, next){
 
