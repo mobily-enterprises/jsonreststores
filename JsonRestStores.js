@@ -177,11 +177,8 @@ var Store = declare( null,  {
   reposition: function( doc, putBefore, putDefaultPosition, existing, cb ){
     if( typeof( cb ) === 'undefined' ) cb = function(){};
 
-    console.log("CALLED REPOSITION ON:", doc, putBefore, putDefaultPosition, existing );
-
     // No position field: nothing to do
     if( ! this.dbLayer.positionField ){
-       console.log("JSsonRestStores skipped repositioning as layer doesn't have positionField: ", this.table );
        return cb( null );
     }
     
@@ -205,8 +202,6 @@ var Store = declare( null,  {
         beforeId = null;
       }
     }
-
-    console.log("LAYER'S REPOSITION PARAMETERS BASED ON CALL:", where, beforeId );
 
     this.dbLayer.reposition( doc, where, beforeId, cb );
   },
@@ -721,9 +716,6 @@ var Store = declare( null,  {
       if( conditions.and.length === 0 ) delete conditions.and;
       if( conditions.or.length === 0 ) delete conditions.or;
 
-      console.log("CONDITIONS: ", conditions );
-      console.log("SORT: ", sort );
-
       cb( null, {
         conditions: conditions,
         ranges: ranges,
@@ -929,8 +921,6 @@ var Store = declare( null,  {
     // Paranoid checks
     if( typeof( request.options.sort ) === 'undefined' || request.options.sort === null ) request.options.sort = {}; 
     if( typeof( request.options.ranges ) === 'undefined' || request.options.ranges === null ) request.options.ranges = {}; 
-
-    console.log("FILTERS: ", request.options.filters );
 
     // Add the default sort if no sorting options were passed
     if(Object.getOwnPropertyNames( request.options.sort ).length === 0 && self.defaultSort){
