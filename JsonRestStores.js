@@ -105,7 +105,7 @@ var Store = declare( null,  {
   prepareBeforeSend: function( request, method, p, cb ){ cb( null, p.doc ); },// p takes: { doc }
 
   // Permission stock functions
-  checkPermissions: function( request, method, p, cb ){ cb( null, true ); },// p takes: doc, fullDoc for putExisting, get, delete
+  checkPermissions: function( request, method, p, cb ){ cb( null, true ); },// p takes: { doc, fullDoc} for putExisting, get, delete
   
   // post* functions 
   postValidate: function( request, method, p, cb ){ cb( null ); }, // p takes: {}
@@ -558,7 +558,6 @@ var Store = declare( null,  {
     } else {
       selector = { conditions: { and: [ { field: self.idProperty, type: 'eq', value: request.params[ self.idProperty ] } ] } };
     }
-
 
     // Make up the `updateObject` variable, based on the passed `body`
     for( var i in request.body ) updateObject[ i ] = request.body[ i ];
