@@ -34,6 +34,8 @@ exports = module.exports = declare( null,  {
 
   constructor: function(){
 
+    var self = this;
+
     // The db driver must be defined
     if( self.DbLayer == null ){
       throw( new Error("You must define a db driver in constructor class (creating " + self.storeName + ')' ));
@@ -43,9 +45,9 @@ exports = module.exports = declare( null,  {
     self.collectionName = this.collectionName ? this.collectionName : this.storeName;
 
     // The db layer already has a table called 'collectionName' in the registry!
-    // This store will reuse it
-    var existingDbLayer = self.SimpleDbLayer.getLayer( self.DbLayer, self.collectionName );
-
+    // This store will reuse it. In this case, the class' self.schema, self.nested and
+    // self.hardLimitOnQueries will be ignored and the dbLayer's will be used instead
+    var existingDbLayer = self.DbLayer.getLayer( self.DbLayer, self.collectionName );
     if( existingDbLayer ){
       
       // idProperty must match
@@ -58,18 +60,53 @@ exports = module.exports = declare( null,  {
       self.hardLimitOnQueries = existingDbLayer.hardLimitOnQueries;
 
       self.dbLayer = existingDbLayer;
+
+      // Augment schema making paramIds and onlineSearchSchema searchable
+      self._augmentSchema( existingDbLayer.schema );
+      
+      // Regalculate _searchableHash and _indexGroups as the schema
+      // might have changed a little in terms of what's searchable
+      existingDbLayer._makeSearchableHashAndIndexGroups();
+      
+    } else {
+
+      // Augment schema making paramIds and onlineSearchSchema searchable
+      self._augmentSchema();
+
+      var layerOptions = {
+        schema: self.schema,
+        nested: self.nested,
+        hardLimitOnQueries: self.hardLimitOnQueries,
+
+        idProperty: self.idProperty,
+
+        schemaError: self.UnprocessableEntityError,
+        children: true,
+      };
+      if( self.position ){
+        layerOptions.positionField = '__position';
+        layerOptions.positionBase = self.paramIds.slice( 0, -1 ); // TODO: Check, it was 1,-1, why?!?      
+      }
+
+      // Actually create the layer with the given parameters
+      self.dbLayer = new self.DbLayer( self.collectionName, layerOptions );
     }
+     
+    // TODO: Check that each entry in self.sortableFields is actually marked as "searchable" in
+    // self.schema; otherwise, stop with an error. This is important as any sortable field MUST
+    // be searchable
+  },
 
+  // Augment schema making paramIds and onlineSearchSchema searchable
+  _augmentSchema: function( schema ){
+    var self = this;
 
-    // ******************************************************************************
-    // *** MAKE FIELDS `searchable` IN SCHEMA, IF THEY ARE DEFINED IN `searchSchema`
-    // *** (Including searchOptions)
-    // ******************************************************************************
+    if( ! schema ) schema = self.schema;
 
     // By default, added paramIds will be set as `searchable` in DB `schema`
     for( var i = 0, l = self.paramIds.length; i < l; i ++ ){
       var k = self.paramIds[ i ];
-      self.schema.structure[ k ].searchable = true;
+      schema.structure[ k ].searchable = true;
     }
 
     // Make sure that, for every entry present in onlineSearchSchema,
@@ -79,13 +116,13 @@ exports = module.exports = declare( null,  {
     for( var k in self.onlineSearchSchema.structure ){
     
       var entry = self.onlineSearchSchema.structure[ k ];
-
+      
       // Simple case: no `searchOptions`. So, the search target is 
       // the same as `k`.
       if( typeof( entry.searchOptions ) === 'undefined' ){
 
         if( self.paramIds.indexOf( k ) === -1 ){
-          if( self.schema.structure[ k ] ) self.schema.structure[ k ].searchable = true;
+          if( schema.structure[ k ] ) schema.structure[ k ].searchable = true;
         } 
 
       }
@@ -117,31 +154,7 @@ exports = module.exports = declare( null,  {
     }
 
 
-    // If dbLayer didn't exist already, then create one (using the passed options)
-    if( ! dbLayer ){
-      var layerOptions = {
-        schema: self.schema,
-        nested: self.nested,
-        hardLimitOnQueries: self.hardLimitOnQueries,
-
-        idProperty: self.idProperty,
-
-        schemaError: self.UnprocessableEntityError,
-        children: true,
-      };
-      if( self.position ){
-        layerOptions.positionField = '__position';
-        layerOptions.positionBase = self.paramIds.slice( 0, -1 ); // TODO: Check, it was 1,-1, why?!?      
-      }
-
-      // Actually create the layer with the given parameters
-      self.dbLayer = new self.DbLayer( self.collectionName, layerOptions );
-    }
-
-    // TODO: Check that each entry in self.sortableFields is actually marked as "searchable" in
-    // self.schema; otherwise, stop with an error. This is important as any sortable field MUST
-    // be searchable
-  }
+  },
 
   implementReposition: function( doc, putBefore, putDefaultPosition, existing, cb ){
     if( typeof( cb ) === 'undefined' ) cb = function(){};
@@ -198,9 +211,18 @@ exports = module.exports = declare( null,  {
   },
 
 
-// *********************************************************************
+  // *********************************************************************
   // *** FUNCTIONS THAT ACTUALLY ACCESS DATA THROUGH THE DB DRIVER
   // ********************************************************************* 
+
+  /*
+      * FIRST:
+      *   REMOTE: options.filters, options.sort, options.ranges are created by _initOptionsFromReq
+      *   LOCAL: user sets options.filters, options.sort, options.ranges, options.skipHardLimitOnQueries
+
+      * AND THEN:
+      *   self._queryMakeSelector( filters, sort, ranges ) is called, and returns the full db selector for those options
+  */
 
   _enrichSelectorWithParams: function( selector, params ){
     
@@ -234,7 +256,7 @@ exports = module.exports = declare( null,  {
     return selector;
 
   },
-
+  
 
   implementFetchOne: function( request, cb ){
 
@@ -396,7 +418,8 @@ exports = module.exports = declare( null,  {
       // There is a slim chance that  self.onlineSearchSchema.structure[ filterField ] is not there:
       // it happens in case the request is from API and it required a field available
       // in the main schema but NOT in the search schema
-      var searchable = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchable;
+      //var searchable = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchable;
+      var searchable = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ];
       var searchOptions = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchOptions;
 
       if( searchable || !remote ) {
@@ -453,190 +476,6 @@ exports = module.exports = declare( null,  {
     }
 
   },
-
-
-
-
-
-  // *********************************************************************
-  // *** FUNCTIONS THAT ACTUALLY ACCESS DATA THROUGH THE DB DRIVER
-  // ********************************************************************* 
-
-  _enrichSelectorWithParams: function( selector, params ){
-    
-    var self = this;
-
-    // filter.conditions.and needs to exist and be an object
-    if( typeof( selector.conditions ) === 'undefined' || selector.conditions === null ){
-      selector.conditions = {};
-    }
-    if( typeof( selector.conditions.and ) === 'undefined' || selector.conditions.and === null ){
-      selector.conditions.and = [];
-    } 
-   
-    // Add param IDs as "AND" conditions to the query
-    self.paramIds.forEach( function( paramId ){
-      if( typeof( params[ paramId ]) !== 'undefined' ){
-        selector.conditions.and.push( { field: paramId, type: 'eq', value: params[ paramId ] } );
-      }
-    });
-
-    // Remove 'and' array from selector condition if it is empty
-    if (selector.conditions.and.length === 0) {
-        delete selector.conditions.and;
-    }
-
-    // Remove conditions object from selector if there is no conditions
-    if (Object.keys(selector.conditions).length === 0) {
-        delete selector.conditions;
-    }
-
-    return selector;
-
-  },
-
-
-  implementFetchOne: function( request, cb ){
-
-    var self = this;
-
-    // Make up the filter, based on the store's IDs (used as filters).
-    var selector = {};
-
-    // Make up the selector.
-    // Remote requests need to have the full filter based on request.params. Local ones
-    // only have to have (and I mean HAVE TO) the idProperty
-    if( request.remote ){
-       self._enrichSelectorWithParams( selector, request.params );
-    } else {
-      selector = { conditions: { and: [ { field: self.idProperty, type: 'eq', value: request.params[ self.idProperty ] } ] } };
-    }
-
-    // Make the database call 
-    self.dbLayer.select( selector, { children: true }, function( err, docs ){
-      if( err ){
-        cb( err );
-      } else {
-
-        if( docs.length === 0 ){
-          cb( null, null );
-        } else if( docs.length !== 1 ){
-
-          cb( new self.ServiceUnavailableError({
-            message: "implementFetchOne fetched more than 1 record",
-            data: {
-              length: docs.length,
-              selector: selector,
-              store: self.storeName
-            }
-          }));
-        } else {
-          cb( null, docs[ 0 ] );
-        }
-      }
-    });
-
-  }, 
-
-  implementInsert: function( request, generatedId, cb ){
-   
-    var self = this;
-
-    var record = {};
-
-    // Make up the `record` variable, based on the passed `body`
-    for( var k in request.body ) record[ k ] = request.body[ k ];
-    delete record._children;
-
-    // If generatedId was passed, force the record to
-    // that id
-    if( generatedId ) record[ self.idProperty ] = generatedId;
-
-    self.dbLayer.insert( record, { returnRecord: true, skipValidation: true, children: true }, cb );
-  },
-
-  implementUpdate: function( request, cb ){
-
-    var self = this;
-    var updateObject = {};
-
-    // Make up the filter, based on the store's IDs (used as filters).
-    var selector = {};
-
-    // Make up the selector.
-    // Remote requests need to have the full filter based on request.params. Local ones
-    // only have to have (and I mean HAVE TO) the idProperty
-    if( request.remote ){
-       self._enrichSelectorWithParams( selector, request.params );
-    } else {
-      selector = { conditions: { and: [ { field: self.idProperty, type: 'eq', value: request.params[ self.idProperty ] } ] } };
-    }
-
-    // Make up the `updateObject` variable, based on the passed `body`
-    for( var i in request.body ) updateObject[ i ] = request.body[ i ];
-    delete updateObject._children;
-
-    // Obsoleted by self._enrichBodyWithParamIdsIfRemote
-    // Add param IDs to the record that is being written (updated)
-    //self.paramIds.forEach( function( paramId ){
-    //  if( typeof( request.params[ paramId ] ) !== 'undefined' ){
-    //    updateObject[ paramId ] = request.params[ paramId ];
-    //  }
-    //});
-
-    // Only delete unset fields if there is no piggyField.
-    // If piggyField is there, this is a single-record update
-    var deleteUnsetFields = ! self.piggyField;
-
-    self.dbLayer.update( selector, updateObject, { deleteUnsetFields: deleteUnsetFields, multi: false, skipValidation: true }, function( err, howMany ){
-      if( err ){
-        cb( err );
-      } else {
-
-        self.dbLayer.select( selector, { children: true }, function( err, docs ){
-          if( err ){
-            cb( err );
-          } else {
-            if( docs.length === 0 ){
-              cb( null, null );
-            } else if( docs.length !== 1 ){
-
-              cb( new self.ServiceUnavailableError({
-                message: "dbLayer.update updated more than 1 record",
-                data: { 
-                  length: docs.length,
-                  selector: selector,
-                  store: self.storeName
-                }
-              }));
-
-            } else {
-              cb( null, docs[ 0 ] );
-            }
-          }
-        });
-      }
-    });
-  },
-
-
-  implementDelete: function( request, cb ){
-
-    var self = this;
-    var selector = {};
-
-    // Make up the selector.
-    // Remote requests need to have the full filter based on request.params. Local ones
-    // only have to have (and I mean HAVE TO) the idProperty
-    if( request.remote ){
-       self._enrichSelectorWithParams( selector, request.params );
-    } else {
-      selector = { conditions: { and: [ { field: self.idProperty, type: 'eq', value: request.params[ self.idProperty ] } ] } };
-    }
-
-    self.dbLayer.delete( selector, { multi: false, skipValidation: true }, cb );
-  },
-
 
   implementQuery: function( request, next ){
 
@@ -681,124 +520,4 @@ exports = module.exports = declare( null,  {
 
 
 
-
-  _queryMakeSelector: function( remote, filters, sort, ranges, cb ){
-
-    var self = this;
-    var errors = [];
-    var field, type, condition;
-
-    // Define and set the conditions variable, which will be returned
-    var conditions = {};
-    conditions.and = [];
-    conditions.or = [];
-
-    // Add filters to the selector
-    for( var filterField in filters ){
-
-      var filterValue = filters[ filterField ];
-
-      // There is a slim chance that  self.onlineSearchSchema.structure[ filterField ] is not there:
-      // it happens in case the request is from API and it required a field available
-      // in the main schema but NOT in the search schema
-      var searchable = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchable;
-      var searchOptions = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchOptions;
-
-      if( searchable || !remote ) {
-
-        // searchOptions is not an object/is null: just set default conditions (equality with field)
-        if( typeof( searchOptions ) !== 'object' || searchOptions === null ){
-          field = filterField;
-          type = 'eq';
-          condition = 'and';
-          conditions[ condition ].push( { field: field, type: type, value: filters[ filterField ] } );
-
-        // searchOptions IS an object: it might be an array or a single condition set
-        } else {
-         
-          // Make sure elements ends up as an array regardless
-          if( Array.isArray( searchOptions ) ){
-            var elements = searchOptions;
-          } else {
-            var elements = [ searchOptions ];
-          }
-
-          elements.forEach( function( element ){
-
-            field = element.field || filterField;
-            type = element.type || 'eq';
-            condition = element.condition || 'and';
-            value = element.value || filters[ filterField ];
-
-            conditions[ condition ].push( { field: field, type: type, value: value } );
-          });
-
-        }
-
-      // Field is not searchable: error!
-      } else {
-        errors.push( { field: filterField, message: 'Field not allowed in search: ' + filterField + ' in ' + self.storeName } );
-      }
-
-    }
-
-    // Call the callback with an error, or with the selector (containing conditions, ranges, sort)
-    if( errors.length ){
-      cb( new self.UnprocessableEntityError( { errors: errors } ) );
-    } else {
-
-      if( conditions.and.length === 0 ) delete conditions.and;
-      if( conditions.or.length === 0 ) delete conditions.or;
-
-      cb( null, {
-        conditions: conditions,
-        ranges: ranges,
-        sort: sort,
-      } );
-    }
-
-  },
-
-
-  /*
-      * FIRST:
-      *   REMOTE: options.filters, options.sort, options.ranges are created by _initOptionsFromReq
-      *   LOCAL: user sets options.filters, options.sort, options.ranges, options.skipHardLimitOnQueries
-
-      * AND THEN:
-      *   self._queryMakeSelector( filters, sort, ranges ) is called, and returns the full db selector for those options
-  */
-
-  _enrichSelectorWithParams: function( selector, params ){
-    
-    var self = this;
-
-    // filter.conditions.and needs to exist and be an object
-    if( typeof( selector.conditions ) === 'undefined' || selector.conditions === null ){
-      selector.conditions = {};
-    }
-    if( typeof( selector.conditions.and ) === 'undefined' || selector.conditions.and === null ){
-      selector.conditions.and = [];
-    } 
-   
-    // Add param IDs as "AND" conditions to the query
-    self.paramIds.forEach( function( paramId ){
-      if( typeof( params[ paramId ]) !== 'undefined' ){
-        selector.conditions.and.push( { field: paramId, type: 'eq', value: params[ paramId ] } );
-      }
-    });
-
-    // Remove 'and' array from selector condition if it is empty
-    if (selector.conditions.and.length === 0) {
-        delete selector.conditions.and;
-    }
-
-    // Remove conditions object from selector if there is no conditions
-    if (Object.keys(selector.conditions).length === 0) {
-        delete selector.conditions;
-    }
-
-    return selector;
-
-  },
 });
