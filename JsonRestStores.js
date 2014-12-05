@@ -27,6 +27,7 @@ var
 , url = require('url')
 , async = require('async')
 , querystring = require('querystring')
+, SimpleDbLayerMixin = require('./SimpleDbLayerMixin.js')
 ;
 
 var Store = declare( null,  {
@@ -1658,3 +1659,5 @@ exports = module.exports = Store;
 Store.artificialDelay = 0;
 Store.registry = {};
 
+// Embed the mixin so that it's available (it's a VERY common mixin)
+Store.SimpleDbLayerMixin = SimpleDbLayerMixin;
