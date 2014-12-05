@@ -8,13 +8,30 @@ var
 , querystring = require('querystring')
 ;
 
-exports = module.exports = declare( null,  {
+/*
+KEEP IN MIND:
+- If two stores have the same collectionName, the second one will reuse the existing one.
+- This means that you can create the stores beforehand, and then get JsonRestStores to use them (nice!)
+- In case of reusing, schema, nested, idProperty and hardLimitOnQueries will be ignored (the dbLayer's are used)
+- SimpleDbLayerMixin must be passed schema, nested, hardLimitOnQueries, idproperty to create the layer with
 
-  dbLayer: null, // Create by constructor: an instance of dbLayer()
+ALSO:
+- If collectionName is not passed, it's assumed to be the same as storeName
+*/
+
+exports = module.exports = declare( null,  {
 
   // Must be defined for this module to be functional
   DbLayer: null,
   
+  // The object representing the table in the DB layer
+  dbLayer: null,
+
+  nested: [],
+  hardLimitOnQueries: 50,
+
+  collectionName: null,
+
   constructor: function(){
 
     // The db driver must be defined
@@ -22,9 +39,12 @@ exports = module.exports = declare( null,  {
       throw( new Error("You must define a db driver in constructor class (creating " + self.storeName + ')' ));
     }
 
+    // If collectionName is not specified, it will deduct it from storeName
+    self.collectionName = this.collectionName ? this.collectionName : this.storeName;
+
     // The db layer already has a table called 'collectionName' in the registry!
     // This store will reuse it
-    var existingDbLayer = self.DbLayer.getLayer( self.collectionName );
+    var existingDbLayer = self.SimpleDbLayer.getLayer( self.DbLayer, self.collectionName );
 
     if( existingDbLayer ){
       
@@ -105,6 +125,7 @@ exports = module.exports = declare( null,  {
         hardLimitOnQueries: self.hardLimitOnQueries,
 
         idProperty: self.idProperty,
+
         schemaError: self.UnprocessableEntityError,
         children: true,
       };
