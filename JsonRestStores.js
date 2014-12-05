@@ -84,8 +84,7 @@ var Store = declare( null,  {
 
   implementUpdate: function( request, cb ){
     throw("implementUpdate not implemented, store is not functional");
-  },:w
-
+  },
   implementDelete: function( request, cb ){
     throw("implementDelete not implemented, store is not functional");
   },
@@ -201,7 +200,7 @@ var Store = declare( null,  {
         }
       }
       self.onlineSearchSchema = new self.schema.constructor( onlineSearchSchemaStructure );
-    }
+    } 
 
     Store.registry[ self.storeName ] = self;
   },
