@@ -9,27 +9,14 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 */
 
 
+
 /*
-
-Out of curiosity, bugs found after VERY thorough unit testing:
-
-* afterPutExisting wasn't called for LOCAL API requests
-* on a PUT UPDATE, the record returned via remote call (as a JSON string) was the object BEFORE extrapolateDoc()
-* prepareBodyPut was split in prepareBodyPutNew and prepareBodyPutExisting, which is logically wrong (prepareBody needed to happen at the very beginning)
-* handleDelete was not taken into consideration at all
-
-Funnily enough, it didn't catch a bug as big as the sky with the Range headers returning the wrong information (partial counts of objects) and not dealing with an important special case (zero results) 
-
-*/
-
-/* 
-KEEP IN MIND:
-
-- SimpleDbLayer MUST enforce the one-object=one-table rule, otherwise its registry won't work
-- JsonRestStores must be passed schema, nested, idproperty  to create the layer with
-- If two stores have the same collectionName, the second one will reuse the existing one.
-- This means that you can create the stores beforehand, and then get JsonRestStores to use them (nice!)
-- In case of reusing, schema, nested, and hardLimitOnQueries, sortableFields mustn't be declared, and idProperty needs to match
+NOTE. When creating a store, you can take the following shortcuts:
+  * Don't specify `paramIds`. If not specified, it will be worked out from publicURL
+  * Don't specify `idProperty`. If idProperty not specified, it will be assumed last element of paramIds
+  * Don't specify `paramIds` in schema. They will be added to the schema as `{type: 'id' }` automatically
+  * Don't specify `onlineSearchSchema`. It will be worked out taking all schema element marked as
+    `searchable: true` (except paramIds)
 */
 
 var 
@@ -49,26 +36,17 @@ var Store = declare( null,  {
   // ***********************************************************
 
   storeName: null,
+  schema: null,
 
   // ****************************************************
   // *** ATTRIBUTES THAT CAN TO BE DEFINED IN PROTOTYPE
   // ****************************************************
 
   onlineSearchSchema: null, // If not set in prototype, worked out from `schema` by constructor
-  collectionName: null, // If not set in prototype, is set as `storeName` by constructor
+  sortableFields: [],
   publicURL: null, // Not mandatory (if you want your store to be API-only for some reason)
   idProperty: null, // If not set in prototype, taken as last item of paramIds)
   paramIds: [], // Only allowed if publicURL is not set
-
-  // *****************************************************************
-  // *** ATTRIBUTES USED TO CREATE A STORE (IF NOT IN DBLAYER CACHE)
-  // *** (Note: only allowed if collectionName not already in dbLayer cache
-  // *****************************************************************
-
-  schema: null,
-  nested: [],
-  hardLimitOnQueries: 50,
-  sortableFields: [],
 
   // ****************************************************
   // *** ATTRIBUTES THAT DEFINE STORE'S BEHAVIOUR
@@ -105,7 +83,7 @@ var Store = declare( null,  {
 
   implementUpdate: function( request, cb ){
     throw("implementUpdate not implemented, store is not functional");
-  },
+  },:w
 
   implementDelete: function( request, cb ){
     throw("implementDelete not implemented, store is not functional");
@@ -137,10 +115,7 @@ var Store = declare( null,  {
   postDbOperation: function( request, method, p, cb ){ cb( null ); },// p takes: { fullDoc || queryDoc }
   postEverything: function( request, method, p, cb ) { cb( null ); },// p takes: all sorts
 
-  // #3
   logError: function( error ){ },
-
-  // New signature for EVERYTHING: function( request, method, params, cb );
 
   formatErrorResponse: function( error ){
 
@@ -188,9 +163,6 @@ var Store = declare( null,  {
       throw( new Error("You must define a schema") );
     }
 
-    // If collectionName is not specified, it will deduct it from storeName
-    self.collectionName = this.collectionName ? this.collectionName : this.storeName;
-
     // If paramId is not specified, takes it from publicURL
     if( self.paramIds.length === 0 && typeof( self.publicURL ) === 'string' ){
       self.paramIds =  ( self.publicURL + '/').match(/:.*?\/+/g).map( function(i){return i.substr(1, i.length - 2 )  } );
@@ -230,10 +202,8 @@ var Store = declare( null,  {
       self.onlineSearchSchema = new self.schema.constructor( onlineSearchSchemaStructure );
     }
 
-    // #2
     Store.registry[ self.storeName ] = self;
   },
-
 
 
   _initOptionsFromReq: function( mn, req ){
@@ -1687,67 +1657,4 @@ Store.OneFieldStoreMixin = declare( null,  {
 exports = module.exports = Store;
 Store.artificialDelay = 0;
 Store.registry = {};
-
-
-
-
-
-    // #1
-    // Cannot have paramIds set up AS WELL AS publicURL -- one or the other
-    /*
-    if( self.paramIds && self.publicURL ){
-       throw( new Error( "paramIds and publicURL are mutually exclusive when creating a store" ) );
-    }
-    */
-
-    /* 
-    // #2 
-
-    // Took this out as the rational is that if something is in `onlineSearchSchema`, then
-    // it's searchable. I think this was here from before, when `onlineSearchSchema` could be
-    // set as the same as `schema`
-
-    // If onlineSearchSchema WAS defined, then add `searchable` to all entries
-    // Since it's a defined search schema, all of its entries need to be
-    // searchable regardless.
-    } else {
-
-      for( var k in self.onlineSearchSchema.structure ){
-        self.onlineSearchSchema.structure[ k ].searchable = true;
-      }
-    }
-    */
-
-
-/*
-// #3
-// Old signatures
-
-  // Doc extrapolation and preparation calls (common amongst all ops)
-  extrapolateDoc: function( request, fullDoc, cb ){ cb( null, fullDoc ); },
-  prepareBeforeSend: function( request, doc, cb ){ cb( null ); },
-  prepareBody: function( request, body, method, cb ){ cb( null ); },
-
-  // "after" calls -- now 'postEverything()'
-  afterPutNew: function( request, doc, fullDoc, overwrite, cb ){ cb( null ) },
-  afterPutExisting: function( request, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb ){ cb( null ) },
-  afterPost: function( request, doc, fullDoc, cb){ cb( null ); },
-  afterDelete: function( request, doc, fullDoc, cb ){ cb( null ); },
-  afterGet: function( request, doc, fullDoc, cb ) { cb( null ); },
-  afterGetQuery: function( request, queryDocs, cb ) { cb( null ); },
-
-  // Permission stock functions
-  checkPermissionsPost: function( request, cb ){ cb( null, true ); },
-  checkPermissionsPutNew: function( request, cb ){ cb( null, true ); },
-  checkPermissionsPutExisting: function( request, doc, fullDoc, cb ){ cb( null, true ); },
-  checkPermissionsGet: function( request, doc, fullDoc, cb ){ cb( null, true ); },
-  checkPermissionsGetQuery: function( request, cb ){ cb( null, true ); },
-  checkPermissionsDelete: function( request, doc, fullDoc, cb ){ cb( null, true ); },
-
-  // Body preparation, post-validation and post-check-permissions functions
-  postValidate: function( request, body, method, cb ){ cb( null ); },
-  postCheckPermissions: function( request, method, cb ){ cb( null ); },
-  postDbOperation: function( request, method, fullDoc, cb ){ cb( null ); },
-
-*/
 
