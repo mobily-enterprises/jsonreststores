@@ -419,7 +419,7 @@ exports = module.exports = declare( null,  {
       // it happens in case the request is from API and it required a field available
       // in the main schema but NOT in the search schema
       //var searchable = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchable;
-      var searchable = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ];
+      var searchable = self.onlineSearchSchema.structure[ filterField ];
       var searchOptions = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchOptions;
 
       if( searchable || !remote ) {
@@ -500,9 +500,10 @@ exports = module.exports = declare( null,  {
     if( typeof( request.options.ranges ) === 'undefined' || request.options.ranges === null ) request.options.ranges = {}; 
 
     // Add the default sort if no sorting options were passed
-    if(Object.getOwnPropertyNames( request.options.sort ).length === 0 && self.defaultSort){
-      request.options.sort = self.defaultSort;
-    }
+    // NOTE: Moved to JsonRestStores
+    //if(Object.getOwnPropertyNames( request.options.sort ).length === 0 && self.defaultSort){
+    //  request.options.sort = self.defaultSort;
+    //}
 
     self._queryMakeSelector( request.remote, request.options.filters, request.options.sort, request.options.ranges, function( err, selector ){
       if( err ){
