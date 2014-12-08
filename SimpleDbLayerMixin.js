@@ -156,38 +156,6 @@ exports = module.exports = declare( null,  {
 
   },
 
-  implementReposition: function( doc, putBefore, putDefaultPosition, existing, cb ){
-    if( typeof( cb ) === 'undefined' ) cb = function(){};
-
-    // No position field: nothing to do
-    if( ! this.dbLayer.positionField ){
-       return cb( null );
-    }
-    
-    // where can be `start, `end`, or `at`. If it's `at`, then beforeId will be considered
-    var where, beforeId;
-
-    // CASE #1: putBefore is set: where = at, beforeId = putBefore 
-    if( putBefore ) {
-      where = 'at';
-      beforeId = putBefore;
-
-    // CASE #2: putDefaultPosition is set: where = putDefaultPosition, beforeId = null
-    } else if( putDefaultPosition ){
-      where = putDefaultPosition;
-      beforeId = null;
-
-    // CASE #3: putBefore and putDefaultPosition are not set. IF it's a new record, where = end, beforeId = null
-    } else {
-      if( !existing ){
-        where = 'end';
-        beforeId = null;
-      }
-    }
-
-    this.dbLayer.reposition( doc, where, beforeId, cb );
-  },
-
 
   // *********************************************************************
   // *** INDEXING FUNCTIONS (STUBS TO THE LAYER'S INDEXING FUNCTIONS)
@@ -256,7 +224,19 @@ exports = module.exports = declare( null,  {
     return selector;
 
   },
+
+  implementReposition: function( doc, where, beforeId, cb ){
+    if( typeof( cb ) === 'undefined' ) cb = function(){};
+
+    // No position field: nothing to do
+    if( ! this.dbLayer.positionField ){
+       return cb( null );
+    }
   
+    // Doesn't do much: just tell the layer to repositon  
+    this.dbLayer.reposition( doc, where, beforeId, cb );
+
+  },
 
   implementFetchOne: function( request, cb ){
 
@@ -317,7 +297,7 @@ exports = module.exports = declare( null,  {
     self.dbLayer.insert( record, { returnRecord: true, skipValidation: true, children: true }, cb );
   },
 
-  implementUpdate: function( request, cb ){
+  implementUpdate: function( request, deleteUnsetFields, cb ){
 
     var self = this;
     var updateObject = {};
@@ -347,8 +327,8 @@ exports = module.exports = declare( null,  {
     //});
 
     // Only delete unset fields if there is no piggyField.
-    // If piggyField is there, this is a single-record update
-    var deleteUnsetFields = ! self.piggyField;
+    // If piggyField is there, this is a single-field update
+    //var deleteUnsetFields = ! self.piggyField;
 
     self.dbLayer.update( selector, updateObject, { deleteUnsetFields: deleteUnsetFields, multi: false, skipValidation: true }, function( err, howMany ){
       if( err ){

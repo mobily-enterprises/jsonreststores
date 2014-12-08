@@ -4,19 +4,38 @@ JsonRestStores
 JsonRestStores is the best way to create REST stores that return JSON data.
 Rundown of features:
 
-* **DRY approach**. Everything works as you'd expect it to, even though you are free to tweak things.
-* **Database-agnostic**. The module itself provides you with _everything_ except the data-manipulation methods, which are up to you to implement.
-* **Schema based**. Anything coming from the client will be validated and cast.
-* **API-ready**. Every store function can be called via API. API calls have more relaxed constraints.
-* **Tons of hooks**. You can hook yourself to every step of the store processing process: `afterValidate()`,   `afterCheckPermissions()`, `afterDbOperation()`, `afterEverything()`
-* **Authentication hooks**. Only implement things once, and keep authentication tight.
-* **Mixin-based**. You can add functionalities easily.
-* **Inheriting stores**. You can easily derive a store from another one.
-* **Simple error**. Errors can be chained up, or they can make the store return them to the client.
+* Database-agnostic. The module itself simply 
 
-JsonRestStores even comes with its own database layer mixin, SimpleDbLayerMixin, which will implement all of the important methods that will read, write and delete elements from a database. The mixin uses [simpledblayer](https://github.com/mercmobily/simpledblayer) to access the database. For now, only MongoDb is supported but more will come.
+
+a one-stop module that allows you to create fully functional, configurable Json REST stores using NodeJS.
+Rundown of features:
+
+* 
+
+
+A store can be inherited from another store, and can define all sorts of hooks to configure how it behaves and what it does (including permissions).
+
+
+
+It even creates the right indexes for you. It's also very easy to create "nested" stores (`http://www.example.com/bookings/1234/users` for example).
+
+Database access is done using [simpledblayer](https://github.com/mercmobily/simpledblayer), which at the moment supports:
+
+* MongoDb
+* TingoDb
+* ...more coming soon
+
+It's really simple to develop more layers (e.g. MariaDb, Postgresql, CouchDb, etc.);
 
 And don't worry, after an overly long introduction, I do have a [quickstart](https://github.com/mercmobily/JsonRestStores#quick-start)!
+
+# DOCUMENTATION REWRITE IN PROGRESS
+
+Please look for "YOU ARE HERE (REDOCUMENTING)" -- that's where I am at in terms of redocumenting JsonRestStores.
+
+I rewrote big chunks of it: a Json REST store is now identified by an object, rather than a constructor. This ensures really high performances, since the "request" object I create is minimal.
+
+The change in API is really small, and it should be the last one in a while (if I see that it's stable enough, I will turn _this_ into 1.0 so that it will ensure no more API changes).
 
 # Introduction to (JSON) REST stores
 
@@ -43,14 +62,17 @@ And then to access users for that booking:
 It sounds simple enough (although it's only two tables and it already looks rather boring). It gets tricky when you consider that:
 
 * You need to make sure that permissions are always carefully checked. For example, only users that are part of booking `1234` can `GET /bookings/:bookingId/users`
-* When implementing `GET /bookings/`, you need to parse the URL in order to enable data filtering (for example, `GET /bookings?dateFrom=1976-01-10&name=Tony` will need to filter, on the database, all bookings made after the 10th of January 1976 by Tony).
-* When implementing `GET /bookings/`, you need to return the right `Content-Range` HTTP headers in your results so that the clients know what range they are getting.
+* You need to make sure you behave correctly in your `PUT` calls, as data might already be there
+* When implementing `GET /bookings/`, you need to make sure people can filter and order by the right fields by parsing the URL correctly. When you do that, you need to keep in mind that different parameters will need to trigger different filters on the database (for example, `GET /bookings?dateFrom=1976-01-10&name=Tony` will need to filter, on the database, all bookings made after the 10th of January 1976 by Tony).
+* When implementing `GET /bookings/`, you need to return the right `Content-Range` HTTP headers in your results
 * When implementing `GET /bookings/`, you also need to make sure you take into account any `Range` header set by the client, who might only want to receive a subset of the data
 * With `POST` and `PUT`, you need to make sure that data is validated against some kind of schema, and return the appropriate errors if it's not.
-* With `PUT`, you need to consider the HTTP headers `If-match` and `If-none-match` to see if you can//should//must overwrite existing records 
-* All unimplemented methods should return a `501 Unimplemented Method` server response
+* With `PUT`, you need to consider the HTTP headers `If-match` and `If-none-match` to see if you can//should//must overwrite existing records
+* You must remember to get your filters right: when implementing `GET /bookings/:bookingId/users/:userId`, you must make sure that you are making queries to the database without forgetting `:bookingId`. This sounds pretty obvious with only 2 stores, gets tricky when you have a few dozens.
+* Don't forget about URL format validation: you need to make sure that anything submitted by the user is sanitised etc.
+* You need to create database indexes the right way, so that searches are not slow.
 
-This is only a short list of obvious things. There are many more to consider. The point is, when you make a store you should be focusing on the important parts (the data you manipulate, and permission checking) rather than repetitive, boilerplate code.
+This is only a short list of obvious things. There are many more to consider.
 
 With JsonRestStores, you can create JSON REST stores without ever worrying about any one of those things. You can concentrate on what _really_ matters: your application and your application's logic.
 
@@ -62,9 +84,19 @@ I suggest you read [John Calcote's article about REST, PUT, POST, etc.](http://j
 
 You should also read my small summary of [what a REST store actually provides](https://github.com/mercmobily/JsonRestStores/blob/master/jsonrest.md).
 
-At this stage, the stores are 100% compatible with [Dojo's JsonRest](http://dojotoolkit.org/reference-guide/1.8/dojo/store/JsonRest.html) as well as [Sitepen's dstore](http://dstorejs.io/).
+To understand stores and client interaction, you can read [Dojo's JsonRest stores documentation](http://dojotoolkit.org/reference-guide/1.8/dojo/store/JsonRest.html), because the stores created using this module are 100% compliant with what Dojo's basic JsonRest module sends to servers.
 
+## JsonRestStores' features
 
+* Follows the KISS principle: everything is kept as simple as possible.
+* 100% compliant with [Dojo's JsonRest stores](http://dojotoolkit.org/reference-guide/1.8/dojo/store/JsonRest.html). This means for example that the server will handle the `if-match` and `if-none-match` headers (for `PUT` calls), or will take into consideration the `range` headers and provide the right `Content-range` header in the responses (for `GET` calls) and so on.
+* It's database-agnostic. It uses simpledblayer to access data, and it can also manipulate subsets of existing data.
+* It uses a simple schema library  simple, extendible data validation. 
+* It uses OOP patterns neatly using simpledeclare: each store is a javascript constructor which inherits from the database-specific constructor (which inherits itself from a generic, base constructor).
+* All unimplemented methods will return a `501 Unimplemented Method` server response
+* It's able to manipulate only a subset of your DB data. If you have existing tables/collections, JsonRestStores will only ever touch the fields defined in your store's schema.
+* It will use SimpleDbLayer, which will create indexes according to what's marked as `searchable` in the schema; this includes creating compound keys with the store's IDs as prefix when possible/appropriate
+* It's highly addictive. You will never want to write an API call by hand again.
 
 # Quickstart
 
@@ -74,13 +106,195 @@ Jsonreststores is a module that creates managed routes for you, and integrates v
 
 Here is a list of modules used by JsonRestStores. You should be at least slightly familiar with them.
 
-* [SimpleDeclare - Github](https://github.com/mercmobily/SimpleDeclare). This module makes creation of constructor functions/classes a breeze. Using SimpleDeclare is a must when using JsonRestStores -- unless you want to drown in unreadable code.
+* [SimpleDeclare - Github](https://github.com/mercmobily/SimpleDeclare). This module makes creation of constructor functions/classes a breeze. Using SimpleDeclare is a must when using JsonRestStores -- unless you want to drown in unreadable code
+
+* [simpledblayer](https://github.com/mercmobily/simpledblayer). This module provides a constructor function what will act as the DB layer for JsonRestStores. Any DB supported by simpledblayer will work with JsonRestStores.
 
 * [SimpleSchema - Github](https://github.com/mercmobily/SimpleSchema). This module makes it easy (and I mean, really easy) to define a schema and validate/cast data against it. It's really simple to extend a schema as well. It's a no-fuss module.
 
 * [Allhttperrors](https://npmjs.org/package/allhttperrors). A simple module that creats `Error` objects for all of the possible HTTP statuses.
 
 Note that all of these modules are fully unit-tested, and are written and maintained by me.
+
+## Using JsonRestStores in your ExpressJS app
+
+In order to use JsonRestStores with MongoDb for example you will need to:
+
+* Create a database connection
+* Extend SimpleDbLayer with database-specific functionalities
+* Extend SimpleSchema with database-specific functionalities (so that it can deal with the DB's id fields, for example)
+* Create stores and get JsonRestStores to set routes in your `app` variable
+
+The first three points are very much db-specific, whereas the last one would stay the same regardless of the database picked. The best thing to do is to enapsulate all of the db-specific functionality in their own module.
+
+Here is how you would change a stock `app.js` file if you used MongoDb:
+
+    /**
+     * Module dependencies.
+     */
+
+    var express = require('express');
+    var routes = require('./routes');
+    var user = require('./routes/user');
+    var http = require('http');
+    var path = require('path');
+
+   
+    var app = express();
+    
+    // ADDED 11 lines:
+    // The whole app will be wrapped around the connecton
+    var dbSpecific = require('./dbSpecific-mongo.js'); // ADDED
+    var storesRoutes = require('./storesRoutes.js'); // ADDED
+    dbSpecific.connect( 'mongodb://localhost/tests', {}, function( err ){
+      if( err ){
+        console.error("Could not connect to the database server");
+        process.exit(1);
+      } else {
+        // From this point on, dbConnect.db will be available to anybody
+        // requiring `dbConnect.js`
+
+        // all environments
+        app.set('port', process.env.PORT || 3000);
+        app.set('views', __dirname + '/views');
+        app.set('view engine', 'jade');
+        app.use(express.favicon());
+        app.use(express.logger('dev'));
+        app.use(express.bodyParser());
+        app.use(express.methodOverride());
+        app.use(app.router);
+        app.use(express.static(path.join(__dirname, 'public')));
+    
+        // ADDED 1 line: Set JsonRestStore routes for REST stores
+        storesRoutes( app ); // ADDED
+    
+        // development only
+        if ('development' == app.get('env')) {
+          app.use(express.errorHandler());
+        } 
+
+        app.get('/', routes.index);
+        app.get('/users', user.list);
+
+        http.createServer(app).listen(app.get('port'), function(){
+          console.log('Express server listening on port ' + app.get('port'));
+        });
+
+      // ADDED 2 lines: extra closing brackets
+      }
+    });
+
+Your `dbSpecific-mongo.js` file would look like this:
+
+    // Generic modules
+    var declare = require('simpledeclare'); // Declare module
+    var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
+    var SimpleSchema = require('simpleschema');  // The main schema module
+    var SimpleDbLayer = require('simpledblayer'); // The main DB layer module
+
+    // Mongo-specific modules
+    var mongo = require("mongodb"); // MongoDB
+    var SimpleSchemaMongo = require('simpleschema-mongo'); // Mongo-specific functions for the schema module
+    var SimpleDbLayerMongo = require('simpledblayer-mongo'); // Mongo-specific functions for the DB layer
+    
+    exports.db = null
+    exports.DbLayer = null;
+    exports.Schema = null;
+    exports.JRS = null;
+
+    exports.connect = function( url, options, cb ){
+      mongo.MongoClient.connect( url, options, function( err, db ){
+        if( err ){
+          cb( err );
+        } else {
+          exports.db = db;
+          exports.Schema = declare( [ SimpleSchema, SimpleSchemaMongo ] );
+          exports.DbLayer = declare( [ SimpleDbLayer, SimpleDbLayerMongo ], { db: db } );
+          exports.JRS = declare( JsonRestStores, { DbLayer: exports.DbLayer } );
+
+          cb( null );
+        }
+      });
+    }    
+
+
+It's basically just a module that exports all of the db-specific constructor, and a `connect()` function that will assign something meaningul to those variable.
+
+* `JsonRestStores` need a DbLayer to work. The DbLayer is the `SimpleDbLayer` class, extended with the MongoDB-specific `SimpleDbLayerMongo` class (which will allow it to _acutally_ access the MongoDB database)
+* `JsonRestStores` stores are always defined with a Schema. The `SimpleSchema` class is extended with the MongoDB-specific `SimpleSchemaMongo` class (which allows it to understand and cast Mongo's ID fields property)
+
+Your `storesRoutes.js` file will then use `dbSpecific-mongo.js` to get the those variables:
+
+    var declare = require('simpledeclare'); // Declare module
+    var dbSpecific = require('./dbSpecific-mingo.js');
+
+    exports = module.exports = function( app ){
+
+      var JRS = dbSpecific.JRS;
+      var Schema = dbSpecific.Schema;
+    
+      var Managers = declare( JRS, {
+    
+        schema: new Schema({
+          name   : { type: 'string', trim: 60 },
+          surname: { type: 'string', trim: 60 },
+        }),
+    
+        storeName: 'managers',
+        publicURL: '/managers/:id',
+    
+        handlePut: true,
+        handlePost: true,
+        handleGet: true,
+        handleGetQuery: true,
+        handleDelete: true,
+    
+        hardLimitOnQueries: 50,
+      });
+   
+      var managers = new Managers(); 
+      managers.setAllRoutes( app );
+    }
+
+## TingoDB
+
+What if you want to use TingoDB instead? since everything is encapsulated, all you need to do is write `dbSpecific-tingo.js`, as follows:
+
+    // Generic modules
+    var declare = require('simpledeclare'); // Declare module
+    var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
+    var SimpleSchema = require('simpleschema');  // The main schema module
+    var SimpleDbLayer = require('simpledblayer'); // The main DB layer module
+
+    // Tingo-specific modules
+    var tingo = require("tingodb")({}); // TingoDB
+    var SimpleSchemaTingo = require('simpleschema-tingo'); // Tingo-specific functions for the schema module
+    var SimpleDbLayerTingo = require('simpledblayer-tingo'); // Tingo-specific functions for the DB layer
+    
+    exports.db = null
+    exports.DbLayer = null;
+    exports.Schema = null;
+    exports.JRS = null;
+
+    exports.connect = function( url, options, cb ){
+      try {
+        exports.db = new tingo.Db(url, options );
+      } catch( e ){
+        return cb( e );
+      }
+      exports.Schema = declare( [ SimpleSchema, SimpleSchemaTingo ] );
+      exports.DbLayer = declare( [ SimpleDbLayer, SimpleDbLayerTingo ], { db: exports.db } );
+      exports.JRS = declare( JsonRestStores, { DbLayer: exports.DbLayer } );
+
+      cb( null );
+    }    
+
+At this point you are nearly good to go; you only need some minor modifications:
+
+* In `storesRoutes.js` and `app.js`, change `require('./dbSpecific-mongo.js');` into `require('./dbSpecific-tingo.js');`
+* In `app.js`, change the connection function into `dbSpecific.connect( '/tmp/tests', {}, function( err ){`
+
+In the rest of the documentation, I will assume that your `db`, `JRS` and `Schema` variables are set and will focus on the code that actually creates the stores.
 
 # Store examples
 
@@ -89,9 +303,6 @@ Here are three very common use-cases for JsonRest stores, fully explained:
 ## A basic store
 
 Here is how you make a fully compliant store:
-
-      var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
-      var SimpleSchema = require('simpleschema');  // The main schema module
 
       var Managers = declare( JRS, {
 
@@ -109,53 +320,12 @@ Here is how you make a fully compliant store:
         handleGetQuery: true,
         handleDelete: true,
 
-        constructor: function(){
-          this.data = [];
-        },
-
-
-        implementFetchOne: function( request, cb ){
-          var d = this.data[ request.params[ self.idProperty ] ];
-          return d ? d : null;
-        }, 
-
-        implementInsert: function( request, generatedId, cb ){
-          
-        },
-
-        implementUpdate: function( request, cb ){
-        },
-
-        implementDelete: function( request, cb ){
-        },
-
-        implementQuery: function( request, cb ){
-        },
-
-        implementReposition: function( doc, where, beforeId, cb ){
-
-          switch( where ){
-            case 'at':
-              // Move element somewhere
-            break;
-
-            case 'start':
-              // Move element at the beginning of the array
-            break;
-
-            case 'end':
-              // Move element at the end of the array
-            break;
-          }
-
-          cb( null );
-        }
-
+        hardLimitOnQueries: 50,
       });
 
       var managers = new Managers(); 
       managers.setAllRoutes( app );
-
+ 
 
 That's it: this is enough to make a full store which will handly properly all of the HTTP calls. Try it if you don't believe me!
 
@@ -164,8 +334,9 @@ That's it: this is enough to make a full store which will handly properly all of
 * `publicURL` is the URL the store is reachable at. ***The last one ID is the most important one***: the last ID in `publicURL` (in this case it's also the only one: `id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
 * `storeName` (_mandatory_) needs to be a unique name for your store. It is mandatory to have one, as (when used with a database) it will define the name of the DB table/collection
 * `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error
-* `implementXXX` methods are the ones that actually implement the data access functionlity
 * `managers.setAllRoutes( app )` creates the right Express routes to actually activate your stores. Specifically:
+
+.
 
     // Make entries in "app", so that the application
     // will give the right responses

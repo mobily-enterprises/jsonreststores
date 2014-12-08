@@ -64,11 +64,11 @@ var Store = declare( null,  {
   echoAfterPost: true,
   echoAfterDelete: true,
 
-  chainErrors: 'none',  // can be 'none', 'all', 'nonhttp'
+  chainErrors: 'none',  // can be 'none' (do not chain), 'all' (chain all), 'nonhttp' (chain non-HTTP errors)
 
-  deleteAfterGetQuery: false,
+  deleteAfterGetQuery: false, // Delete records after fetching them
 
-  strictSchemaAfterRefetching: false, // TO IMPLEMENT
+  strictSchemaAfterRefetching: false, // UNIMPLEMENTED. Do not fail if LOADED record fail schema
 
   position: false,    // If set, will make fields re-positionable
   defaultSort: null,  // If set, it will be applied to all getQuery calls
@@ -83,7 +83,7 @@ var Store = declare( null,  {
     throw("implementInsert not implemented, store is not functional");
   },
 
-  implementUpdate: function( request, cb ){
+  implementUpdate: function( request, deleteUnsetFields, cb ){
     throw("implementUpdate not implemented, store is not functional");
   },
   implementDelete: function( request, cb ){
@@ -94,7 +94,7 @@ var Store = declare( null,  {
     throw("implementQuery not implemented, store is not functional");
   },
 
-  implementReposition: function( doc, putBefore, putDefaultPosition, existing, cb ){
+  implementReposition: function( doc, where, beforeId, cb ){
     cb( null );
   },
 
@@ -211,6 +211,42 @@ var Store = declare( null,  {
     var newO = {};
     for( var k in o ) newO[ k ] = o[ k ];
     return newO;
+  },
+
+
+
+  // Will call implementReposition based on headers.
+  // -putBefore is an id.
+  // -putDefaultPosition is 'start' or 'end'.
+  // -existing is true or false: true for existing records false for new ones
+  // 
+  // When calling implementReposition:
+  // - where can be 'start', 'end' or 'at'
+  // - beforeId is only meaningful for 'at' (tell is where to place it)
+  // - existing is boolean, and it's only meaningful if this.position is there, and 
+  _repositionBasedOnHeaders: function( fullDoc, putBefore, putDefaultPosition, existing, cb ){
+
+    // No position field: nothing to do
+    if( ! this.position ){
+       return cb( null );
+    }
+    
+    // CASE #1: putBefore is set: where = at, beforeId = putBefore 
+    if( putBefore ) {
+      this.implementReposition( fullDoc, 'at', putBefore, cb );
+
+    // CASE #2: putDefaultPosition is set: where = putDefaultPosition, beforeId = null
+    } else if( putDefaultPosition ){
+      this.implementReposition( fullDoc, putDefaultPosition, null, cb );
+
+    // CASE #3: putBefore and putDefaultPosition are not set. IF it's a new record, where = end, beforeId = null
+    } else if( !existing) {
+      this.implementReposition( fullDoc, 'end', null, cb );
+
+    // CASE #4: don't do anything.
+    } else {
+      cb( null );
+    }
   },
 
   _initOptionsFromReq: function( mn, req ){
@@ -532,6 +568,19 @@ var Store = declare( null,  {
     this.checkPermissions( request, method, p, cb );
   },
 
+  _enrichBodyWithParamIdsIfRemote: function( request ){
+
+    var self = this;
+
+    if( request.remote ){
+      self.paramIds.forEach( function( paramId ){
+        if( typeof( request.params[ paramId ] ) !== 'undefined' ){
+          request.body[ paramId ] = request.params[ paramId ];
+        }
+      });
+    }
+  },
+
   _makePost: function( request, next ){
 
     var self = this;
@@ -599,7 +648,7 @@ var Store = declare( null,  {
                   self.implementInsert( request, generatedId, function( err, fullDoc ){
                     if( err ) return self._sendError( request, next, err );
 
-                    self.implementReposition( fullDoc, request.options.putBefore, request.options.putDefaultPosition, false, function( err ){
+                    self._repositionBasedOnHeaders( fullDoc, request.options.putBefore, request.options.putDefaultPosition, false, function( err ){
                       if( err ) return self._sendError( request, next, err );
 
                       self.afterDbOperation( request, 'post', { fullDoc: fullDoc }, function( err ){
@@ -641,19 +690,6 @@ var Store = declare( null,  {
         });
       });
     });
-  },
-
-  _enrichBodyWithParamIdsIfRemote: function( request ){
-
-    var self = this;
-
-    if( request.remote ){
-      self.paramIds.forEach( function( paramId ){
-        if( typeof( request.params[ paramId ] ) !== 'undefined' ){
-          request.body[ paramId ] = request.params[ paramId ];
-        }
-      });
-    }
   },
 
   _makePut: function( request, next ){
@@ -749,7 +785,7 @@ var Store = declare( null,  {
                       self.implementInsert( request, null, function( err, fullDoc ){
                         if( err ) return self._sendError( request, next, err );
               
-                        self.implementReposition( fullDoc, request.options.putBefore, request.options.putDefaultPosition, false, function( err ){
+                        self._repositionBasedOnHeaders( fullDoc, request.options.putBefore, request.options.putDefaultPosition, false, function( err ){
                           if( err ) return self._sendError( request, next, err );
 
                           self.afterDbOperation( request, 'putNew', { fullDoc: fullDoc }, function( err ){
@@ -810,10 +846,10 @@ var Store = declare( null,  {
                         // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
                         self.schema.cleanup( request.body, 'doNotSave' );
                 
-                        self.implementUpdate( request, function( err, fullDocAfter ){
+                        self.implementUpdate( request, true, function( err, fullDocAfter ){
                           if( err ) return self._sendError( request, next, err );
             
-                          self.implementReposition( fullDoc, request.options.putBefore, request.options.putDefaultPosition, true, function( err ){
+                          self._repositionBasedOnHeaders( fullDoc, request.options.putBefore, request.options.putDefaultPosition, true, function( err ){
                             if( err ) return self._sendError( request, next, err );
     
                             self.afterDbOperation( request, 'putExisting', { doc: doc, fullDoc: fullDoc, fullDocAfter: fullDocAfter }, function( err ){
@@ -1119,8 +1155,11 @@ var Store = declare( null,  {
       request._res = res;
 
       // Set the params and body options, copying them from `req`
-      request.params = {}; for( var k in req.params) request.params[ k ] = req.params[ k ];
-      request.body = {}; for( var k in req.body) request.body[ k ] = req.body[ k ];
+      //request.params = {}; for( var k in req.params) request.params[ k ] = req.params[ k ];
+      //request.body = {}; for( var k in req.body) request.body[ k ] = req.body[ k ];
+      request.params = self._co( req.params );
+      request.body = self._co( req.body );
+
 
       // Since it's an online request, options are set by "req"
       // This will set things like ranges, sort options, etc.
@@ -1172,11 +1211,11 @@ var Store = declare( null,  {
 
     // Make entries in "app", so that the application
     // will give the right responses
-    app.get(      url + idName, this.getRequestHandler( 'Get' ) );
-    app.get(      url,          this.getRequestHandler( 'GetQuery') );
-    app.put(      url + idName, this.getRequestHandler( 'Put') );
-    app.post(     url,          this.getRequestHandler( 'Post') );
-    app.delete(   url + idName, this.getRequestHandler( 'Delete') );
+    app.get(    url + idName, this.getRequestHandler( 'Get' ) );
+    app.get(    url,          this.getRequestHandler( 'GetQuery') );
+    app.put(    url + idName, this.getRequestHandler( 'Put') );
+    app.post(   url,          this.getRequestHandler( 'Post') );
+    app.delete( url + idName, this.getRequestHandler( 'Delete') );
   },
 
   // ****************************************************
@@ -1342,7 +1381,7 @@ Store.OneFieldStoreMixin = declare( null,  {
   // make sense in a OneFieldStore context
   extrapolateDoc: function( request, method, doc, cb ){ cb( null, doc ); },
   prepareBeforeSend: function( request, method, doc, cb ){ cb( null, doc ); },
-  prepareBody: function( request, body, method, cb ){ cb( null, body ); },
+  prepareBody: function( request, method, body, cb ){ cb( null, body ); },
   
   // Making sure unwanted methods  are not even implemented
   _makePost: function( request, next ){
@@ -1453,18 +1492,21 @@ Store.OneFieldStoreMixin = declare( null,  {
         request.body = preparedBody;
 
         self._enrichBodyWithParamIdsIfRemote( request );
-        
+
+        // Go through each field in body, and check that it's either
+        // a paramId OR piggyField
+        // After this, body will be validated with { onlyObjectValues }
+        var errorsInPiggyField = [];
+        for( var field in request.body ){
+          if( self.paramIds.indexOf( field ) == -1 && field != self.piggyField ){
+            errorsInPiggyField.push( { field: field, message: 'Field not allowed because not a paramId nor the piggyBack field: ' + field + ' in ' + self.storeName } );
+          }
+        }
+        if( errorsInPiggyField.length ) return self._sendError( request, next, new self.UnprocessableEntityError( { errors: errorsInPiggyField } ) );
+
+
         self.schema.validate( request.body, { onlyObjectValues: true }, function( err, validatedBody, errors ) {
           if( err ) return self._sendError( request, next, err );
-
-          // Go through each field in body, and check that it's either
-          // a paramId OR piggyField
-          // After this, body will be validated with { onlyObjectValues }
-          for( var field in request.body ){
-            if( self.paramIds.indexOf( field ) == -1 && field != self.piggyField ){
-              errors.push( { field: field, message: 'Field not allowed because not a paramId nor the piggyBack field: ' + field + ' in ' + self.storeName } );
-            }
-          }
 
           if( errors.length ) return self._sendError( request, next, new self.UnprocessableEntityError( { errors: errors } ) );
 
@@ -1502,7 +1544,7 @@ Store.OneFieldStoreMixin = declare( null,  {
                   self.afterCheckPermissions( request, 'putExisting', { doc: doc, fullDoc: fullDoc }, function( err ){
                     if( err ) return self._sendError( request, next, err );
                
-                    self.implementUpdate( request, function( err, fullDocAfter ){
+                    self.implementUpdate( request, false, function( err, fullDocAfter ){
                       if( err ) return self._sendError( request, next, err );
 
                       // Manipulate fullDoc: at this point, it's the WHOLE database record,
