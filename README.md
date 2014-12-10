@@ -4,6 +4,8 @@ JsonRestStores
 JsonRestStores is the best way to create REST stores that return JSON data.
 Rundown of features:
 
+**WARNING: JsonRestStore is now going through a very extensive rewrite (I am now working on improving the underlying db layer, which will change the way you define queries). Do not use this module till this writing is gone**.
+
 * **DRY approach**. Everything works as you'd expect it to, even though you are free to tweak things.
 * **Database-agnostic**. The module itself provides you with _everything_ except the data-manipulation methods, which are up to you to implement.
 * **Schema based**. Anything coming from the client will be validated and cast.
@@ -113,14 +115,13 @@ Here is how you make a fully compliant store:
           this.data = [];
         },
 
-
         implementFetchOne: function( request, cb ){
           var d = this.data[ request.params[ self.idProperty ] ];
           return d ? d : null;
         }, 
 
         implementInsert: function( request, generatedId, cb ){
-          
+
         },
 
         implementUpdate: function( request, cb ){
@@ -229,7 +230,7 @@ A bit of testing with `curl`:
       "surname": "Mobily"
     }
 
-    $ curl -i -GET"  http://localhost:3000/managers/
+    $ curl -i -GET  http://localhost:3000/managers/
     HTTP/1.1 200 OK
     X-Powered-By: Express
     Content-Type: application/json; charset=utf-8
