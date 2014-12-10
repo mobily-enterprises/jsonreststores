@@ -75,25 +75,32 @@ var Store = declare( null,  {
 
   // Methods that MUST be implemented for the store to be functional
 
+  // NB: request.params, self.idProperty
   implementFetchOne: function( request, cb ){
     throw("implementFetchOne not implemented, store is not functional");
   }, 
 
+  // NB: request.body (data), self.idProperty (assign to generatedId)
   implementInsert: function( request, generatedId, cb ){
     throw("implementInsert not implemented, store is not functional");
   },
 
+  // NB: request.body (data), self.idProperty (filter), request.params (strict filter) 
   implementUpdate: function( request, deleteUnsetFields, cb ){
     throw("implementUpdate not implemented, store is not functional");
   },
+
+  // NB: self.idProperty (filter), request.params (strict filter)
   implementDelete: function( request, cb ){
     throw("implementDelete not implemented, store is not functional");
   },
 
+  // NB: request.options.[filter, sort, ranges, delete], request.params (strict filter) 
   implementQuery: function( request, next ){
     throw("implementQuery not implemented, store is not functional");
   },
 
+  // NB: 'where' can be `start`, `end` or `at`. If `at`, `beforeId` must be specified
   implementReposition: function( doc, where, beforeId, cb ){
     cb( null );
   },
@@ -642,10 +649,10 @@ var Store = declare( null,  {
                 // Clean up body from things that are not to be submitted
                 self.schema.cleanup( request.body, 'doNotSave' );
               
-                self.schema.makeId( request.body, function( err, generatedId ){
+                self.schema.makeId( request.body, function( err, forceId ){
                   if( err ) return self._sendError( request, next, err );
                                   
-                  self.implementInsert( request, generatedId, function( err, fullDoc ){
+                  self.implementInsert( request, forceId, function( err, fullDoc ){
                     if( err ) return self._sendError( request, next, err );
 
                     self._repositionBasedOnHeaders( fullDoc, request.options.putBefore, request.options.putDefaultPosition, false, function( err ){
@@ -764,6 +771,8 @@ var Store = declare( null,  {
                 // done on inputted data
                 if( ! fullDoc ){
 
+                  console.log("HERE, IT'S A NEW DOC");
+
                   // Actually check permissions
                   self._checkPermissionsProxy( request, 'putNew', {}, function( err, granted ){
                     if( err ) return self._sendError( request, next, err );
@@ -781,7 +790,7 @@ var Store = declare( null,  {
                       // Make sure that the id property in the body does match
                       // the one passed as last parameter in the list of IDs
                       request.body[ self.idProperty ] = request.params[ self.idProperty ];
-                      
+
                       self.implementInsert( request, null, function( err, fullDoc ){
                         if( err ) return self._sendError( request, next, err );
               
@@ -805,8 +814,8 @@ var Store = declare( null,  {
                                 self.afterEverything( request, 'putNew', { preparedDoc: preparedDoc, doc: doc, fullDoc: fullDoc }, function( err ){
                                   if( err ) return self._sendError( request, next, err );
                    
-                                  if( remote ){
-                                    if( self.echoAfterPutNew ){
+                                  if( request.remote ){
+                                    if( self.echoAfterPutNew ){ 
                                       request._res.json( 201, preparedDoc );
                                     } else {
                                       //request._res.send( 204, '' );
@@ -817,7 +826,6 @@ var Store = declare( null,  {
                                   }
                                 });
                               });
-
                             });
                           });
                         });
