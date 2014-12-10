@@ -280,7 +280,7 @@ exports = module.exports = declare( null,  {
 
   }, 
 
-  implementInsert: function( request, generatedId, cb ){
+  implementInsert: function( request, forceId, cb ){
    
     var self = this;
 
@@ -292,7 +292,7 @@ exports = module.exports = declare( null,  {
 
     // If generatedId was passed, force the record to
     // that id
-    if( generatedId ) record[ self.idProperty ] = generatedId;
+    if( forceId ) record[ self.idProperty ] = forceId;
 
     self.dbLayer.insert( record, { returnRecord: true, skipValidation: true, children: true }, cb );
   },
