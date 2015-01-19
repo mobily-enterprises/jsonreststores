@@ -6,6 +6,8 @@ Rundown of features:
 
 **WARNING: JsonRestStore is now going through a very extensive rewrite (I am now working on improving the underlying db layer, which will change the way you define queries). Do not use this module till this writing is gone**.
 
+**UPDATE: The underlying module, SimpleDbLayer, has been revamped. JsonRestStores is now next in the list. I will keep a TODO list here; however, I do not expect to take more than 1 week/10 days to get it finished off**.
+
 * **DRY approach**. Everything works as you'd expect it to, even though you are free to tweak things.
 * **Database-agnostic**. The module itself provides you with _everything_ except the data-manipulation methods, which are up to you to implement.
 * **Schema based**. Anything coming from the client will be validated and cast.
@@ -14,7 +16,7 @@ Rundown of features:
 * **Authentication hooks**. Only implement things once, and keep authentication tight.
 * **Mixin-based**. You can add functionalities easily.
 * **Inheriting stores**. You can easily derive a store from another one.
-* **Simple error**. Errors can be chained up, or they can make the store return them to the client.
+* **Simple error management**. Errors can be chained up, or they can make the store return them to the client.
 
 JsonRestStores even comes with its own database layer mixin, SimpleDbLayerMixin, which will implement all of the important methods that will read, write and delete elements from a database. The mixin uses [simpledblayer](https://github.com/mercmobily/simpledblayer) to access the database. For now, only MongoDb is supported but more will come.
 
