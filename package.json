@@ -8,7 +8,7 @@
     "mongodb"
   ],
   "main": "JsonRestStores.js",
-  "version": "0.3.30",
+  "version": "0.3.31",
   "private": false,
   "repository": {
     "type": "git",
@@ -18,7 +18,7 @@
     "name": "Tony Mobily"
   },
   "scripts": {
-        "test": "nodeunit test-tingo.js"
+    "test": "nodeunit test-tingo.js"
   },
   "dependencies": {
     "allhttperrors": "0.3.x",
@@ -27,7 +27,7 @@
     "async": "0.2.x"
   },
   "devDependencies": {
-    "nodeunit"  : "latest",
+    "nodeunit": "latest",
     "simpledblayer": "~0.3.x",
     "tingodb": "~0.2.x",
     "simpledblayer-tingo": "~0.3.x"
