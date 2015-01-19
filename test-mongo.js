@@ -5,9 +5,7 @@ var
 
 , J = require('./JsonRestStores.js')
 , SimpleDbLayer = require('simpledblayer')
-, MongoMixin = require('simpledblayer-mongo')
-
-, mw = require('mongowrapper')
+, mongo = require('mongodb')
 ;
 
 
@@ -19,6 +17,8 @@ var tests = allTests.get(
 
   function getDbAndDbLayerAndJRS( done ) {
 
+    mongo.MongoClient.connect( url, options, function( err, db ){
+  
     mw.connect('mongodb://localhost/tests', {}, function( err, db ){
       if( err ){
         throw new Error("MongoDB connect: could not connect to database");
