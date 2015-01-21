@@ -8,6 +8,19 @@ Rundown of features:
 
 **UPDATE: The underlying module, SimpleDbLayer, has been revamped. JsonRestStores is now next in the list. I will keep a TODO list here; however, I do not expect to take more than 1 week/10 days to get it finished off**.
 
+
+TODO:
+
+* [ ] Implement search filter definition in JsonRestStores, based on an object acting as template. Advise only.
+* [ ] Rewrite documentation for JsonRestStores (the basic module), including the filter definition
+* [ ] Rewrite documentation for JsonRestStores' SimpleDbLayerMixin
+* [ ] Rewrite tests for JsonRestStores (the basic module)
+* [ ] Rewrite tests for JsonRestStores' SimpleDbLayerMixin
+* [ ] Adapt existing software to new API (SimpleDbLayerMixin, Hotplate, BookingDojo)
+* [ ] Check that all of the existing software works _AS IS_ with the new implementations
+* [ ] Implement filter in dstore that mimics 100% the querying in JsonRestStores, test everything
+
+
 * **DRY approach**. Everything works as you'd expect it to, even though you are free to tweak things.
 * **Database-agnostic**. The module itself provides you with _everything_ except the data-manipulation methods, which are up to you to implement.
 * **Schema based**. Anything coming from the client will be validated and cast.
