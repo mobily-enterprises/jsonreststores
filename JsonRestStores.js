@@ -66,7 +66,7 @@ var Store = declare( null,  {
 
   deleteAfterGetQuery: false, // Delete records after fetching them
 
-  strictSchemaAfterRefetching: false, // UNIMPLEMENTED. Do not fail if LOADED record fail schema
+  strictSchemaOnFetch: true,
 
   position: false,    // If set, will make fields re-positionable
   defaultSort: null,  // If set, it will be applied to all getQuery calls

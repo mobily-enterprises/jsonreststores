@@ -77,6 +77,7 @@ exports = module.exports = declare( null,  {
         schema: self.schema,
         nested: self.nested,
         hardLimitOnQueries: self.hardLimitOnQueries,
+        strictSchemaOnFetch: self.strictSchemaOnFetch,
 
         idProperty: self.idProperty,
 
