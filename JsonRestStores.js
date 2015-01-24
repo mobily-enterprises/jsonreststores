@@ -100,6 +100,7 @@ var Store = declare( null,  {
 
   // NB: 'where' can be `start`, `end` or `at`. If `at`, `beforeId` must be specified
   implementReposition: function( doc, where, beforeId, cb ){
+    
     cb( null );
   },
 
@@ -108,9 +109,9 @@ var Store = declare( null,  {
   // ****************************************************
 
   // Doc extrapolation and preparation calls
-  prepareBody: function( request, method, body, cb ){ cb( null, body ); }, 
-  extrapolateDoc: function( request, method, doc, cb ){ cb( null, doc ); },
-  prepareBeforeSend: function( request, method, doc, cb ){ cb( null, doc ); },
+  prepareBody: function( request, method, body, cb ){ cb( null, body ); },//
+  extrapolateDoc: function( request, method, doc, cb ){ cb( null, doc ); },//
+  prepareBeforeSend: function( request, method, doc, cb ){ cb( null, doc ); },//
 
   // Permission stock functions
   checkPermissions: function( request, method, p, cb ){ cb( null, true ); },// p takes: { doc, fullDoc} only for putExisting, get, delete
@@ -211,10 +212,10 @@ var Store = declare( null,  {
 
   // Simple function that shallow-copies an object. This should be used
   // every time  prepareBody, extrapolateDoc or prepareBeforeSend are
-  // overridden
+  // overridden (in order to pass a copy of the object)
   _co: function( o ){
     var newO = {};
-    for( var k in o ) newO[ k ] = o[ k ];
+    for( var k in o ) if( o.hasOwnProperty( k ) ) newO[ k ] = o[ k ];
     return newO;
   },
 
@@ -613,6 +614,7 @@ var Store = declare( null,  {
         self._enrichBodyWithParamIdsIfRemote( request );
 
         // Delete _children which mustn't be here regardless
+
         delete request.body._children;
 
         self.schema.validate( request.body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, validatedBody, errors ){
@@ -769,8 +771,6 @@ var Store = declare( null,  {
                 // done on inputted data
                 if( ! fullDoc ){
 
-                  console.log("HERE, IT'S A NEW DOC");
-
                   // Actually check permissions
                   self._checkPermissionsProxy( request, 'putNew', {}, function( err, granted ){
                     if( err ) return self._sendError( request, next, err );
@@ -831,7 +831,6 @@ var Store = declare( null,  {
                     });
                   });
            
- 
                 // It's an EXISTING doc: it will need to be an update, _and_ permissions will be
                 // done on inputted data AND existing doc
                 } else {
@@ -1161,11 +1160,8 @@ var Store = declare( null,  {
       request._res = res;
 
       // Set the params and body options, copying them from `req`
-      //request.params = {}; for( var k in req.params) request.params[ k ] = req.params[ k ];
-      //request.body = {}; for( var k in req.body) request.body[ k ] = req.body[ k ];
       request.params = self._co( req.params );
       request.body = self._co( req.body );
-
 
       // Since it's an online request, options are set by "req"
       // This will set things like ranges, sort options, etc.
