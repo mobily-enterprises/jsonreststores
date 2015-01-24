@@ -47,7 +47,7 @@ exports = module.exports = declare( null,  {
     // The db layer already has a table called 'collectionName' in the registry!
     // This store will reuse it. In this case, the class' self.schema, self.nested and
     // self.hardLimitOnQueries will be ignored and the dbLayer's will be used instead
-    var existingDbLayer = self.DbLayer.getLayer( self.DbLayer, self.collectionName );
+    var existingDbLayer = self.DbLayer.getLayer( self.collectionName );
     if( existingDbLayer ){
       
       // idProperty must match
@@ -59,6 +59,7 @@ exports = module.exports = declare( null,  {
       self.nested = existingDbLayer.nested;
       self.hardLimitOnQueries = existingDbLayer.hardLimitOnQueries;
 
+      
       self.dbLayer = existingDbLayer;
 
       // Augment schema making paramIds and onlineSearchSchema searchable
@@ -89,13 +90,15 @@ exports = module.exports = declare( null,  {
         layerOptions.positionBase = self.paramIds.slice( 0, -1 ); // TODO: Check, it was 1,-1, why?!?      
       }
 
+      layerOptions.table = self.collectionName;
       // Actually create the layer with the given parameters
-      self.dbLayer = new self.DbLayer( self.collectionName, layerOptions );
+      self.dbLayer = new self.DbLayer( layerOptions );
     }
      
     // TODO: Check that each entry in self.sortableFields is actually marked as "searchable" in
     // self.schema; otherwise, stop with an error. This is important as any sortable field MUST
     // be searchable
+
   },
 
   // Augment schema making paramIds and onlineSearchSchema searchable
@@ -104,6 +107,7 @@ exports = module.exports = declare( null,  {
 
     if( ! schema ) schema = self.schema;
 
+    // TODO: I think this is now useless as SimpleDbLayer does it
     // By default, added paramIds will be set as `searchable` in DB `schema`
     for( var i = 0, l = self.paramIds.length; i < l; i ++ ){
       var k = self.paramIds[ i ];
@@ -170,11 +174,10 @@ exports = module.exports = declare( null,  {
     this.dbLayer.generateSchemaIndexes( options, function( err ){
       if( err ) return cb( err );
 
-      // TODO: Add more indexes:
+      // TODO: check if we need to add more indexes. I think they are all done by simpleDbLayer. Old comment:
       // * Add new index with { workspaceId: 1, searchableField: 1 } for each searchable if multiHome
       // * Add new index for paramIds
       // * MAYBE for each sortable, create paramIds + field
-
       cb( null );
     });
   },
@@ -319,17 +322,9 @@ exports = module.exports = declare( null,  {
     for( var i in request.body ) updateObject[ i ] = request.body[ i ];
     delete updateObject._children;
 
-    // Obsoleted by self._enrichBodyWithParamIdsIfRemote
-    // Add param IDs to the record that is being written (updated)
-    //self.paramIds.forEach( function( paramId ){
-    //  if( typeof( request.params[ paramId ] ) !== 'undefined' ){
-    //    updateObject[ paramId ] = request.params[ paramId ];
-    //  }
-    //});
-
     // Only delete unset fields if there is no piggyField.
     // If piggyField is there, this is a single-field update
-    //var deleteUnsetFields = ! self.piggyField;
+    // var deleteUnsetFields = ! self.piggyField;
 
     self.dbLayer.update( selector, updateObject, { deleteUnsetFields: deleteUnsetFields, multi: false, skipValidation: true }, function( err, howMany ){
       if( err ){
