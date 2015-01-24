@@ -4,7 +4,9 @@ var
 , declare = require('simpledeclare')
 
 , J = require('./JsonRestStores.js')
+, SM = require( './SimpleDbLayerMixin.js' )
 , SimpleDbLayer = require('simpledblayer')
+, MongoMixin = require('simpledblayer-mongo')
 , mongo = require('mongodb')
 ;
 
@@ -17,14 +19,14 @@ var tests = allTests.get(
 
   function getDbAndDbLayerAndJRS( done ) {
 
-    mongo.MongoClient.connect( url, options, function( err, db ){
+    mongo.MongoClient.connect( 'mongodb://localhost/tests', {}, function( err, db ){
   
-    mw.connect('mongodb://localhost/tests', {}, function( err, db ){
+    //mw.connect('mongodb://localhost/tests', {}, function( err, db ){
       if( err ){
         throw new Error("MongoDB connect: could not connect to database");
       } else {
         var DbLayer = declare( [ SimpleDbLayer, MongoMixin ], { db: db } );
-        var JRS = declare( J, { DbLayer: DbLayer } );
+        var JRS = declare( [J, SM ], { DbLayer: DbLayer } );
         done( null, db, DbLayer, JRS );
       }
     });
@@ -33,9 +35,10 @@ var tests = allTests.get(
   function closeDb( db, done ) {
     db.close( done );
   }
+
 );
 
-for(var test in tests) {
+for(var test in tests){
     exports[ test ] = tests[ test ];
 }
 
