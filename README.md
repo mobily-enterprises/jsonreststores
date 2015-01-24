@@ -6,20 +6,36 @@ Rundown of features:
 
 **WARNING: JsonRestStore is now going through a very extensive rewrite (I am now working on improving the underlying db layer, which will change the way you define queries). Do not use this module till this writing is gone**.
 
-**UPDATE: The underlying module, SimpleDbLayer, has been revamped. JsonRestStores is now next in the list. I will keep a TODO list here; however, I do not expect to take more than 1 week/10 days to get it finished off**.
 
+PLAN OF ATTACK:
+---------------
 
-TODO:
+BACK TO SimpleDbLayer with Hotplate
+[ ] Fix API calls in tests, making that the only tests that fails are the ones for different SimpleDbLayer
+[ ] Fix querying in JsonRestStores, KEEPING the current onlineSearchSchema definitions
+[ ] Make sure hotplate itself works leaving everything as is (API has not changed)
 
-* [ ] Implement search filter definition in JsonRestStores, based on an object acting as template. Advise only.
-* [ ] Rewrite documentation for JsonRestStores (the basic module), including the filter definition
-* [ ] Rewrite documentation for JsonRestStores' SimpleDbLayerMixin
-* [ ] Rewrite tests for JsonRestStores (the basic module)
-* [ ] Rewrite tests for JsonRestStores' SimpleDbLayerMixin
-* [ ] Adapt existing software to new API (SimpleDbLayerMixin, Hotplate, BookingDojo)
-* [ ] Check that all of the existing software works _AS IS_ with the new implementations
-* [ ] Implement filter in dstore that mimics 100% the querying in JsonRestStores, test everything
+IMPROVE searchSchema
+[ ] Make new syntax for searchSchema, allowing any depth of querying
+[ ] Change tests to see if it all works with new querying ability
+[ ] Change hotplate to see if it all works with new queries
 
+MEMORY store
+[ ] Implement sample store for documentation using memory, advising with searchSchema
+[ ] Implement proper memory store with querying, getting querying code from dstore 
+[ ] Make sure tests run using new memory store
+[ ] Try the whole of hotplate running on the memory store
+
+DOCUMENTING
+[ ] Rewrite bdocumentation for basic JsonRestStores
+[ ] Rewrite documentation with using SimpleDbLayerMixin
+
+IMPROVE dstore
+[ ] Use new (and tested) memory store code to write querying code for dstore
+[ ] Check that hotplate all works with new filtering, without ever doing a refresh
+
+PARTY
+[ ] Party!
 
 * **DRY approach**. Everything works as you'd expect it to, even though you are free to tweak things.
 * **Database-agnostic**. The module itself provides you with _everything_ except the data-manipulation methods, which are up to you to implement.
@@ -82,7 +98,6 @@ You should also read my small summary of [what a REST store actually provides](h
 At this stage, the stores are 100% compatible with [Dojo's JsonRest](http://dojotoolkit.org/reference-guide/1.8/dojo/store/JsonRest.html) as well as [Sitepen's dstore](http://dstorejs.io/).
 
 
-
 # Quickstart
 
 Jsonreststores is a module that creates managed routes for you, and integrates very easily with existing ExpressJS applications.
@@ -136,7 +151,6 @@ Here is how you make a fully compliant store:
         }, 
 
         implementInsert: function( request, generatedId, cb ){
-
         },
 
         implementUpdate: function( request, cb ){
@@ -151,8 +165,12 @@ Here is how you make a fully compliant store:
         implementReposition: function( doc, where, beforeId, cb ){
 
           switch( where ){
+
             case 'at':
               // Move element somewhere
+              function moveElement(array, from, to) {
+                if( to !== from ) array.splice( to, 0, array.splice(from, 1)[0]);
+              }
             break;
 
             case 'start':
@@ -180,7 +198,7 @@ That's it: this is enough to make a full store which will handly properly all of
 * `publicURL` is the URL the store is reachable at. ***The last one ID is the most important one***: the last ID in `publicURL` (in this case it's also the only one: `id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
 * `storeName` (_mandatory_) needs to be a unique name for your store. It is mandatory to have one, as (when used with a database) it will define the name of the DB table/collection
 * `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error
-* `implementXXX` methods are the ones that actually implement the data access functionlity
+* `implementXXX` methods are the ones that actually implement the data access functionality
 * `managers.setAllRoutes( app )` creates the right Express routes to actually activate your stores. Specifically:
 
     // Make entries in "app", so that the application
