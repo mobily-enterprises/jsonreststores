@@ -1,4 +1,3 @@
-
 /*
 Copyright (C) 2013 Tony Mobily
 
@@ -103,6 +102,7 @@ var compareCollections = function( test, a, b ){
     delete newItem._children;
     b0.push( newItem );
   }
+ 
 
  try {
     var a1 = [], a2, a3;
@@ -137,6 +137,19 @@ var compareCollections = function( test, a, b ){
 
   //test.ok( equal, "Record sets do not match" );
 
+}
+
+var compareItems = function( test, a, b ){
+
+  var a1 = {}, b1 = {};
+
+  for( var k in a ) a1[ k ] = a[ k ];
+  for( var k in b ) b1[ k ] = b[ k ];
+
+  if( a1._children ) delete a1._children;
+  if( b1._children ) delete b1._children;
+
+  return compareCollections( test, [ a1 ], [ b1 ] );
 }
 
 
@@ -254,6 +267,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       });
       g.people = new g.People();
      
+
+
       // Set the basic stores
       g.WsPeople = declare( g.JRS, {
 
@@ -289,6 +304,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
 
       // Clear people table
       //g.dbPeople = new g.DbLayer( 'people', {  name: true, surname: true, age: false, id: true }  ); 
+      //console.log( "IT IS: ", require('util').inspect( g.people, { depth: 10 } ) );
+      //debugger;
       g.dbPeople = g.people.dbLayer;
       g.dbPeople.delete( { }, { multi: true }, function( err ){
         if( err ){
@@ -370,7 +387,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
        * APIg  castDoc
        * REST  echoAfterPost
        * REST/APIh prepareBeforeSend
-       * REST/APIh afterPost
+       * REST/APIh afterEverything
     */
   
     'Post() API Working test': function( test ){
@@ -381,7 +398,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
  
           g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
             test.ifError( err );
-            test.deepEqual( data[ 0 ], person );
+            compareItems( test, data[ 0 ], person );
   
             test.done();
           });
@@ -445,7 +462,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           test.equal( type, 'bytes' );
           test.equal( status, 400 );
-          test.deepEqual( data,
+          compareItems( test,  data,
   
   { message: 'Bad Request',
   errors: 
@@ -466,13 +483,13 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-  
-          prepareBody: function( request, body, method, done ){
+          prepareBody: function( request, method, body, done ){
             
-            if( method === 'post' ){
-              body.name = body.name + "_prepareBodyPost";
-            }
-            done( null );
+            if( method !== 'post' ) return cb( null, this._co( body ) );
+
+            var body = this._co( body );
+            body.name = body.name + "_prepareBodyPost";
+            done( null, body );
           },
   
         });
@@ -482,7 +499,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         // Set the basic stores
         people2.apiPost( { name: "Tony" }, function( err, person ){
           test.ifError( err );
-          test.deepEqual( person,
+          compareItems( test,  person,
   
   { name: 'Tony_prepareBodyPost',
   id: person.id }
@@ -499,7 +516,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         g.people.apiPost( { name: 'Tony', surname: "1234567890123456789012345", age: 37 }, function( err, person ){
            
-          test.deepEqual( err.errors,  [ { field: 'surname', message: 'Field is too long: surname' } ] );
+          compareItems( test,  err.errors,  [ { field: 'surname', message: 'Field is too long: surname' } ] );
           test.equal( err.message, "Unprocessable Entity");
           test.equal( err.httpError, 422);
           test.done();
@@ -514,7 +531,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-          checkPermissionsPost: function( request, cb ){
+          checkPermissions: function( request, method, p, cb ){
+
+            if( method !== 'post' ) return done( null );
+
             if( request.body.name === 'TONY' ) cb( null, false );
             else cb( null, true );
           },  
@@ -541,7 +561,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         g.people.apiPost( { name: "Tony", extra: "Won't be saved" }, function( err, person ){
           test.ifError( err );
-          test.deepEqual( person, { name: 'Tony', id: person.id } ); 
+          compareItems( test,  person, { name: 'Tony', id: person.id } ); 
           test.done();
         });
       });
@@ -555,10 +575,11 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
   
-          extrapolateDoc: function( request, fullDoc, done ){
+          extrapolateDoc: function( request, method, fullDoc, done ){
   
-            var doc = {};
-            for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+            if( method !== 'post' ) return done( null, this._co( fullDoc ) );
+
+            var doc = this._co( fullDoc );
             doc.name = doc.name + '_extrapolateDoc';
   
             done( null, doc );
@@ -572,7 +593,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         // Set the basic stores
         people2.apiPost( { name: "Tony" }, function( err, person ){
           test.ifError( err );
-          test.deepEqual( person,
+          compareItems( test,  person,
   
   { name: 'Tony_extrapolateDoc',
   id: person.id }
@@ -647,10 +668,13 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
    
-          prepareBeforeSend: function( request, doc, done ){
+          prepareBeforeSend: function( request, method, doc, done ){
+
+            if( method !== 'post' ) return done( null, this._co( doc ) );
+
+            var doc = this._co( doc ); 
             doc.beforeSend = '_prepareBeforeSend';
-  
-            done( null );
+            done( null, doc );
           }
         });
         People2.deleteStore( 'people2' );
@@ -684,10 +708,13 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-          prepareBeforeSend: function( request, doc, done ){
-            doc.beforeSend = '_prepareBeforeSend';
+          prepareBeforeSend: function( request, method, doc, done ){
 
-            done( null );
+            if( method !== 'post' ) return done( null, this._co( doc ) );
+
+            var doc = this._co( doc );
+            doc.beforeSend = '_prepareBeforeSend';
+            done( null, doc );
           },
   
         });
@@ -697,7 +724,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         // Set the basic stores
         people2.apiPost( { name: "Tony" }, function( err, person ){
           test.ifError( err );
-          test.deepEqual( person,
+          compareItems( test,  person,
   
   { name: 'Tony',
   id: person.id,
@@ -710,18 +737,18 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       });
     },
   
-    'Post() REST afterPost': function( test ){
+    'Post() REST afterEverything': function( test ){
       zap( function(){
   
   
-        var afterPost = false;
+        var afterEverything = false;
         var People2 = declare( g.People, {
           storeName: 'people2',
           collectionName: 'people',
 
    
-          afterPost: function( request, doc, fullDoc, done){
-            afterPost = true;
+          afterEverything: function( request, method, p, done){
+            afterEverything = true;
             done( null );
           },
         });
@@ -734,7 +761,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           var res = this;
   
-          test.equal( afterPost, true );
+          test.equal( afterEverything, true );
           test.equal( status, 201 );
   
           test.done();
@@ -745,17 +772,17 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
     },
   
-    'Post() APIh afterPost': function( test ){
+    'Post() APIh afterEverything': function( test ){
       zap( function(){
   
-        var afterPost = false;
+        var flag = false;
         var People2 = declare( g.People, {
           storeName: 'people2',
           collectionName: 'people',
 
   
-          afterPost: function( request, doc, fullDoc, done){
-            afterPost = true;
+          afterEverything: function( request, method, p, done ){
+            flag = true;
             done( null );
           },
   
@@ -767,7 +794,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         // Set the basic stores
         people2.apiPost( { name: "Tony" }, function( err, person ){
           test.ifError( err );
-          test.equal( afterPost, true );
+          test.equal( flag, true );
   
           test.done();
         });
@@ -792,7 +819,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
        * APIg  castDoc
        * REST  echoAfterPutNew
        * REST/APIh prepareBeforeSend (if echoAfterPutNew)
-       * REST/APIh afterPutNew
+       * REST/APIh afterEverything
        EXISTING:
        * APIh  (+)extrapolateDoc
        * APIg  (+)castDoc
@@ -802,7 +829,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
        * APIg  castDoc
        * REST  echoAfterPutExisting
        * REST/APIh prepareBeforeSend (if echoAfterPutExisting)
-       * REST/APIh afterPutExisting
+       * REST/APIh afterEverything
     */
   
   
@@ -817,7 +844,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
             test.ifError( err );
-            test.deepEqual( data[ 0 ], person );
+            compareItems( test,  data[ 0 ], person );
   
             // Existing
             var p = { name: 'Tony', surname: "Mobily", age: 38 };
@@ -826,7 +853,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
               g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
                 test.ifError( err );
-                test.deepEqual( data[ 0 ], person );
+                compareItems( test,  data[ 0 ], person );
                 test.equal( data[ 0 ].age, 38 );
   
                 test.done();
@@ -856,7 +883,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
               g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
                 test.ifError( err );
-                test.deepEqual( data[ 0 ], person );
+                compareItems( test,  data[ 0 ], person );
   
   
                 zap( function() {
@@ -868,7 +895,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
                     g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
                       test.ifError( err );
-                      test.deepEqual( data[ 0 ], person );
+                      compareItems( test,  data[ 0 ], person );
                       test.equal( data[ 0 ].age, 38 );
   
                       var p = { name: 'Tony', surname: "Mobily", age: 38 };
@@ -1020,7 +1047,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           test.equal( type, 'bytes' );
           test.equal( status, 400 );
-          test.deepEqual( data,
+          compareItems( test,  data,
   
   { message: 'Bad Request',
   errors: 
@@ -1040,11 +1067,13 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-          prepareBody: function( request, body, method, done ){
-            if( method === 'put' ){
-              body.name = body.name.toUpperCase();
-            }
-            done( null );
+          prepareBody: function( request, method, body, done ){
+
+            if( method !== 'putExisting' ) return done( null, this._co( body ) );
+
+            body = this._co( body );
+            body.name = body.name.toUpperCase();
+            done( null, body );
           }
         });
         People2.deleteStore( 'people2' );
@@ -1067,7 +1096,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var p = { name: 'Tony', surname: "1234567890123456789012", age: 37 };
         g.people.apiPut( 1234, p, function( err, person ){
   
-          test.deepEqual( err.errors, [ { field: 'surname', message: 'Field is too long: surname' } ] );
+          compareItems( test,  err.errors, [ { field: 'surname', message: 'Field is too long: surname' } ] );
           test.equal( err.message, 'Unprocessable Entity' );
           test.equal( err.httpError, 422 );
   
@@ -1084,7 +1113,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-          checkPermissionsPutNew: function( request, cb ){
+          checkPermissions: function( request, method, p, cb ){
+
+            if( method !== 'putNew' ) cb( null, true );
+
             if( request.body.name === 'TONY' ) cb( null, false );
             else cb( null, true );
           },  
@@ -1112,7 +1144,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var p = { id: 1234, name: "Tony", age: 37, extra: "Won't be saved" }; 
         g.people.apiPut( null, p, function( err, person ){
           test.ifError( err );
-          test.deepEqual( person, { name: 'Tony', age: 37, id: person.id } ); 
+          compareItems( test,  person, { name: 'Tony', age: 37, id: person.id } ); 
           test.done();
         });
       });
@@ -1126,10 +1158,11 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
   
-          extrapolateDoc: function( request, fullDoc, done ){
+          extrapolateDoc: function( request, method, fullDoc, done ){
   
-            var doc = {};
-            for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+            if( method !== 'putNew' ) return done( null, this._co( fullDoc ) );
+
+            var doc = this._co( fullDoc );
             doc.name = doc.name + '_extrapolateDoc';
             doc.age = doc.age.toString();
             done( null, doc );
@@ -1215,10 +1248,13 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
   
-          prepareBeforeSend: function( request, doc, done ){
+          prepareBeforeSend: function( request, method, doc, done ){
+
+            if( method !== 'putNew' ) return done( null, this._co( doc ) );
+
+            var doc = this._co( doc );
             doc.beforeSend = '_prepareBeforeSend';
-  
-            done( null );
+            done( null, doc );
           },
   
         });
@@ -1228,7 +1264,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         // Set the basic stores
         people2.apiPut( 1234, { name: "Tony" }, function( err, person ){
           test.ifError( err );
-          test.deepEqual( person,
+          compareItems( test,  person,
   
   { name: 'Tony',
   id: person.id,
@@ -1248,10 +1284,13 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-          prepareBeforeSend: function( request, doc, done ){
+          prepareBeforeSend: function( request, method, doc, done ){
+
+            if( method !== 'putNew' ) return done( null, this._co( doc ) );
+
+            var doc = this._co( doc );
             doc.beforeSend = '_prepareBeforeSend';
-  
-            done( null );
+            done( null, doc );
           }
         });
         People2.deleteStore( 'people2' );
@@ -1276,7 +1315,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       });
     },
   
-    'Put() NEW APIh afterPutNew': function( test ){
+    'Put() NEW APIh afterEverything': function( test ){
       zap( function(){
   
         var flag = false;
@@ -1285,7 +1324,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
   
-          afterPutNew: function( request, doc, fullDoc, overwrite, done){
+          afterEverything: function( request, method, p, done ){
             flag = true;
             done( null );
           },
@@ -1304,7 +1343,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       });
     },
   
-    'Put() NEW REST afterPutNew': function( test ){
+    'Put() NEW REST afterEverything': function( test ){
       zap( function(){
   
         var flag = false;
@@ -1313,7 +1352,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
    
-          afterPutNew: function( request, doc, fullDoc, overwrite, done ){
+          afterEverything: function( request, method, p, done ){
             flag = true;
             done( null );
           },
@@ -1388,7 +1427,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-            checkPermissionsPutExisting: function(  request, doc, fullDoc, cb ){
+            checkPermissions: function(  request, method, p, cb ){
+              if( method !== 'putExisting' ) return cb( null, true );
+
               if( request.body.name === 'TONY' ) cb( null, false );
               else cb( null, true );
             },  
@@ -1436,11 +1477,12 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
   
-          extrapolateDoc: function( request, fullDoc, done ){
+          extrapolateDoc: function( request, method, fullDoc, done ){
   
-            var doc = {};
-            for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
-  
+            if( method !== 'putExisting' ) return done( null, this._co( fullDoc ) );
+
+            var doc = this._co( fullDoc );
+
             if( People2.firstTimeRun ){
               People2.firstTimeRun = false;
             } else {
@@ -1518,10 +1560,13 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-            prepareBeforeSend: function( request, doc, done ){
-              doc.beforeSend = '_prepareBeforeSend';
+            prepareBeforeSend: function( request, method, doc, done ){
 
-              done( null );
+              if( method !== 'putExisting' ) return done( null, this._co( doc ) );
+
+              var doc = this._co( doc );
+              doc.beforeSend = '_prepareBeforeSend';
+              done( null, doc );
             },
   
           });
@@ -1531,7 +1576,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           // Set the basic stores
           people2.apiPut( 1234, { name: "Tony" }, function( err, person ){
             test.ifError( err );
-            test.deepEqual( person,
+            compareItems( test,  person,
   
   { name: 'Tony',
   id: person.id,
@@ -1555,9 +1600,12 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
    
-            prepareBeforeSend: function( request, doc, done ){
-              doc.beforeSend = '_prepareBeforeSend';
+            prepareBeforeSend: function( request, method, doc, done ){
 
+              if( method !== 'putExisting' ) return done( null, this._co( doc ) );
+
+              var doc = this._co( doc );
+              doc.beforeSend = '_prepareBeforeSend';
               done( null );
             }
           });
@@ -1584,7 +1632,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       });
     },
   
-    'Put() EXISTING APIh afterPutExisting': function( test ){
+    'Put() EXISTING APIh afterEverything': function( test ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
@@ -1596,7 +1644,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
    
-            afterPutExisting: function( request, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb ){
+            afterEverything: function( request, method, p, cb ){
               flag = true;
               cb( null );
             },
@@ -1614,7 +1662,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       });
     },
   
-    'Put() EXISTING REST afterPutExisting': function( test ){
+    'Put() EXISTING REST afterEverything': function( test ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
@@ -1626,7 +1674,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
    
-            afterPutExisting: function( request, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb ){
+            afterEverything: function( request, method, p, cb ){
               flag = true;
               cb( null );
             },
@@ -1662,7 +1710,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
        * APIg  castDoc
        * REST  checkPermissionsGet
        * APIh prepareBeforeSend
-       * APIh afterGet
+       * APIh afterEverything
     */
   
     'Get() API Working test': function( test ){
@@ -1676,7 +1724,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           g.people.apiGet( 1234, function( err, person ){
             test.ifError( err );
   
-            test.deepEqual( p, person );
+            compareItems( test,  p, person );
   
             test.done();
           });
@@ -1750,7 +1798,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           test.equal( type, 'bytes' );
           test.equal( status, 400 );
-          test.deepEqual( data,
+          compareItems( test,  data,
   
   { message: 'Bad Request',
   errors: 
@@ -1771,10 +1819,11 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-          extrapolateDoc: function( request, fullDoc, done ){
+          extrapolateDoc: function( request, method, fullDoc, done ){
   
-            var doc = {};
-            for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+            if( method !== 'get' ) return done( null, this._co( fullDoc ) );
+
+            var doc = this._co( fullDoc );
             doc.age ++;
             done( null, doc );
           }
@@ -1818,7 +1867,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-            checkPermissionsGet: function(  request, doc, fullDoc, cb ){
+            checkPermissionsGet: function(  request, method, p, cb ){
+              if( method !== 'get' ) cb( null, true );
+
               if( request.params.id === 1234 ) cb( null, false );
               else cb( null, true );
             },  
@@ -1852,9 +1903,12 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
   
-            prepareBeforeSend: function( request, doc, done ){
+            prepareBeforeSend: function( request, method, doc, done ){
+
+              if( method !== 'get' ) return done( null, this._co( doc ) );
+
+              var doc = this._co( doc );
               doc.beforeSend = '_prepareBeforeSend';
-  
               done( null );
             },
   
@@ -1865,7 +1919,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           // Set the basic stores
           people2.apiGet( 1234, { name: "Tony" }, function( err, person ){
             test.ifError( err );
-            test.deepEqual( person,
+            compareItems( test,  person,
   
   { name: 'Tony',
   id: person.id,
@@ -1880,7 +1934,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
     },
   
-    'Get() APIh afterGet': function( test ){
+    'Get() APIh afterEverything': function( test ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
@@ -1892,7 +1946,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
    
-            afterPutExisting: function( request, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb ){
+            afterEverything: function( request, method, p, cb ){
               flag = true;
               cb( null );
             },
@@ -1914,9 +1968,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
     'Get() API toughness test: invalid ID': function( test ){
       g.people.apiGet( { a: 10 }, function( err, personGet ){
-        test.deepEqual( err.errors, [ { field: 'id', message: 'Error during casting' } ] );
-        test.deepEqual( err.message, 'Bad Request' );
-        test.deepEqual( err.httpError, 400 );
+        compareItems( test,  err.errors, [ { field: 'id', message: 'Error during casting' } ] );
+        compareItems( test,  err.message, 'Bad Request' );
+        compareItems( test,  err.httpError, 400 );
         test.done();
       });
     },
@@ -1949,9 +2003,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             test.ok( total === 1 );
   
             g.people.apiGet( person.id, function( err, personGet ){
-              test.deepEqual( err.errors, [ { field: 'surname', message: 'Field is too long: surname' } ] );
-              test.deepEqual( err.message, 'Unprocessable Entity' );
-              test.deepEqual( err.httpError, 422 );
+              compareItems( test,  err.errors, [ { field: 'surname', message: 'Field is too long: surname' } ] );
+              compareItems( test,  err.message, 'Unprocessable Entity' );
+              compareItems( test,  err.httpError, 422 );
    
               test.done();
             });
@@ -2006,7 +2060,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
        * APIh  extrapolateDoc
        * APIg  castDoc
        * REST  checkPermissionsDelete
-       * APIh afterDelete
+       * APIh afterEverything
     */
   
     'Delete() API Working test': function( test ){
@@ -2018,7 +2072,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           g.people.apiGet( person.id, function( err, personGet ){
             test.ifError( err );
-            test.deepEqual( person, personGet );
+            compareItems( test,  person, personGet );
   
             g.people.apiDelete( person.id, function( err ){
               test.ifError( err );
@@ -2101,7 +2155,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           test.equal( type, 'bytes' );
           test.equal( status, 400 );
-          test.deepEqual( data,
+          compareItems( test,  data,
   
   { message: 'Bad Request',
   errors: 
@@ -2130,10 +2184,11 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
   
-            extrapolateDoc: function( request, fullDoc, done ){
+            extrapolateDoc: function( request, method, fullDoc, done ){
   
-              var doc = {};
-              for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+              if( method !== 'delete' ) return done( null, this._co( fullDoc ) );
+
+              var doc = this._co( fullDoc );
               doc.surname += '_extrapolated';
               extrapolatedSurname = doc.surname;
   
@@ -2175,7 +2230,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-            checkPermissionsDelete: function(  request, doc, fullDoc, cb ){
+            checkPermissions: function(  request, method, p, cb ){
+
+              if( method !== 'delete' ) return cb( null, true );
+
               if( request.params.id === 1234 ) cb( null, false );
               else cb( null, true );
             },  
@@ -2200,7 +2258,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
     },
   
-    'Delete() APIh afterDelete': function( test ){
+    'Delete() APIh afterEverything': function( test ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
@@ -2212,7 +2270,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
   
-            afterDelete: function( request, doc, fullDoc, cb ){
+            afterEverything: function( request, method, p, cb ){
               flag = true;
               cb( null );
             },
@@ -2301,7 +2359,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           g.people.apiGetQuery( { sort: { age: 1 } }, function( err, docs ){
             test.ifError( err );
   
-            test.deepEqual( docs,
+            compareItems( test,  docs,
   
   [ { id: 1237, name: 'Sara', surname: 'Fabbietti', age: 14 },
   { id: 1235, name: 'Chiara', surname: 'Mobily', age: 24 },
@@ -2330,7 +2388,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           g.people.apiGetQuery( { sort: { age: 1 }, ranges: { limit: 1 } }, function( err, docs ){
             test.ifError( err );
   
-            test.deepEqual( docs,
+            compareItems( test,  docs,
   
   [ { id: 1237, name: 'Sara', surname: 'Fabbietti', age: 14 } ]
   
@@ -2433,7 +2491,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           test.equal( type, 'bytes' );
           test.equal( status, 400 );
-          test.deepEqual( data,
+          compareItems( test,  data,
   
   { message: 'Bad Request',
   errors: 
@@ -2455,7 +2513,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-          checkPermissionsGetQuery: function(  request, cb ){
+          checkPermissions: function(  request, method, p, cb ){
+
+            if( method !== 'getQuery' ) return cb( null, true );
+
             if( request.options.filters.name === 'Tony' ) cb( null, false );
             else cb( null, true );
           },  
@@ -2489,7 +2550,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           test.equal( type, 'bytes' );
           test.equal( status, 400 );
-          test.deepEqual( data,
+          compareItems( test,  data,
   
   { message: 'Bad Request',
   errors: [ { field: 'surname', message: 'Field is too long: surname' } ] }
@@ -2511,10 +2572,11 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           collectionName: 'people',
 
   
-          extrapolateDoc: function( request, fullDoc, done ){
+          extrapolateDoc: function( request, method, fullDoc, done ){
   
-            var doc = {};
-            for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
+            if( method !== 'getQuery' ) return done( null, this._co( fullDoc ) );
+
+            var doc = this._co( fullDoc );
             doc.surname += '_extrapolated';
   
             done( null, doc );
@@ -2565,9 +2627,12 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           storeName: 'people2',
           collectionName: 'people',
 
-          prepareBeforeSend: function( request, doc, done ){
-           doc.prepared = 10;
+          prepareBeforeSend: function( request, method, doc, done ){
 
+           if( method !== 'getQuery' ) return done( null, this._co( doc ) );
+
+           var doc = this._co( doc );
+           doc.prepared = 10;
            done( null );
           },
         });
@@ -2601,7 +2666,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
        g.people._queryMakeSelector( true, { name: 'Tony', surname: 'Mobily' }, {}, {}, function( err, selector ){
 
          test.ifError( err );
-         test.deepEqual( selector,
+         compareItems( test,  selector,
   
   { conditions: 
    { and: 
@@ -2614,7 +2679,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
          g.people._queryMakeSelector( true, { nameSt: 'Mob', ageGt: 20 }, {}, {}, function( err, selector) {
 
            test.ifError( err );
-           test.deepEqual( selector,
+           compareItems( test,  selector,
   
   { conditions: 
    { and: 
@@ -2628,7 +2693,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
            g.people._queryMakeSelector( true, { name: 'Tony' }, { name: -1, surname: 1 }, {}, function( err, selector ){
   
              test.ifError( err );
-             test.deepEqual( selector, 
+             compareItems( test,  selector, 
   
   { conditions: { and: [ { field: 'name', type: 'eq', value: 'Tony' } ] },
   ranges: {},
@@ -2639,7 +2704,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
              var selector = g.people._queryMakeSelector( true, { name: 'Tony' }, { name: -1, surname: 1 }, { from: 0, to: 10, limit: 5}, function( err, selector ){
   
                test.ifError( err );
-               test.deepEqual( selector, 
+               compareItems( test,  selector, 
   
   { conditions: { and: [ { field: 'name', type: 'eq', value: 'Tony' } ] },
   ranges: { from: 0, to: 10, limit: 5 },
@@ -2662,15 +2727,15 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
        req.headers[ 'if-match' ] = '*';
        var options = g.people._initOptionsFromReq( 'Put', req, true );
-       test.deepEqual( options, { overwrite: true } );
+       compareItems( test,  options, { overwrite: true } );
   
        req.headers[ 'if-none-match' ] = '*';
        var options = g.people._initOptionsFromReq( 'Put', req, true );
-       test.deepEqual( options, { overwrite: false } );
+       compareItems( test,  options, { overwrite: false } );
   
        req.headers = {};
        var options = g.people._initOptionsFromReq( 'Put', req, true );
-       test.deepEqual( options, { } );
+       compareItems( test,  options, { } );
   
        test.done();
     }, 
@@ -2684,7 +2749,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
        req.url = "http://www.example.org/people?name=Tony&surname=Mobily";
   
        var options = g.people._initOptionsFromReq( 'GetQuery', req, true );
-       test.deepEqual( options, 
+       compareItems( test,  options, 
   
   { sort: {},
   ranges: null,
@@ -2705,7 +2770,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
        req.url = "http://www.example.org/people?name=Tony&surname=Mobily&sortBy=+name,-surname";
   
        var options = g.people._initOptionsFromReq( 'GetQuery', req, true );
-       test.deepEqual( options, 
+       compareItems( test,  options, 
   
   { sort: { name: 1, surname: -1 },
   ranges: null,
@@ -2716,7 +2781,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
        req.url = "http://www.example.org/people?name=Tony&surname=Mobily&sortBy=+name,surname";
   
        var options = g.people._initOptionsFromReq( 'GetQuery', req, true );
-       test.deepEqual( options, 
+       compareItems( test,  options, 
   
   { sort: { name: 1 },
   ranges: null,
@@ -2737,7 +2802,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
        req.url = "http://www.example.org/people?name=Tony";
   
        var options = g.people._initOptionsFromReq( 'GetQuery', req, true );
-       test.deepEqual( options, 
+       compareItems( test,  options, 
   
   { sort: {},
   ranges: { from: 0, to: 10, limit: 11 },
@@ -2750,7 +2815,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
        req.url = "http://www.example.org/people?name=Tony";
   
        var options = g.people._initOptionsFromReq( 'GetQuery', req, true );
-       test.deepEqual( options, 
+       compareItems( test,  options, 
   
   { sort: {},
   ranges: null,
@@ -2784,7 +2849,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
 
             chainErrors: 'nonhttp',
   
-            extrapolateDoc: function( request, fullDoc, cb ){
+            extrapolateDoc: function( request, method, fullDoc, cb ){
               cb( new Error("Some other error") );
             },
           });
@@ -2799,7 +2864,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
               test.done();
             }),
             function( err ){
-              test.deepEqual( err.errors,
+              compareItems( test,  err.errors,
   
   [ { field: 'workspaceId',
        message: 'Field required in the URL: workspaceId' } ]
