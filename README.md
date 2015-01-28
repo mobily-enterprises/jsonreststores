@@ -11,9 +11,12 @@ PLAN OF ATTACK:
 ---------------
 
 BACK TO SimpleDbLayer with Hotplate
-[ ] Fix API calls in tests, making that the only tests that fails are the ones for different SimpleDbLayer
-[ ] Fix querying in JsonRestStores, KEEPING the current onlineSearchSchema definitions
-[ ] Make sure hotplate itself works leaving everything as is (API has not changed)
+[X] Fix API calls in tests, making that the only tests that fails are the ones for different SimpleDbLayer
+[X] Fix querying in JsonRestStores, KEEPING the current onlineSearchSchema definitions
+[ ] Make sure SimpleDbLayerMixin works
+[ ] Make sure hotplate itself works leaving everything as is (API has not changed). New SimpleDbLayer works!!!
+
+MILESTONE 1 COMPLETED: SimpleDbLayer V.2 is fully working, BookingDojo works again!
 
 IMPROVE searchSchema
 [ ] Make new syntax for searchSchema, allowing any depth of querying
@@ -21,10 +24,12 @@ IMPROVE searchSchema
 [ ] Change hotplate to see if it all works with new queries
 
 MEMORY store
-[ ] Implement sample store for documentation using memory, advising with searchSchema
+[ ] Implement sample store for documentation using memory, basic one with no searching nor adding
 [ ] Implement proper memory store with querying, getting querying code from dstore 
 [ ] Make sure tests run using new memory store
 [ ] Try the whole of hotplate running on the memory store
+
+MILESTONE 2 COMPLETED: JsonRestStore has a memory store that works without buggy TingoDB, and hotplate runs on it
 
 DOCUMENTING
 [ ] Rewrite bdocumentation for basic JsonRestStores
@@ -36,6 +41,9 @@ IMPROVE dstore
 
 PARTY
 [ ] Party!
+
+MILESTONE 3 COMPLETED: JsonRestStores now works AMAZINGLY well with dstores, 
+
 
 * **DRY approach**. Everything works as you'd expect it to, even though you are free to tweak things.
 * **Database-agnostic**. The module itself provides you with _everything_ except the data-manipulation methods, which are up to you to implement.
@@ -85,18 +93,17 @@ It sounds simple enough (although it's only two tables and it already looks rath
 
 This is only a short list of obvious things. There are many more to consider. The point is, when you make a store you should be focusing on the important parts (the data you manipulate, and permission checking) rather than repetitive, boilerplate code.
 
-With JsonRestStores, you can create JSON REST stores without ever worrying about any one of those things. You can concentrate on what _really_ matters: your application and your application's logic.
+With JsonRestStores, you can create JSON REST stores without ever worrying about any one of those things. You can concentrate on what _really_ matters: your application's data and logic.
 
 ## Understand a little about REST stores
 
 If you are new to REST and web stores, you will probably benefit by reading a couple of important articles. Understanding the concepts behind REST stores will make your life easier.
 
-I suggest you read [John Calcote's article about REST, PUT, POST, etc.](http://jcalcote.wordpress.com/2008/10/16/put-or-post-the-rest-of-the-story/). (It's a fantastic read, and I realised that it was written by John, who is a long term colleague and friend, only much later!).
+I suggest you read [John Calcote's article about REST, PUT, POST, etc.](http://jcalcote.wordpress.com/2008/10/16/put-or-post-the-rest-of-the-story/). (It's a fantastic read, and I realised that it was written by John, who is a long term colleague and fellow writer at Free Software Magazine, only much later!).
 
 You should also read my small summary of [what a REST store actually provides](https://github.com/mercmobily/JsonRestStores/blob/master/jsonrest.md).
 
 At this stage, the stores are 100% compatible with [Dojo's JsonRest](http://dojotoolkit.org/reference-guide/1.8/dojo/store/JsonRest.html) as well as [Sitepen's dstore](http://dstorejs.io/).
-
 
 # Quickstart
 

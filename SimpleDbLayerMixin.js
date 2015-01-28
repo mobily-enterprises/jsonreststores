@@ -19,7 +19,16 @@ ALSO:
 - If collectionName is not passed, it's assumed to be the same as storeName
 */
 
-exports = module.exports = declare( null,  {
+
+/*
+WHERE AM I?
+
+Make tests pass.
+Have a look at the code in general, and so whatever it takes to make tests pass. Tests will ABSOLUTELY
+NEED to add a searchOpt test with searchOpt being an array, and check for ranges
+*/
+
+exports = module.exports = declare( Object,  {
 
   // Must be defined for this module to be functional
   DbLayer: null,
@@ -189,44 +198,51 @@ exports = module.exports = declare( null,  {
 
   /*
       * FIRST:
-      *   REMOTE: options.filters, options.sort, options.ranges are created by _initOptionsFromReq
-      *   LOCAL: user sets options.filters, options.sort, options.ranges, options.skipHardLimitOnQueries
+      *   REMOTE: options.conditions, options.sort, options.ranges are created by _initOptionsFromReq
+      *   LOCAL: user sets options.conditions, options.sort, options.ranges, options.skipHardLimitOnQueries
 
       * AND THEN:
-      *   self._queryMakeSelector( filters, sort, ranges ) is called, and returns the full db selector for those options
+      *   self._queryMakeDbLayerFilter( conditions, sort, ranges ) is called, and returns the full db selector for those options
   */
 
-  _enrichSelectorWithParams: function( selector, params ){
+  _enrichConditionsWithParams: function( conditions, params ){
     
     var self = this;
 
-    // filter.conditions.and needs to exist and be an object
-    if( typeof( selector.conditions ) === 'undefined' || selector.conditions === null ){
-      selector.conditions = {};
-    }
-    if( typeof( selector.conditions.and ) === 'undefined' || selector.conditions.and === null ){
-      selector.conditions.and = [];
-    } 
-   
-    // Add param IDs as "AND" conditions to the query
+    // This will have the list of items that will actually get filtered
+    // (they are in self.paramIds and are also defined in `params`
+    var list = [];
+    var returnedConditions = conditions;
+    var whereToPush;
+
+    // Get the list of items that _actually_ need to be added
     self.paramIds.forEach( function( paramId ){
-      if( typeof( params[ paramId ]) !== 'undefined' ){
-        selector.conditions.and.push( { field: paramId, type: 'eq', value: params[ paramId ] } );
-      }
+      if( params.hasOwnProperty( paramId ) ) list.push( paramId );
     });
 
-    // Remove 'and' array from selector condition if it is empty
-    if (selector.conditions.and.length === 0) {
-        delete selector.conditions.and;
+    // If nothing needs to be added, leave filter as it is
+    if( ! list.length ) return returnedConditions;  
+
+
+    if( conditions.name === 'and' ){
+      whereToPush = conditions.args;
+    } else {
+      // Turn first condition into an 'and' condition
+      returnedConditions = { name: 'and', args: [ conditions ] };
+      whereToPush = returnedConditions.args;
     }
 
-    // Remove conditions object from selector if there is no conditions
-    if (Object.keys(selector.conditions).length === 0) {
-        delete selector.conditions;
+    // Add a condition for each paramId, so that it will get satisfied
+    list.forEach( function( paramId ){
+      whereToPush.push( { name: 'eq', args: [ paramId, params[ paramId ] ] } );
+    });
+
+    // If there is only one "and" condition, normalise it to the condition itself
+    if( returnedConditions.name === 'and' && returnedConditions.args.length === 1 ){
+      returnedConditions = returnedConditions.args[ 0 ];
     }
 
-    return selector;
-
+    return returnedConditions;
   },
 
   implementReposition: function( doc, where, beforeId, cb ){
@@ -246,20 +262,20 @@ exports = module.exports = declare( null,  {
 
     var self = this;
 
-    // Make up the filter, based on the store's IDs (used as filters).
-    var selector = {};
+    // Make up the condition, based on the store's IDs
+    var conditions = {};
 
     // Make up the selector.
     // Remote requests need to have the full filter based on request.params. Local ones
     // only have to have (and I mean HAVE TO) the idProperty
     if( request.remote ){
-       self._enrichSelectorWithParams( selector, request.params );
+       conditions = self._enrichConditionsWithParams( conditions, request.params );
     } else {
-      selector = { conditions: { and: [ { field: self.idProperty, type: 'eq', value: request.params[ self.idProperty ] } ] } };
+      conditions = { name: 'eq', args: [ self.idProperty, request.params[ self.idProperty ]  ] };
     }
 
     // Make the database call 
-    self.dbLayer.select( selector, { children: true }, function( err, docs ){
+    self.dbLayer.select( conditions, { children: true }, function( err, docs ){
       if( err ){
         cb( err );
       } else {
@@ -306,16 +322,16 @@ exports = module.exports = declare( null,  {
     var self = this;
     var updateObject = {};
 
-    // Make up the filter, based on the store's IDs (used as filters).
-    var selector = {};
+    // Make up the condition, based on the store's IDs
+    var conditions = {};
 
     // Make up the selector.
-    // Remote requests need to have the full filter based on request.params. Local ones
+    // Remote requests need to have the full conditions based on request.params. Local ones
     // only have to have (and I mean HAVE TO) the idProperty
     if( request.remote ){
-       self._enrichSelectorWithParams( selector, request.params );
+       conditions = self._enrichConditionsWithParams( conditions, request.params );
     } else {
-      selector = { conditions: { and: [ { field: self.idProperty, type: 'eq', value: request.params[ self.idProperty ] } ] } };
+      conditions = { name: 'eq', args: [ self.idProperty, request.params[ self.idProperty ]  ] };
     }
 
     // Make up the `updateObject` variable, based on the passed `body`
@@ -326,12 +342,12 @@ exports = module.exports = declare( null,  {
     // If piggyField is there, this is a single-field update
     // var deleteUnsetFields = ! self.piggyField;
 
-    self.dbLayer.update( selector, updateObject, { deleteUnsetFields: deleteUnsetFields, multi: false, skipValidation: true }, function( err, howMany ){
+    self.dbLayer.update( conditions, updateObject, { deleteUnsetFields: deleteUnsetFields, multi: false, skipValidation: true }, function( err, howMany ){
       if( err ){
         cb( err );
       } else {
 
-        self.dbLayer.select( selector, { children: true }, function( err, docs ){
+        self.dbLayer.select( conditions, { children: true }, function( err, docs ){
           if( err ){
             cb( err );
           } else {
@@ -361,51 +377,53 @@ exports = module.exports = declare( null,  {
   implementDelete: function( request, cb ){
 
     var self = this;
-    var selector = {};
+    var conditions = {};
 
     // Make up the selector.
-    // Remote requests need to have the full filter based on request.params. Local ones
+    // Remote requests need to have the full conditions based on request.params. Local ones
     // only have to have (and I mean HAVE TO) the idProperty
     if( request.remote ){
-       self._enrichSelectorWithParams( selector, request.params );
+       conditions = self._enrichConditionsWithParams( conditions, request.params );
     } else {
-      selector = { conditions: { and: [ { field: self.idProperty, type: 'eq', value: request.params[ self.idProperty ] } ] } };
+      conditions = { name: 'eq', args: [ self.idProperty, request.params[ self.idProperty ]  ] };
     }
 
-    self.dbLayer.delete( selector, { multi: false, skipValidation: true }, cb );
+    self.dbLayer.delete( conditions, { multi: false, skipValidation: true }, cb );
   },
 
-  _queryMakeSelector: function( remote, filters, sort, ranges, cb ){
+  _queryMakeDbLayerFilter: function( remote, conditionsHash, sort, ranges, cb ){
+ 
+    // The simleDbLayer filter that will get returned
+    var filter = {};
 
     var self = this;
     var errors = [];
-    var field, type, condition;
+    var field, condition, value;
 
-    // Define and set the conditions variable, which will be returned
-    var conditions = {};
-    conditions.and = [];
-    conditions.or = [];
+    // Straight fields that do not need any conversions as they are the same
+    // between JsonRestStores and SimpleDbLayer
+    filter.ranges = ranges;
+    filter.sort = sort;
+
+    // Starting point, with an `and`. This will get trimmed to a straight condition if
+    // filter.conditions.args.length is 1
+    filter.conditions = { name: 'and', args: [ ] };
 
     // Add filters to the selector
-    for( var filterField in filters ){
+    for( var searchField in conditionsHash ){
 
-      var filterValue = filters[ filterField ];
-
-      // There is a slim chance that  self.onlineSearchSchema.structure[ filterField ] is not there:
+      // There is a slim chance that self.onlineSearchSchema.structure[ searchField ] is not there:
       // it happens in case the request is from API and it required a field available
       // in the main schema but NOT in the search schema
-      //var searchable = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchable;
-      var searchable = self.onlineSearchSchema.structure[ filterField ];
-      var searchOptions = self.onlineSearchSchema.structure[ filterField ] && self.onlineSearchSchema.structure[ filterField ].searchOptions;
+      //var searchable = self.onlineSearchSchema.structure[ searchField ] && self.onlineSearchSchema.structure[ searchField ].searchable;
+      var searchable = self.onlineSearchSchema.structure[ searchField ];
+      var searchOptions = self.onlineSearchSchema.structure[ searchField ] && self.onlineSearchSchema.structure[ searchField ].searchOptions;
 
       if( searchable || !remote ) {
 
         // searchOptions is not an object/is null: just set default conditions (equality with field)
         if( typeof( searchOptions ) !== 'object' || searchOptions === null ){
-          field = filterField;
-          type = 'eq';
-          condition = 'and';
-          conditions[ condition ].push( { field: field, type: type, value: filters[ filterField ] } );
+          filter.conditions.args.push( { name: 'eq', args: [ searchField, conditionsHash[ searchField ] ] } );
 
         // searchOptions IS an object: it might be an array or a single condition set
         } else {
@@ -417,39 +435,46 @@ exports = module.exports = declare( null,  {
             var elements = [ searchOptions ];
           }
 
+          var orConditions = { name: 'or', args: [] };
           elements.forEach( function( element ){
 
-            field = element.field || filterField;
-            type = element.type || 'eq';
+            field = element.field || searchField;
             condition = element.condition || 'and';
-            value = element.value || filters[ filterField ];
+            value = element.value || conditionsHash[ searchField ];
 
-            conditions[ condition ].push( { field: field, type: type, value: value } );
+            if( condition === 'and' ){
+              filter.conditions.args.push( { name: 'eq', args: [ field, value ] } );
+            } else {
+              orConditions.args.push( { name: 'eq', args: [ field, value ] } );              
+            }
           });
 
+          // More than one 'or' conditions: add the whole orConditions to the filter
+          if( orConditions.args.length > 1 ){
+            filter.conditions.args.push( orConditions );
+          }
+          // Only one "or" condition: add it straight to the list of conditions
+          else if( orConditions.args.length === 1 ){
+            filter.conditions.args.push( orConditions.args[ 0 ] );
+          }
+        }
+
+        // Don't have an `and` condition with just one entry. Shrink it to
+        // a straight condition instead.
+        if( filter.conditions.name === 'and' || filter.conditions.name === 'or' ){
+          if( filter.conditions.args.length === 1 ) filter.conditions = filter.conditions.args[ 0 ];
         }
 
       // Field is not searchable: error!
       } else {
-        errors.push( { field: filterField, message: 'Field not allowed in search: ' + filterField + ' in ' + self.storeName } );
+        errors.push( { field: searchField, message: 'Field not allowed in search: ' + searchField + ' in ' + self.storeName } );
       }
-
     }
 
     // Call the callback with an error, or with the selector (containing conditions, ranges, sort)
-    if( errors.length ){
-      cb( new self.UnprocessableEntityError( { errors: errors } ) );
-    } else {
-
-      if( conditions.and.length === 0 ) delete conditions.and;
-      if( conditions.or.length === 0 ) delete conditions.or;
-
-      cb( null, {
-        conditions: conditions,
-        ranges: ranges,
-        sort: sort,
-      } );
-    }
+    if( errors.length ) return cb( new self.UnprocessableEntityError( { errors: errors } ) );
+   
+    cb( null, filter );
 
   },
 
@@ -475,21 +500,16 @@ exports = module.exports = declare( null,  {
     if( typeof( request.options.sort ) === 'undefined' || request.options.sort === null ) request.options.sort = {}; 
     if( typeof( request.options.ranges ) === 'undefined' || request.options.ranges === null ) request.options.ranges = {}; 
 
-    // Add the default sort if no sorting options were passed
-    // NOTE: Moved to JsonRestStores
-    //if(Object.getOwnPropertyNames( request.options.sort ).length === 0 && self.defaultSort){
-    //  request.options.sort = self.defaultSort;
-    //}
 
-    self._queryMakeSelector( request.remote, request.options.filters, request.options.sort, request.options.ranges, function( err, selector ){
+    self._queryMakeDbLayerFilter( request.remote, request.options.conditions, request.options.sort, request.options.ranges, function( err, filter ){
       if( err ){
         next( err );
       } else {
 
-        if( request.remote) self._enrichSelectorWithParams( selector, request.params );
+        if( request.remote) filter.conditions = self._enrichConditionsWithParams( filter.conditions, request.params );
 
         // Run the select based on the passed parameters
-        self.dbLayer.select( selector, dbLayerOptions, next );
+        self.dbLayer.select( filter, dbLayerOptions, next );
       }
     });
 

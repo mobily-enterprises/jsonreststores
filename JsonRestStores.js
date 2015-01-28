@@ -28,7 +28,7 @@ var
 , SimpleDbLayerMixin = require('./SimpleDbLayerMixin.js')
 ;
 
-var Store = declare( null,  {
+var Store = declare( Object,  {
 
   // ***********************************************************
   // *** ATTRIBUTES THAT ALWAYS NEED TO BE DEFINED IN PROTOTYPE
@@ -229,7 +229,7 @@ var Store = declare( null,  {
   // When calling implementReposition:
   // - where can be 'start', 'end' or 'at'
   // - beforeId is only meaningful for 'at' (tell is where to place it)
-  // - existing is boolean, and it's only meaningful if this.position is there, and 
+  // - existing is boolean, and it's only meaningful if this.position is there 
   _repositionBasedOnHeaders: function( fullDoc, putBefore, putDefaultPosition, existing, cb ){
 
     // No position field: nothing to do
@@ -296,13 +296,13 @@ var Store = declare( null,  {
 
     }
 
-    // Set the 'SortBy', 'ranges' and 'filters' in
+    // Set the 'SortBy', 'ranges' and 'conditions' in
     // the options, based on the passed headers
 
     if( mn == 'GetQuery' ){
       options.sort = parseSortBy( req );
       options.ranges = parseRangeHeaders( req );
-      options.filters = parseFilters( req );
+      options.conditions = parseConditions( req );
     }
 
     // If self.defaultSort was passed, then maybe it needs to be applied (depending on options.sort)
@@ -367,16 +367,19 @@ var Store = declare( null,  {
         rangeTo = tokens[2] - 0;
         if( rangeTo == 'Infinity' ){
           return ({
-            from: rangeFrom
+            //from: rangeFrom
+            skip: rangeFrom
           })
         } else {
 
           limit =  rangeTo - rangeFrom + 1;
 
           return( {
-            from: rangeFrom,
-            to: rangeTo,
-            limit:  limit,
+            //from: rangeFrom,
+            //to: rangeTo,
+            //limit:  limit,
+            skip: rangeFrom,
+            limit: limit,
           });
 
         }
@@ -387,7 +390,7 @@ var Store = declare( null,  {
     }
 
 
-    function parseFilters( req ){
+    function parseConditions( req ){
 
       var url_parts = url.parse( req.url, false );
       var q = url_parts.query || '';
@@ -906,13 +909,13 @@ var Store = declare( null,  {
   },
 
   // Helper function for _makeGetQuery
-  _validateSearchFilter: function( request, filters, options, cb ){
+  _validateSearchConditions: function( request, conditions, options, cb ){
 
     var self = this;
 
     // If it's a remote call, then simply validate using the onlineSearchSchema
     if( request.remote ){
-      return self.onlineSearchSchema.validate( filters, options, cb);
+      return self.onlineSearchSchema.validate( conditions, options, cb);
     }
 
     // If it's a local call, validate using a new schema made up with the onlineSearchSchema AND
@@ -922,13 +925,13 @@ var Store = declare( null,  {
     for( var k in self.schema.structure ) schemaStructure[ k ] = schemaStructure[ k ] || self.schema.structure[ k ];
 
     var newSchema = new self.onlineSearchSchema.constructor( schemaStructure );
-    newSchema.validate( filters, options, cb );
+    newSchema.validate( conditions, options, cb );
   },
 
   _makeGetQuery: function( request, next ){
 
     var self = this;
-    var sort, range, filters;
+    var sort, range, conditions;
 
     if( typeof( next ) !== 'function' ) next = function(){};
 
@@ -950,11 +953,11 @@ var Store = declare( null,  {
         self.afterCheckPermissions( request, 'getQuery', {}, function( err ){
           if( err ) return self._sendError( request, next, err );
 
-          self._validateSearchFilter( request, request.options.filters, { onlyObjectValues: true }, function( err, filters, errors ){
+          self._validateSearchConditions( request, request.options.conditions, { onlyObjectValues: true }, function( err, conditions, errors ){
             if( err ) return self._sendError( request, next, err );
 
-            // Actually assigning cast and validated filters to `options`
-            request.options.filters = filters;
+            // Actually assigning cast and validated conditions to `options`
+            request.options.conditions = conditions;
 
             // Errors in casting: give up, run away
             if( errors.length ) return self._sendError( request, next, new self.BadRequestError( { errors: errors } ));
@@ -1364,7 +1367,7 @@ Store.getAllStores = function(){
 // OneFieldStoreMixin, to create a one-field store based
 // on a "main" parent store
 
-Store.OneFieldStoreMixin = declare( null,  {
+Store.OneFieldStoreMixin = declare( Object,  {
 
   // Variables that HAVE TO be set by the inherited constructor
   storeName: null,
