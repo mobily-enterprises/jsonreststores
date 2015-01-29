@@ -10,8 +10,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 /*
 
-  TODO:
-Tests for:
+  TEST TODO:
   * self.deleteAfterGetQuery 
   * { delete: true } in GetQuery
   * Missing paramId in API Post or Put
@@ -19,6 +18,7 @@ Tests for:
   * Check that indexing works
   * Test hook bodyPostValidate
   * Check postValidate
+  * echoAfterDelete
 */
 
 var 
@@ -62,9 +62,6 @@ var RES = function( func ){
   this.setHeader = function( header, value ){
     this._headers[ header ] = value;
   };
-
-
-
 }
 
 var peopleData = exports.peopleData = [
@@ -80,6 +77,8 @@ function l( v ){
 }
 
 var compareCollections = function( test, a, b ){
+
+  //console.log( "HERE, a,b:", a, b );
 
   // Makes sure that records have the keys in the right order
   var a0 = [];
@@ -102,9 +101,10 @@ var compareCollections = function( test, a, b ){
     delete newItem._children;
     b0.push( newItem );
   }
- 
+  //console.log( "HERE, a0, b0:", a0, b0 );
 
- try {
+
+  try {
     var a1 = [], a2, a3;
     a0.forEach( function( item ){
       a1.push( JSON.stringify( item ) );
@@ -204,10 +204,6 @@ var clearAndPopulateTestCollection = function( g, cb ){
 
 
 
-process.on('uncaughtException', function(err) {
-  console.error(err.stack);
-});
-
 //Error.stackTraceLimit = Infinity;
 
 exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
@@ -216,6 +212,12 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   var g = {};
 
   var startup = function( done ){
+
+
+    process.on('uncaughtException', function(err) {
+      console.error("UNCAUGHT ERROR: ", err.stack);
+      console.error("ERROR HAPPENED:", new Error().stack );
+    });
 
     var self = this;
 
@@ -394,10 +396,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         g.people.apiPost( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
  
           g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
             compareItems( test, data[ 0 ], person );
   
             test.done();
@@ -411,7 +413,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
         (g.people.getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           var res = this;
   
           test.equal( type, 'json' );
@@ -441,7 +443,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
         var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
         (people2.getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
           test.equal( type, 'bytes' );
@@ -457,7 +459,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { params: { }, body: { name: 'Tony', surname: 'Mobily' } } );
         (g.wsPeople.getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           var res = this;
   
           test.equal( type, 'bytes' );
@@ -498,7 +500,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         // Set the basic stores
         people2.apiPost( { name: "Tony" }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           compareItems( test,  person,
   
   { name: 'Tony_prepareBodyPost',
@@ -544,7 +546,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
         var req = makeReq( { body: { name: 'TONY', surname: 'Mobily' } } );
         (people2.getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
   
@@ -560,7 +562,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         g.people.apiPost( { name: "Tony", extra: "Won't be saved" }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           compareItems( test,  person, { name: 'Tony', id: person.id } ); 
           test.done();
         });
@@ -592,7 +594,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
         // Set the basic stores
         people2.apiPost( { name: "Tony" }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           compareItems( test,  person,
   
   { name: 'Tony_extrapolateDoc',
@@ -625,7 +627,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var people2 = new People2();
 
         people2.apiPost( { name: 'Tony', age: 37 }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           test.equal( person.age, 37 );
           test.done();
@@ -648,7 +650,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
         var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
         (people2.getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
   
@@ -683,7 +685,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
         (people2.getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
   
@@ -723,7 +725,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
         // Set the basic stores
         people2.apiPost( { name: "Tony" }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           compareItems( test,  person,
   
   { name: 'Tony',
@@ -757,7 +759,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { body: { name: 'TONy', surname: 'Mobily' } } );
         (people2.getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
   
@@ -793,7 +795,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
         // Set the basic stores
         people2.apiPost( { name: "Tony" }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           test.equal( flag, true );
   
           test.done();
@@ -831,28 +833,27 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
        * REST/APIh prepareBeforeSend (if echoAfterPutExisting)
        * REST/APIh afterEverything
     */
-  
-  
-  
+    
     'Put() API Working test (new, existing)': function( test ){
       zap( function(){
   
         // New
         var p = { id: 1234, name: 'Tony', surname: "Mobily", age: 37 };
         g.people.apiPut( null, p, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
+
           g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
             compareItems( test,  data[ 0 ], person );
   
             // Existing
             var p = { name: 'Tony', surname: "Mobily", age: 38 };
             g.people.apiPut( person.id, p, function( err, person ){
-              test.ifError( err );
+              test.ifError( err ); if( err ) return test.done();
   
               g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
-                test.ifError( err );
+                test.ifError( err ); if( err ) return test.done();
                 compareItems( test,  data[ 0 ], person );
                 test.equal( data[ 0 ].age, 38 );
   
@@ -879,10 +880,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
             var p = { id: 1234, name: 'Tony', surname: "Mobily", age: 37 };
             g.people.apiPut( null, p, { overwrite: true }, function( err, person ){
-              test.ifError( err );
+              test.ifError( err ); if( err ) return test.done();
   
               g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
-                test.ifError( err );
+                test.ifError( err ); if( err ) return test.done();
                 compareItems( test,  data[ 0 ], person );
   
   
@@ -891,10 +892,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
                   // Existing
                   var p = { name: 'Tony', surname: "Mobily", age: 38 };
                   g.people.apiPut( person.id, p, { overwrite: false }, function( err, person ){
-                    test.ifError( err );
+                    test.ifError( err ); if( err ) return test.done();
   
                     g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
-                      test.ifError( err );
+                      test.ifError( err ); if( err ) return test.done();
                       compareItems( test,  data[ 0 ], person );
                       test.equal( data[ 0 ].age, 38 );
   
@@ -922,7 +923,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { url: 'http://www.example.com/1234', params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
         (g.people.getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           var res = this;
   
           test.equal( type, 'json' );
@@ -934,7 +935,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           var req = makeReq( {  url: 'http://www.example.com/1234', params: { id: 1234 }, body: { name: 'Tony2', surname: 'Mobily2' } } );
           (g.people.getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
             var res = this;
  
             test.equal( type, 'json' );
@@ -956,7 +957,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( {  url: 'http://www.example.com/1234', headers: { 'if-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
         (g.people.getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           var res = this;
   
           test.equal( type, 'bytes' );
@@ -968,7 +969,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
             var req = makeReq( {  url: 'http://www.example.com/1234', headers: { 'if-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
             (g.people.getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
-              test.ifError( err );
+              test.ifError( err ); if( err ) return test.done();
               var res = this;
   
               test.equal( type, 'json' );
@@ -982,7 +983,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
                 var req = makeReq( {  url: 'http://www.example.com/1234', headers: { 'if-none-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
                 (g.people.getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
-                  test.ifError( err );
+                  test.ifError( err ); if( err ) return test.done();
                   var res = this;
   
                   test.equal( type, 'json' );
@@ -995,7 +996,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
                   var req = makeReq( {  url: 'http://www.example.com/1234', headers: { 'if-none-match': '*' }, params: { id: 1234 }, body: { id: 1235, name: 'Tony', surname: 'Mobily' } } );
                   (g.people.getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
-                    test.ifError( err );
+                    test.ifError( err ); if( err ) return test.done();
                     var res = this;
   
                     test.equal( type, 'bytes' );
@@ -1026,7 +1027,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
         var req = makeReq( {  url: 'http://www.example.com/1234', params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
         (people2.getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
           test.equal( type, 'bytes' );
@@ -1042,7 +1043,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( {  url: 'http://www.example.com/1234', params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
         (g.wsPeople.getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           var res = this;
   
           test.equal( type, 'bytes' );
@@ -1069,7 +1070,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
 
           prepareBody: function( request, method, body, done ){
 
-            if( method !== 'putExisting' ) return done( null, this._co( body ) );
+            if( method !== 'put' ) return done( null, this._co( body ) );
 
             body = this._co( body );
             body.name = body.name.toUpperCase();
@@ -1081,10 +1082,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
 
         var p = { id: 1234, name: 'Tony', surname: "Mobily", age: 37 };
         people2.apiPut( null, p, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           test.equal( person.name, "TONY" );
           test.equal( person.surname, "Mobily" );
-
+  
           test.done();
         });
       });
@@ -1126,7 +1127,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
         var req = makeReq( { params: { id: 1234 }, body: { name: 'TONY', surname: 'Mobily' } } );
         (people2.getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
   
@@ -1143,7 +1144,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var p = { id: 1234, name: "Tony", age: 37, extra: "Won't be saved" }; 
         g.people.apiPut( null, p, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           compareItems( test,  person, { name: 'Tony', age: 37, id: person.id } ); 
           test.done();
         });
@@ -1173,7 +1174,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
   
         people2.apiPut( 1234, { name: "Tony", age: 37 }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           test.equal( person.name, 'Tony_extrapolateDoc' );
           test.equal( person.age, 37 );
@@ -1203,7 +1204,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
   
         people2.apiPut( 1234, { name: "Tony", age: 37 }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           test.equal( person.age, 37 );
   
           test.done();
@@ -1227,7 +1228,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
         var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
         (people2.getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
   
@@ -1263,7 +1264,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
         // Set the basic stores
         people2.apiPut( 1234, { name: "Tony" }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           compareItems( test,  person,
   
   { name: 'Tony',
@@ -1298,7 +1299,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( {  url: 'http://www.example.com/1234', params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
         (people2.getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
   
@@ -1335,7 +1336,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
         // Set the basic stores
         people2.apiPut( 1234, { name: "Tony" }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           test.equal( flag, true );
   
           test.done();
@@ -1350,7 +1351,6 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var People2 = declare( g.People, {
           storeName: 'people2',
           collectionName: 'people',
-
    
           afterEverything: function( request, method, p, done ){
             flag = true;
@@ -1362,7 +1362,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
         (people2.getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
   
@@ -1403,10 +1403,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: '37' }, { multi: true }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           people2.apiPut( 1234, { name: 'Tony', age: 38, extra: 'EXTRA' }, function( err, person ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
             test.equal( typeof ageAtFirstExtrapolateDocs, 'string' );
             test.equal( typeof person.age, 'number' );
   
@@ -1421,7 +1421,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var People2 = declare( g.People, {
           storeName: 'people2',
@@ -1439,7 +1439,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
           var req = makeReq( { params: { id: 1234 }, body: { name: 'TONY' } } );
           (people2.getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
   
             var res = this;
   
@@ -1456,10 +1456,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           g.people.apiPut( 1234, { name: 'Tony', age: 38, extra: 'EXTRA' }, function( err, person ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
             test.equal( typeof( person.extra ), 'undefined' );
   
             test.done();
@@ -1495,10 +1495,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var people2 = new People2();
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           people2.apiPut( 1234, { name: 'Tony', age: 37 }, function( err, person ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
   
             test.equal( person.age, 38 );
   
@@ -1523,7 +1523,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var People2 = declare( g.People, {
           storeName: 'people2',
@@ -1536,7 +1536,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
           (people2.getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
   
             var res = this;
   
@@ -1555,7 +1555,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           var People2 = declare( g.People, {
           storeName: 'people2',
           collectionName: 'people',
@@ -1575,7 +1575,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
           // Set the basic stores
           people2.apiPut( 1234, { name: "Tony" }, function( err, person ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
             compareItems( test,  person,
   
   { name: 'Tony',
@@ -1594,7 +1594,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           var People2 = declare( g.People, {
           storeName: 'people2',
           collectionName: 'people',
@@ -1606,7 +1606,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
 
               var doc = this._co( doc );
               doc.beforeSend = '_prepareBeforeSend';
-              done( null );
+              done( null, doc );
             }
           });
           People2.deleteStore( 'people2' );
@@ -1614,10 +1614,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           var req = makeReq( {  url: 'http://www.example.com/1234', params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
           (people2.getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
   
             var res = this;
-  
             test.equal( type, 'json' );
             test.equal( status, 200 );
             test.equal( headers.Location, 'http://www.example.com/1234' );
@@ -1636,7 +1635,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var flag = false;
           var People2 = declare( g.People, {
@@ -1654,7 +1653,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           // Set the basic stores
           people2.apiPut( 1234, { name: "Tony" }, function( err, person ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
             test.equal( flag, true );
             test.done();
           });
@@ -1666,7 +1665,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var flag = false;
           var People2 = declare( g.People, {
@@ -1684,7 +1683,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           var req = makeReq( { params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
           (people2.getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
   
             var res = this;
   
@@ -1719,10 +1718,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var p = { id: 1234, name: 'Tony', surname: 'Mobily', age: 37 };
         g.dbPeople.insert( p, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           g.people.apiGet( 1234, function( err, person ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
   
             compareItems( test,  p, person );
   
@@ -1737,11 +1736,11 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', surname: 'Mobily', age: '37' }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var req = makeReq( { params: { id: 1234 } } );
           (g.people.getRequestHandler('Get'))(req, new RES( function( err, type, headers, status, data ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
             var res = this;
   
             test.equal( type, 'json' );
@@ -1775,7 +1774,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { params: { id: 1234 } } );
         (people2.getRequestHandler('Get'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
           test.equal( type, 'bytes' );
@@ -1793,7 +1792,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { params: { id: 1234 } } );
         (g.wsPeople.getRequestHandler('Get'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           var res = this;
   
           test.equal( type, 'bytes' );
@@ -1833,10 +1832,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var p = { id: 1234, name: 'Tony', age: 37 };
         g.dbPeople.insert( p, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           people2.apiGet( 1234, function( err, person ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
             test.equal( person.age, 38 );
   
             test.done();
@@ -1861,13 +1860,13 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
          g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var People2 = declare( g.People, {
           storeName: 'people2',
           collectionName: 'people',
 
-            checkPermissionsGet: function(  request, method, p, cb ){
+            checkPermissions: function(  request, method, p, cb ){
               if( method !== 'get' ) cb( null, true );
 
               if( request.params.id === 1234 ) cb( null, false );
@@ -1879,7 +1878,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
           var req = makeReq( { params: { id: 1234 } } );
           (people2.getRequestHandler('Get'))(req, new RES( function( err, type, headers, status, data ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
   
             var res = this;
   
@@ -1897,7 +1896,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           var People2 = declare( g.People, {
           storeName: 'people2',
           collectionName: 'people',
@@ -1909,16 +1908,16 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
 
               var doc = this._co( doc );
               doc.beforeSend = '_prepareBeforeSend';
-              done( null );
+              done( null, doc );
             },
   
           });
           People2.deleteStore( 'people2' );
-        var people2 = new People2();
-   
+          var people2 = new People2();
+
           // Set the basic stores
-          people2.apiGet( 1234, { name: "Tony" }, function( err, person ){
-            test.ifError( err );
+          people2.apiGet( 1234, function( err, person ){
+            test.ifError( err ); if( err ) return test.done();
             compareItems( test,  person,
   
   { name: 'Tony',
@@ -1938,7 +1937,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var flag = false;
           var People2 = declare( g.People, {
@@ -1956,7 +1955,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           // Set the basic stores
           people2.apiPut( 1234, { name: "Tony" }, function( err, person ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
             test.equal( flag, true );
   
             test.done();
@@ -1969,8 +1968,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
     'Get() API toughness test: invalid ID': function( test ){
       g.people.apiGet( { a: 10 }, function( err, personGet ){
         compareItems( test,  err.errors, [ { field: 'id', message: 'Error during casting' } ] );
-        compareItems( test,  err.message, 'Bad Request' );
-        compareItems( test,  err.httpError, 400 );
+        test.equals( err.message, 'Bad Request' );
+        test.equals( err.httpError, '400' );
         test.done();
       });
     },
@@ -1996,10 +1995,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
       zap( function(){
         g.people.apiPost( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           g.dbPeople.update( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id  } ] } }, { surname: '1234567890123456789012' }, { deleteUnsetFields: false }, function( err, total ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
             test.ok( total === 1 );
   
             g.people.apiGet( person.id, function( err, personGet ){
@@ -2033,13 +2032,13 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         peopleWrongId.paramIds = [ 'surname' ],
   
         g.people.apiPost( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person1 ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           g.people.apiPost( { name: 'Chiara', surname: "Mobily", age: 24 }, function( err, person2 ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
   
             peopleWrongId.apiGet( 'Mobily', function( err, person3 ){
               test.ok( typeof( err ) === 'object' );
-              test.ok( err.message === 'execAllDbFetch fetched more than 1 record' );
+              test.ok( err.message === 'implementFetchOne fetched more than 1 record' );
               test.done();
             });
           });
@@ -2065,20 +2064,21 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
     'Delete() API Working test': function( test ){
   
+    //process.exit();
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', surname: 'Mobily', age: 37 }, { multi: true, returnRecord: true }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           g.people.apiGet( person.id, function( err, personGet ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
             compareItems( test,  person, personGet );
   
             g.people.apiDelete( person.id, function( err ){
-              test.ifError( err );
+              test.ifError( err ); if( err ) return test.done();
               
               g.dbPeople.select( { }, function( err, docs ){
-                test.ifError( err );
+                test.ifError( err ); if( err ) return test.done();
   
                 test.equals( docs.length, 0 );
   
@@ -2095,19 +2095,19 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var p = { id: 1234, name: 'Tony', surname: 'Mobily', age: 37 };
         g.dbPeople.insert( p, { multi: true, returnRecord: true }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var req = makeReq( { params: { id: 1234 } } );
           (g.people.getRequestHandler('Delete'))(req, new RES( function( err, type, headers, status, data ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
   
             var res = this;
   
-            test.equal( type, 'bytes' );
-            test.equal( status, 204 );
+            test.equal( type, 'json' );
+            test.equal( status, 200 );
   
             g.dbPeople.select( { }, function( err, docs ){
-              test.ifError( err );
+              test.ifError( err ); if( err ) return test.done();
   
               test.equals( docs.length, 0 );
   
@@ -2133,7 +2133,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { params: { id: 1234 } } );
         (people2.getRequestHandler('Delete'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
           test.equal( type, 'bytes' );
@@ -2150,7 +2150,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { params: { id: 1234 } } );
         (g.wsPeople.getRequestHandler('Get'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           var res = this;
   
           test.equal( type, 'bytes' );
@@ -2177,7 +2177,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var p = { id: 1234, name: 'Tony', surname: 'Mobily', age: 37 };
         g.dbPeople.insert( p, { multi: true, returnRecord: true, skipValidation: true }, function( err, person ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var People2 = declare( g.People, {
           storeName: 'people2',
@@ -2199,7 +2199,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var people2 = new People2();
   
           people2.apiDelete( 1234, function( err, person ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
             test.equal( extrapolatedSurname, 'Mobily_extrapolated' );
   
             test.done();
@@ -2224,7 +2224,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
          g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var People2 = declare( g.People, {
           storeName: 'people2',
@@ -2243,7 +2243,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
           var req = makeReq( { params: { id: 1234 } } );
           (people2.getRequestHandler('Delete'))(req, new RES( function( err, type, headers, status, data ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
   
             var res = this;
   
@@ -2262,7 +2262,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var flag = false;
           var People2 = declare( g.People, {
@@ -2280,7 +2280,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           // Set the basic stores
           people2.apiDelete( 1234, { name: "Tony" }, function( err, person ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
             test.equal( flag, true );
   
             test.done();
@@ -2327,15 +2327,15 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           function( done ){ g.people.apiPost( { name: 'Daniela', surname: "Mobily", age: 64 }, function( err, r ){ l.push( r); done() }) },
           function( done ){ g.people.apiPost( { name: 'Sara', surname: "Fabbietti", age: 14 }, function( err, r ){             done() }) },
         ], function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           
-          g.people.apiGetQuery( { filters: { nameSt: 'Mo' } }, function( err, docs ){
-            test.ifError( err );
+          g.people.apiGetQuery( { conditions: { nameSt: 'Mo' } }, function( err, docs ){
+            test.ifError( err ); if( err ) return test.done();
 
             compareCollections( test, l, docs );
  
-            g.people.apiGetQuery( { filters: { ageGt: 20 } }, function( err, docs ){
-              test.ifError( err );
+            g.people.apiGetQuery( { conditions: { ageGt: 20 } }, function( err, docs ){
+              test.ifError( err ); if( err ) return test.done();
               compareCollections( test, l, docs );
   
               test.done();
@@ -2354,12 +2354,12 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           function( done ){ g.people.apiPut( 1236, { id: 1236, name: 'Daniela', surname: "Mobily", age: 64 }, function( err, r ){ done( err ) }) },
           function( done ){ g.people.apiPut( 1237, { id: 1237, name: 'Sara', surname: "Fabbietti", age: 14 }, function( err, r ){ done( err ) }) },
         ], function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
 
           g.people.apiGetQuery( { sort: { age: 1 } }, function( err, docs ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
   
-            compareItems( test,  docs,
+            compareCollections( test,  docs,
   
   [ { id: 1237, name: 'Sara', surname: 'Fabbietti', age: 14 },
   { id: 1235, name: 'Chiara', surname: 'Mobily', age: 24 },
@@ -2383,12 +2383,12 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           function( done ){ g.people.apiPut( 1236, { name: 'Daniela', surname: "Mobily", age: 64 }, function( err, r ){ done( err ) }) },
           function( done ){ g.people.apiPut( 1237, { name: 'Sara', surname: "Fabbietti", age: 14 }, function( err, r ){ done( err ) }) },
         ], function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           
           g.people.apiGetQuery( { sort: { age: 1 }, ranges: { limit: 1 } }, function( err, docs ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
   
-            compareItems( test,  docs,
+            compareCollections( test,  docs,
   
   [ { id: 1237, name: 'Sara', surname: 'Fabbietti', age: 14 } ]
   
@@ -2409,13 +2409,13 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           function( done ){ g.people.apiPost( { name: 'Daniela', surname: "Mobily", age: 64 }, function( err, r ){ done() }) },
           function( done ){ g.people.apiPost( { name: 'Sara', surname: "Fabbietti", age: 14 }, function( err, r ){ done() }) },
         ], function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
         
           // var req = makeReq( { url: "http://www.example.org/people?ageGt=90", headers: { range: 'items=1-12' } } );
           var req = makeReq( { url: "http://www.example.org/people/", headers: { range: 'items=1-2' } } );
 
           (g.people.getRequestHandler('GetQuery'))(req, new RES( function( err, type, headers, status, data ){
-            test.ifError( err );
+            test.ifError( err ); if( err ) return test.done();
 
             test.equal( type, 'json' );
             test.equal( data.length, 2 );
@@ -2426,7 +2426,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             var req = makeReq( { url: "http://www.example.org/people/?ageGt=90", headers: { range: 'items=1-2' } } );
 
             (g.people.getRequestHandler('GetQuery'))(req, new RES( function( err, type, headers, status, data ){
-              test.ifError( err );
+              test.ifError( err ); if( err ) return test.done();
 
               test.equal( type, 'json' );
               test.equal( data.length, 0 );
@@ -2436,7 +2436,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
               var req = makeReq( { url: "http://www.example.org/people/", headers: { range: 'items=1-20' } } );
 
               (g.people.getRequestHandler('GetQuery'))(req, new RES( function( err, type, headers, status, data ){
-                test.ifError( err );
+                test.ifError( err ); if( err ) return test.done();
 
                 test.equal( type, 'json' );
                 test.equal( data.length, 3 );
@@ -2469,7 +2469,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { params: { id: 1234 } } );
         (people2.getRequestHandler('GetQuery'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
           test.equal( type, 'bytes' );
@@ -2486,7 +2486,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { params: { id: 1234 } } );
         (g.wsPeople.getRequestHandler('Get'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
           var res = this;
   
           test.equal( type, 'bytes' );
@@ -2517,7 +2517,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
 
             if( method !== 'getQuery' ) return cb( null, true );
 
-            if( request.options.filters.name === 'Tony' ) cb( null, false );
+            if( request.options.conditions.name === 'Tony' ) cb( null, false );
             else cb( null, true );
           },  
         });
@@ -2526,7 +2526,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
    
         var req = makeReq( { url: "http://www.example.org/people/?name=Tony&surname=Mobily" } );
         (people2.getRequestHandler('GetQuery'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
   
@@ -2544,7 +2544,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { url: "http://www.example.org/people/?name=Tony&surname=1234567890123456789012" } );
         (g.people.getRequestHandler('GetQuery'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
   
@@ -2593,10 +2593,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           function( done ){ g.dbPeople.insert( { id: 1237, name: 'Sara', surname: "Fabbietti", age: 14 }, { returnRecord: true }, function( err, r ){ if( err ) return done( err ); done() }) },
         ], function( err ){
 
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
 
-           people2.apiGetQuery( { filters: { nameSt: 'Mo' } }, function( err, docs ){
-            test.ifError( err );
+           people2.apiGetQuery( { conditions: { nameSt: 'Mo' } }, function( err, docs ){
+            test.ifError( err ); if( err ) return test.done();
   
             compareCollections( test, l, docs );
    
@@ -2633,7 +2633,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
 
            var doc = this._co( doc );
            doc.prepared = 10;
-           done( null );
+           done( null, doc );
           },
         });
         People2.deleteStore( 'people2' );
@@ -2645,10 +2645,11 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           function( done ){ g.dbPeople.insert( { id: 1236, name: 'Daniela', surname: "Mobily", age: 64 }, { returnRecord: true }, function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
           function( done ){ g.dbPeople.insert( { id: 1237, name: 'Sara', surname: "Fabbietti", age: 14 }, { returnRecord: true }, function( err, r ){ if( err ) return done( err );             done() }) },
         ], function( err ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
-           people2.apiGetQuery( { filters: { nameSt: 'Mo' } }, function( err, docs ){
-            test.ifError( err );
+           people2.apiGetQuery( { conditions: { nameSt: 'Mo' } }, function( err, docs ){
+
+            test.ifError( err ); if( err ) return test.done();
   
 
             compareCollections( test, l, docs );
@@ -2661,52 +2662,52 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
     },
   
   
-    'testing _queryMakeSelector': function( test ){
+    'testing _queryMakeDbLayerFilter': function( test ){
   
-       g.people._queryMakeSelector( true, { name: 'Tony', surname: 'Mobily' }, {}, {}, function( err, selector ){
+       g.people._queryMakeDbLayerFilter( true, { name: 'Tony', surname: 'Mobily' }, {}, {}, function( err, selector ){
 
-         test.ifError( err );
+         test.ifError( err ); if( err ) return test.done();
          compareItems( test,  selector,
   
   { conditions: 
-   { and: 
-      [ { field: 'name', type: 'eq', value: 'Tony' },
-        { field: 'surname', type: 'eq', value: 'Mobily' } ] },
+   { name: 'and', args: [ 
+        { name: 'eq', args: [ 'name', 'Tony' ] } , 
+        { name: 'eq', args: [ 'surname', 'Mobily' ] } ] },
   ranges: {},
   sort: {}  }
          );
       
-         g.people._queryMakeSelector( true, { nameSt: 'Mob', ageGt: 20 }, {}, {}, function( err, selector) {
+         g.people._queryMakeDbLayerFilter( true, { nameSt: 'Mob', ageGt: 20 }, {}, {}, function( err, selector) {
 
-           test.ifError( err );
+           test.ifError( err ); if( err ) return test.done();
            compareItems( test,  selector,
   
   { conditions: 
-   { and: 
-      [ { field: 'surname', type: 'startsWith', value: 'Mob' },
-        { field: 'age', type: 'gt', value: 20 } ] },
+   { name: 'and', args: [ 
+        { name: 'startsWith', args: [ 'surname', 'Mob' ] },
+        { name: 'gt', args: [ 'age', 20 ] } ] },
   ranges: {},
   sort: {}  }
   
            );
   
-           g.people._queryMakeSelector( true, { name: 'Tony' }, { name: -1, surname: 1 }, {}, function( err, selector ){
+           g.people._queryMakeDbLayerFilter( true, { name: 'Tony' }, { name: -1, surname: 1 }, {}, function( err, selector ){
   
-             test.ifError( err );
+             test.ifError( err ); if( err ) return test.done();
              compareItems( test,  selector, 
   
-  { conditions: { and: [ { field: 'name', type: 'eq', value: 'Tony' } ] },
+  { conditions: { name: 'eq', args: [ 'name', 'Tony' ] },
   ranges: {},
   sort: { name: -1, surname: 1 } }
   
              );
   
-             var selector = g.people._queryMakeSelector( true, { name: 'Tony' }, { name: -1, surname: 1 }, { from: 0, to: 10, limit: 5}, function( err, selector ){
+             var selector = g.people._queryMakeDbLayerFilter( true, { name: 'Tony' }, { name: -1, surname: 1 }, { from: 0, to: 10, limit: 5}, function( err, selector ){
   
-               test.ifError( err );
+               test.ifError( err ); if( err ) return test.done();
                compareItems( test,  selector, 
   
-  { conditions: { and: [ { field: 'name', type: 'eq', value: 'Tony' } ] },
+  { conditions: { name: 'eq', args: [ 'name', 'Tony' ] },
   ranges: { from: 0, to: 10, limit: 5 },
   sort: { name: -1, surname: 1 } }
   
@@ -2753,7 +2754,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
   { sort: {},
   ranges: null,
-  filters: { name: 'Tony', surname: 'Mobily' } }
+  conditions: { name: 'Tony', surname: 'Mobily' } }
   
        );
        
@@ -2774,7 +2775,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
   { sort: { name: 1, surname: -1 },
   ranges: null,
-  filters: { name: 'Tony', surname: 'Mobily' } }
+  conditions: { name: 'Tony', surname: 'Mobily' } }
   
        );
   
@@ -2785,7 +2786,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
   { sort: { name: 1 },
   ranges: null,
-  filters: { name: 'Tony', surname: 'Mobily' } }
+  conditions: { name: 'Tony', surname: 'Mobily' } }
        );
   
        
@@ -2805,21 +2806,21 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
        compareItems( test,  options, 
   
   { sort: {},
-  ranges: { from: 0, to: 10, limit: 11 },
-  filters: { name: 'Tony' } }
+  ranges: { skip: 0, limit: 11 },
+  conditions: { name: 'Tony' } }
   
        );
   
   
        req.headers.range = "items= 0-10";
        req.url = "http://www.example.org/people?name=Tony";
-  
+
        var options = g.people._initOptionsFromReq( 'GetQuery', req, true );
        compareItems( test,  options, 
   
   { sort: {},
   ranges: null,
-  filters: { name: 'Tony' } }
+  conditions: { name: 'Tony' } }
   
        );
   
@@ -2830,22 +2831,23 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
     'testing chainErrors': function( test ){
       zap( function(){
   
-        g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
-          test.ifError( err );
+        g.dbWsPeople.insert( { workspaceId: 123, id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
+          test.ifError( err ); if( err ) return test.done();
   
           var WsPeople2 = declare( g.WsPeople, {
-            storeName: 'people2',
-            collectionName: 'people',
+            storeName: 'wsPeople2',
+            collectionName: 'wsPeople',
 
             chainErrors: 'all'
           });
-          WsPeople2.deleteStore( 'people2' );
+
+          WsPeople2.deleteStore( 'wssPeople2' );
           var wsPeople2 = new WsPeople2();
 
   
           var WsPeople3 = declare( g.People, {
-            storeName: 'people3',
-            collectionName: 'people',
+            storeName: 'wsPeople3',
+            collectionName: 'wsPeople',
 
             chainErrors: 'nonhttp',
   
@@ -2853,7 +2855,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
               cb( new Error("Some other error") );
             },
           });
-          WsPeople3.deleteStore( 'people3' );
+
+
+          WsPeople3.deleteStore( 'wsPeople3' );
           var wsPeople3 = new WsPeople3();
   
           // This chains all of them
@@ -2872,7 +2876,6 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
               );
               test.equal( err.message, 'Bad Request' );
               test.equal( err.httpError, 400 );
-  
   
               // This chains all of them
               var req = makeReq( { params: { id: 1234 } } );
@@ -2920,7 +2923,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { params: { id: 1234 } } );
         (people2.getRequestHandler('Delete'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
           test.equal( type, 'bytes' );
@@ -2960,7 +2963,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         var req = makeReq( { params: { id: 1234 } } );
         (people2.getRequestHandler('Delete'))(req, new RES( function( err, type, headers, status, data ){
-          test.ifError( err );
+          test.ifError( err ); if( err ) return test.done();
   
           var res = this;
           test.equal( type, 'bytes' );

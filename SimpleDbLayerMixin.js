@@ -68,7 +68,6 @@ exports = module.exports = declare( Object,  {
       self.nested = existingDbLayer.nested;
       self.hardLimitOnQueries = existingDbLayer.hardLimitOnQueries;
 
-      
       self.dbLayer = existingDbLayer;
 
       // Augment schema making paramIds and onlineSearchSchema searchable
@@ -223,13 +222,14 @@ exports = module.exports = declare( Object,  {
     // If nothing needs to be added, leave filter as it is
     if( ! list.length ) return returnedConditions;  
 
-
     if( conditions.name === 'and' ){
       whereToPush = conditions.args;
     } else {
+
       // Turn first condition into an 'and' condition
-      returnedConditions = { name: 'and', args: [ conditions ] };
+      returnedConditions = { name: 'and', args: [] };
       whereToPush = returnedConditions.args;
+      if( conditions.name ) whereToPush.push( conditions );
     }
 
     // Add a condition for each paramId, so that it will get satisfied
@@ -239,6 +239,7 @@ exports = module.exports = declare( Object,  {
 
     // If there is only one "and" condition, normalise it to the condition itself
     if( returnedConditions.name === 'and' && returnedConditions.args.length === 1 ){
+
       returnedConditions = returnedConditions.args[ 0 ];
     }
 
@@ -274,8 +275,13 @@ exports = module.exports = declare( Object,  {
       conditions = { name: 'eq', args: [ self.idProperty, request.params[ self.idProperty ]  ] };
     }
 
+    //console.log("Conditions:", require('util').inspect( conditions, { depth: 10 } ) ) ;
+    //console.log("HERE: ", self.dbLayer );
+
+    //console.log("Conditions: ", { conditions: conditions } );
+
     // Make the database call 
-    self.dbLayer.select( conditions, { children: true }, function( err, docs ){
+    self.dbLayer.select( { conditions: conditions }, { children: true }, function( err, docs ){
       if( err ){
         cb( err );
       } else {
@@ -288,7 +294,7 @@ exports = module.exports = declare( Object,  {
             message: "implementFetchOne fetched more than 1 record",
             data: {
               length: docs.length,
-              selector: selector,
+              filter: { conditions: conditions },
               store: self.storeName
             }
           }));
@@ -398,7 +404,7 @@ exports = module.exports = declare( Object,  {
 
     var self = this;
     var errors = [];
-    var field, condition, value;
+    var field, name, condition, value;
 
     // Straight fields that do not need any conversions as they are the same
     // between JsonRestStores and SimpleDbLayer
@@ -407,7 +413,10 @@ exports = module.exports = declare( Object,  {
 
     // Starting point, with an `and`. This will get trimmed to a straight condition if
     // filter.conditions.args.length is 1
-    filter.conditions = { name: 'and', args: [ ] };
+    filter.conditions = { name: 'and', args: [ { name: 'or', args: [ ] } ] };
+
+      //console.log("0", conditionsHash );
+
 
     // Add filters to the selector
     for( var searchField in conditionsHash ){
@@ -419,14 +428,22 @@ exports = module.exports = declare( Object,  {
       var searchable = self.onlineSearchSchema.structure[ searchField ];
       var searchOptions = self.onlineSearchSchema.structure[ searchField ] && self.onlineSearchSchema.structure[ searchField ].searchOptions;
 
+      //console.log("A");
       if( searchable || !remote ) {
+
+
+      //console.log("B");
 
         // searchOptions is not an object/is null: just set default conditions (equality with field)
         if( typeof( searchOptions ) !== 'object' || searchOptions === null ){
+          //console.log("B1");
           filter.conditions.args.push( { name: 'eq', args: [ searchField, conditionsHash[ searchField ] ] } );
 
         // searchOptions IS an object: it might be an array or a single condition set
         } else {
+
+      //console.log("C");
+
          
           // Make sure elements ends up as an array regardless
           if( Array.isArray( searchOptions ) ){
@@ -435,45 +452,53 @@ exports = module.exports = declare( Object,  {
             var elements = [ searchOptions ];
           }
 
-          var orConditions = { name: 'or', args: [] };
           elements.forEach( function( element ){
 
+            //console.log("D", element );
             field = element.field || searchField;
             condition = element.condition || 'and';
             value = element.value || conditionsHash[ searchField ];
+            name = element.type;
+
+            //console.log("condition, field, name, value:", condition, field, name, value );
 
             if( condition === 'and' ){
-              filter.conditions.args.push( { name: 'eq', args: [ field, value ] } );
+              filter.conditions.args.push( { name: name, args: [ field, value ] } );
             } else {
-              orConditions.args.push( { name: 'eq', args: [ field, value ] } );              
+              filter.conditions.args[ 0 ].args.push( { name: name, args: [ field, value ] } );              
             }
           });
-
-          // More than one 'or' conditions: add the whole orConditions to the filter
-          if( orConditions.args.length > 1 ){
-            filter.conditions.args.push( orConditions );
-          }
-          // Only one "or" condition: add it straight to the list of conditions
-          else if( orConditions.args.length === 1 ){
-            filter.conditions.args.push( orConditions.args[ 0 ] );
-          }
-        }
-
-        // Don't have an `and` condition with just one entry. Shrink it to
-        // a straight condition instead.
-        if( filter.conditions.name === 'and' || filter.conditions.name === 'or' ){
-          if( filter.conditions.args.length === 1 ) filter.conditions = filter.conditions.args[ 0 ];
         }
 
       // Field is not searchable: error!
       } else {
         errors.push( { field: searchField, message: 'Field not allowed in search: ' + searchField + ' in ' + self.storeName } );
-      }
+      }      
     }
 
+    //console.log("FILTERS BEFORE TRIMMING: ", require('util').inspect( filter, {  depth: 10 } ) );
+
     // Call the callback with an error, or with the selector (containing conditions, ranges, sort)
-    if( errors.length ) return cb( new self.UnprocessableEntityError( { errors: errors } ) );
-   
+    if( errors.length ) return cb( new self.UnprocessableEntityError( { errors: errors } ) ); 
+
+    var l = filter.conditions.args[ 0 ].args.length;
+
+    // No 'or' conditions: take the whole or condition (the first one) out  
+    if( l === 0 ) filter.conditions.args.shift();
+
+    // Only one 'or' condition: place it as a normal 'and' one
+    if( l === 1 ) filter.conditions.args[ 0 ] = filter.conditions.args[ 0 ].args[ 0 ];
+
+    var l = filter.conditions.args.length;
+
+    // And is empty: no conditions to speak of
+    if( l === 0 ) filter.conditions = {};
+
+    // Only one 'and' condition: shrink it to the condition itself
+    if( l === 1 ) filter.conditions = filter.conditions.args[ 0 ]
+
+    //console.log("FILTER: ", filter );
+
     cb( null, filter );
 
   },
@@ -505,6 +530,8 @@ exports = module.exports = declare( Object,  {
       if( err ){
         next( err );
       } else {
+
+        //console.log("FILTER:", filter );
 
         if( request.remote) filter.conditions = self._enrichConditionsWithParams( filter.conditions, request.params );
 

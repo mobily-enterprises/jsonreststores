@@ -871,7 +871,7 @@ var Store = declare( Object,  {
                                   request._res.setHeader( 'Location', request._req.originalUrl );
                                 }
                          
-                                self.prepareBeforeSend( request, 'putExisting', doc, function( err, preparedDoc ){
+                                self.prepareBeforeSend( request, 'putExisting', docAfter, function( err, preparedDoc ){
                                   if( err ) return self._sendError( request, next, err );
 
                                   self.afterEverything( request, 'putExisting', { preparedDoc: preparedDoc, doc: doc, fullDoc: fullDoc, docAfter: docAfter, fullDocAfter: fullDocAfter, overwrite: request.options.overwrite }, function( err ) {
@@ -982,8 +982,8 @@ var Store = declare( Object,  {
 
                         if( request.options.ranges ){
                           var from, to, of;
-                          from = total ? request.options.ranges.from : 0;
-                          to = total ? request.options.ranges.from + total - 1 : 0 ;
+                          from = total ? request.options.ranges.skip : 0;
+                          to = total ? request.options.ranges.skip + total - 1 : 0 ;
                           of = grandTotal;
                           request._res.setHeader('Content-Range', 'items ' + from + '-' + to + '/' + of );
                         }
@@ -1353,7 +1353,7 @@ Store.getStore = function( storeName ){
   return Store.registry[ storeName ];
 }
 
-// Get store from the class' registry
+// Delete the store from the class' registry
 Store.deleteStore = function( storeName ){
   delete Store.registry[ storeName ];
 }
