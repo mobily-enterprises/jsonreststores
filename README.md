@@ -6,14 +6,13 @@ Rundown of features:
 
 **WARNING: JsonRestStore is now going through a very extensive rewrite (I am now working on improving the underlying db layer, which will change the way you define queries). Do not use this module till this writing is gone**.
 
-
 PLAN OF ATTACK:
 ---------------
 
 BACK TO SimpleDbLayer with Hotplate
 [X] Fix API calls in tests, making that the only tests that fails are the ones for different SimpleDbLayer
 [X] Fix querying in JsonRestStores, KEEPING the current onlineSearchSchema definitions
-[ ] Make sure SimpleDbLayerMixin works
+[X] Make sure ALL tests pass (!!!) and that SimpleDbLayerMixin actually works
 [ ] Make sure hotplate itself works leaving everything as is (API has not changed). New SimpleDbLayer works!!!
 
 MILESTONE 1 COMPLETED: SimpleDbLayer V.2 is fully working, BookingDojo works again!

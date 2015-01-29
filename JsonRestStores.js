@@ -1050,7 +1050,7 @@ var Store = declare( Object,  {
                 self.afterEverything( request, 'get', { preparedDoc: preparedDoc, doc: doc, fullDoc: fullDoc }, function( err ) {
                   if( err ) return self._sendError( request, next, err );
                       
-                  // Remote request: set headers, and send the doc back (if echo is on)
+                  // Remote request: set headers, and send the doc back
                   if( request.remote ){
           
                     // Send "prepared" doc
@@ -1371,7 +1371,6 @@ Store.OneFieldStoreMixin = declare( Object,  {
 
   // Variables that HAVE TO be set by the inherited constructor
   storeName: null,
-  collectionName: null,
   publicURL: null,
   piggyField: null,
 
@@ -1384,9 +1383,9 @@ Store.OneFieldStoreMixin = declare( Object,  {
 
   // Reset possibly overloaded function which, although inherited, wouldn't
   // make sense in a OneFieldStore context
+  prepareBody: function( request, method, body, cb ){ cb( null, body ); },
   extrapolateDoc: function( request, method, doc, cb ){ cb( null, doc ); },
   prepareBeforeSend: function( request, method, doc, cb ){ cb( null, doc ); },
-  prepareBody: function( request, method, body, cb ){ cb( null, body ); },
   
   // Making sure unwanted methods  are not even implemented
   _makePost: function( request, next ){
@@ -1471,6 +1470,7 @@ Store.OneFieldStoreMixin = declare( Object,  {
   _makePut: function( request, next ){
 
     var self = this;
+    var overwrite;
 
     if( typeof( next ) !== 'function' ) next = function(){};
 
@@ -1485,11 +1485,10 @@ Store.OneFieldStoreMixin = declare( Object,  {
     }
  
     // Check the IDs.
-
     self._checkParamIds( request, false, function( err ){  
       if( err ) return self._sendError( request, next, err );
 
-      self.prepareBody( request, 'putExisting', request.body, function( err, preparedBody ){
+      self.prepareBody( request, 'put', request.body, function( err, preparedBody ){
         if( err ) return self._sendError( request, next, err );
 
         // Request is changed, old value is saved 
@@ -1497,6 +1496,9 @@ Store.OneFieldStoreMixin = declare( Object,  {
         request.body = preparedBody;
 
         self._enrichBodyWithParamIdsIfRemote( request );
+
+        // Delete _children which mustn't be here regardless
+        delete request.body._children;
 
         // Go through each field in body, and check that it's either
         // a paramId OR piggyField
@@ -1518,8 +1520,10 @@ Store.OneFieldStoreMixin = declare( Object,  {
           // request is changed, old value is saved (again!)
           request.bodyBeforeValidation = request.body;
           request.body = validatedBody;
-      
-          self.afterValidate( request, 'putExisting', {}, function( err ){
+
+          if( errors.length ) return self._sendError( request, next, new self.UnprocessableEntityError( { errors: errors } ) );
+
+          self.afterValidate( request, 'put', {}, function( err ){
             if( err ) return self._sendError( request, next, err );
     
             // Fetch the doc
@@ -1566,11 +1570,9 @@ Store.OneFieldStoreMixin = declare( Object,  {
 
                           // Remote request: set headers, and send the doc back (if echo is on)
                           if( request.remote ){
-                            // Set the Location header
                             request._res.setHeader( 'Location', request._req.originalUrl );
                           }
 
-                           
                           self.prepareBeforeSend( request, 'putExisting', docAfter, function( err, preparedDoc ){
                             if( err ) return self._sendError( request, next, err );
              
