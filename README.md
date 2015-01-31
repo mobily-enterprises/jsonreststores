@@ -11,43 +11,43 @@ PLAN OF ATTACK:
 
 ## BACK TO SimpleDbLayer with Hotplate
 
-  [X] Fix API calls in tests, making that the only tests that fails are the ones for different SimpleDbLayer
-  [X] Fix querying in JsonRestStores, KEEPING the current onlineSearchSchema definitions
-  [X] Make sure ALL tests pass (!!!) and that SimpleDbLayerMixin actually works
-  [X] Update querying API everywhere, in hotplate and bd. Search for `dbLayer.` (db operations) and apiGetQuery (`filters` is now `conditions`), changed hooks 
-  [X] Make sure BookingDojo itself works 100%
+- [X] Fix API calls in tests, making that the only tests that fails are the ones for different SimpleDbLayer
+- [X] Fix querying in JsonRestStores, KEEPING the current onlineSearchSchema definitions
+- [X] Make sure ALL tests pass (!!!) and that SimpleDbLayerMixin actually works
+- [X] Update querying API everywhere, in hotplate and bd. Search for `dbLayer.` (db operations) and apiGetQuery (`filters` is now `conditions`), changed hooks 
+- [X] Make sure BookingDojo itself works 100%
 
 **MILESTONE 1 COMPLETED: SimpleDbLayer V.2 is fully working, BookingDojo works again!**
 
 ## IMPROVE searchSchema
 
-[ ] Make new syntax for searchSchema, allowing any depth of querying, scheleton defined
-[ ] Change tests to see if it all works with new querying ability
-[ ] Change hotplate to see if it all works with new queries
+- [ ] Make new syntax for searchSchema, allowing any depth of querying, scheleton defined
+- [ ] Change tests to see if it all works with new querying ability
+- [ ] Change hotplate to see if it all works with new queries
 
 ## MEMORY store
 
- [ ] Implement sample store for documentation using memory, basic one with no searching nor adding
- [ ] Implement proper memory store with querying, getting querying code from dstore 
- [ ] Make sure tests run using new memory store
- [ ] Try the whole of hotplate running on the memory store
+- [ ] Implement sample store for documentation using memory, basic one with no searching nor adding
+- [ ] Implement proper memory store with querying, getting querying code from dstore 
+- [ ] Make sure tests run using new memory store
+- [ ] Try the whole of hotplate running on the memory store
 
 MILESTONE 2 COMPLETED: JsonRestStore has a memory store that works without buggy TingoDB, and hotplate runs on it
 
 ## IMPROVE dstore
- [ ] Use new (and tested) memory store code to write querying code for dstore
- [ ] Check that hotplate all works with new filtering, without ever doing a refresh
+- [ ] Use new (and tested) memory store code to write querying code for dstore
+- [ ] Check that hotplate all works with new filtering, without ever doing a refresh
 
 MILESTONE 3 COMPLETED: JsonRestStores now works AMAZINGLY well with dstores, 
 
 ## DOCUMENTING
 
- [ ] Rewrite bdocumentation for basic JsonRestStores
- [ ] Rewrite documentation with using SimpleDbLayerMixin
+- [ ] Rewrite bdocumentation for basic JsonRestStores
+- [ ] Rewrite documentation with using SimpleDbLayerMixin
 
 ## PARTY
 
- [ ] Party!
+- [ ] Party!
 
 MILESTONE 4 COMPLETED: All foundation work is actually finished.
 
