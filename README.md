@@ -11,11 +11,11 @@ PLAN OF ATTACK:
 
 ## BACK TO SimpleDbLayer with Hotplate
 
- [X] Fix API calls in tests, making that the only tests that fails are the ones for different SimpleDbLayer
- [X] Fix querying in JsonRestStores, KEEPING the current onlineSearchSchema definitions
- [X] Make sure ALL tests pass (!!!) and that SimpleDbLayerMixin actually works
- [X] Update querying API everywhere, in hotplate and bd. Search for `dbLayer.` (db operations) and apiGetQuery (`filters` is now `conditions`), changed hooks 
- [X] Make sure BookingDojo itself works 100%
+  [X] Fix API calls in tests, making that the only tests that fails are the ones for different SimpleDbLayer
+  [X] Fix querying in JsonRestStores, KEEPING the current onlineSearchSchema definitions
+  [X] Make sure ALL tests pass (!!!) and that SimpleDbLayerMixin actually works
+  [X] Update querying API everywhere, in hotplate and bd. Search for `dbLayer.` (db operations) and apiGetQuery (`filters` is now `conditions`), changed hooks 
+  [X] Make sure BookingDojo itself works 100%
 
 **MILESTONE 1 COMPLETED: SimpleDbLayer V.2 is fully working, BookingDojo works again!**
 
