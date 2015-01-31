@@ -353,7 +353,7 @@ exports = module.exports = declare( Object,  {
         cb( err );
       } else {
 
-        self.dbLayer.select( conditions, { children: true }, function( err, docs ){
+        self.dbLayer.select( { conditions: conditions }, { children: true }, function( err, docs ){
           if( err ){
             cb( err );
           } else {
@@ -365,7 +365,7 @@ exports = module.exports = declare( Object,  {
                 message: "dbLayer.update updated more than 1 record",
                 data: { 
                   length: docs.length,
-                  selector: selector,
+                  conditions: conditions,
                   store: self.storeName
                 }
               }));

@@ -1181,7 +1181,7 @@ It's a simple object, where the keys are the field names, and their respective v
 
 A typical example could be:
 
-    Workspaces.GetQuery( { filters: { workspaceName: 'Booker'} }, function( err, doc ) {
+    Workspaces.GetQuery( { conditions: { workspaceName: 'Booker'} }, function( err, doc ) {
     })
 
 For non-API calls, this option is set by the query string in the URL.
@@ -1196,7 +1196,7 @@ It represents an objects with the keys `rangeFrom`, `rangeTo`, `limit`. E.g.:
 
     // Will return records with workspaceName starting with "Boo" 
     Workspaces.GetQuery( { 
-      filters: { workspaceNameStartsWith: 'Boo' }, 
+      conditions: { workspaceNameStartsWith: 'Boo' }, 
       ranges: { from: 0, to: 24 }
     } , function( err, doc ) {
       // ...
@@ -1214,7 +1214,7 @@ For example:
 
     // Will return records with workspaceName starting with "Boo" and workGroup equals to "Full match"
     Workspaces.GetQuery( {
-      filters: { workspaceNameStartsWith: 'Boo' },
+      conditions: { workspaceNameStartsWith: 'Boo' },
       sort: { workspaceName: 1, score: -1 },
     } , function( err, doc ) {
       // ...
