@@ -128,6 +128,7 @@ exports = module.exports = declare( Object,  {
     }
     visitQueryConditions( self.queryConditions );
 
+/*
     // Make sure that, for every entry present in onlineSearchSchema,
     // the corresponding DB-level schema is searchable
     // (unless they are paramIds, in which case there is no point. AND YES, users might
@@ -172,7 +173,7 @@ exports = module.exports = declare( Object,  {
       }
       
     }
-    
+  */  
 
   },
 
@@ -415,7 +416,6 @@ exports = module.exports = declare( Object,  {
 
 
 
-
   */
   _queryMakeDbLayerFilter: function( remote, conditionsHash, sort, ranges, cb ){
  
@@ -430,13 +430,120 @@ exports = module.exports = declare( Object,  {
     // between JsonRestStores and SimpleDbLayer
     filter.ranges = ranges;
     filter.sort = sort;
+    filter.conditions = {};
+
+    function getQueryFromQueryConditions( ){
+
+      // Make up filter.conditions
+      function visitQueryConditions( o, fc ){
+
+        // Check o.ifDefined. If the corresponding element in onlineSearchSchema is not
+        // defined, won't go there
+        if( o.ifDefined ){
+          if( ! conditionsHash[ o.ifDefined ] ){ return false; }
+        }
+
+        if( o.name === 'and' || o.name === 'or'){
+          fc.name = o.name;
+          fc.args = [];
+
+          o.args.forEach( function( condition ){
+
+            // If it's 'and' or 'or', check the length of what gets returned
+            if( condition.name === 'and' || condition.name === 'or' ){
+
+              // Make up the new condition, visit that one
+              var newCondition = {};
+              var f = visitQueryConditions( condition, newCondition );
+
+              // Falsy return means "don't continue"
+              if( f === false ) return;
+
+              // newCondition is empty: do not add anything to fc
+              if(  newCondition.args.length === 0 ){
+                return;
+              // Only one condition returned: get rid of logical operator, add the straight condition
+              } else if( newCondition.args.length === 1 ){
+                var actualCondition = newCondition.args[ 0 ];
+                fc.args.push( { name: actualCondition.name, args: actualCondition.args } );
+              // Multiple conditions returned: the logical operator makes sense
+              } else {
+                fc.args.push( newCondition );
+              }
+
+            // If it's a leaf  
+            } else {
+              var newCondition = {};
+              var f = visitQueryConditions( condition, newCondition );
+              if( f !== false ) fc.args.push( newCondition );
+            } 
+          });
+
+        // It's a terminal point
+        } else {
+          var arg0 = o.args[ 0 ];
+          var arg1 = o.args[ 1 ];
+
+          // No arg1: most likely a unary operator, let it live.
+          if( typeof( arg1 ) === 'undefined'){
+            fc.name = o.name;
+            fc.args = [];
+            fc.args[ 0 ] = arg0;
+          }
+
+          // The second argument has a "but!". 
+          // If it is in form #something#, it means that it's
+          // actually a field in onlineSearchSchema
+          var m = ( arg1.match && arg1.match( /^#(.*?)#$/) );
+          if( m ) {
+            var osf = m[ 1 ];
+
+            // If it's in form #something#, then entry MUST be in onlineSearchSchema
+            if( ! self.onlineSearchSchema.structure[ osf ] ) throw new Error("Searched for " + arg1 + ", but didn't find corresponding entry in onlineSearchSchema");
+
+            if( conditionsHash[ osf ] ){
+              fc.name = o.name;
+              fc.args = [];
+              fc.args[ 0 ] = arg0;
+              fc.args[ 1 ] = conditionsHash[ osf ];
+            } else {
+              // For leaves, this will tell the callee NOT to add this.
+              return false;
+            };
+
+          // The second argument is not in form #something#: it means it's a STRAIGHT value
+          } else {
+            fc.name = o.name;
+            fc.args = [];
+            fc.args[ 0 ] = arg0;
+            fc.args[ 1 ] = arg1;
+          }
+        }
+      }
+
+      // This will be returned
+      var res = {};
+      visitQueryConditions( self.queryConditions, res );
+
+      // visitQueryConditions does a great job avoiding duplication, but
+      // top-level duplication needs to be checked here
+      if( ( res.name === 'and' || res.name === 'or' ) && res.args.length === 1 ){
+        return res.args[ 0 ];
+      } 
+
+      return res;
+    }
+
+
+
+    console.log("ORIG: ", require('util').inspect( self.queryConditions, { depth: 10 } ));
+    console.log("COPY: ", require('util').inspect( getQueryFromQueryConditions(), { depth: 10 } ));
 
     // Starting point, with an `and`. This will get trimmed to a straight condition if
     // filter.conditions.args.length is 1
     filter.conditions = { name: 'and', args: [ { name: 'or', args: [ ] } ] };
 
       //console.log("0", conditionsHash );
-
 
     // Add filters to the selector
     for( var searchField in conditionsHash ){
