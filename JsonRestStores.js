@@ -42,6 +42,7 @@ var Store = declare( Object,  {
   // ****************************************************
 
   onlineSearchSchema: null, // If not set in prototype, worked out from `schema` by constructor
+  queryConditions: null, // If not set in prototype, worked out from `schema` by constructor 
   sortableFields: [],
   publicURL: null, // Not mandatory (if you want your store to be API-only for some reason)
   idProperty: null, // If not set in prototype, taken as last item of paramIds)
@@ -207,6 +208,17 @@ var Store = declare( Object,  {
       self.onlineSearchSchema = new self.schema.constructor( onlineSearchSchemaStructure );
     } 
 
+    // If queryConditions is not defined, create one
+    // based on the onlineSearchSchema (each field is searchable)
+    // MERC
+    if( self.queryConditions == null ){
+      self.queryConditions = { name: 'and', args: [ ] };
+      for( var k in self.onlineSearchSchema.structure )
+        self.queryConditions.args.push( { name: 'eq', args: [ k, '#' + k + '#' ] } );
+
+    }
+
+
     Store.registry[ self.storeName ] = self;
   },
 
@@ -218,8 +230,6 @@ var Store = declare( Object,  {
     for( var k in o ) if( o.hasOwnProperty( k ) ) newO[ k ] = o[ k ];
     return newO;
   },
-
-
 
   // Will call implementReposition based on headers.
   // -putBefore is an id.
@@ -919,10 +929,10 @@ var Store = declare( Object,  {
     }
 
     // If it's a local call, validate using a new schema made up with the onlineSearchSchema AND
-    // the common schema merged together
+    // the common schema merged together. Priority is given to the onlineSearchSchema
     var schemaStructure = {};
-    for( var k in self.onlineSearchSchema.structure ) schemaStructure[ k ] = self.onlineSearchSchema.structure[ k ];
     for( var k in self.schema.structure ) schemaStructure[ k ] = schemaStructure[ k ] || self.schema.structure[ k ];
+    for( var k in self.onlineSearchSchema.structure ) schemaStructure[ k ] = self.onlineSearchSchema.structure[ k ];
 
     var newSchema = new self.onlineSearchSchema.constructor( schemaStructure );
     newSchema.validate( conditions, options, cb );

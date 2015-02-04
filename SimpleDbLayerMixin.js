@@ -19,13 +19,10 @@ ALSO:
 - If collectionName is not passed, it's assumed to be the same as storeName
 */
 
-
-/*
-WHERE AM I?
-
-Make tests pass.
-Have a look at the code in general, and so whatever it takes to make tests pass. Tests will ABSOLUTELY
-NEED to add a searchOpt test with searchOpt being an array, and check for ranges
+/* I AM HERE:
+  * Make up the query based on queryConditions, adding the conditional ifDefined
+  * Change Hotplate and BookingDojo to use the new query style
+  * Make sure everything works as expected
 */
 
 exports = module.exports = declare( Object,  {
@@ -40,6 +37,8 @@ exports = module.exports = declare( Object,  {
   hardLimitOnQueries: 50,
 
   collectionName: null,
+
+  _foreignSearchFields: [],
 
   constructor: function(){
 
@@ -69,19 +68,9 @@ exports = module.exports = declare( Object,  {
       self.hardLimitOnQueries = existingDbLayer.hardLimitOnQueries;
 
       self.dbLayer = existingDbLayer;
-
-      // Augment schema making paramIds and onlineSearchSchema searchable
-      self._augmentSchema( existingDbLayer.schema );
-      
-      // Regalculate _searchableHash and _indexGroups as the schema
-      // might have changed a little in terms of what's searchable
-      existingDbLayer._makeSearchableHashAndIndexGroups();
-      
+  
     } else {
-
-      // Augment schema making paramIds and onlineSearchSchema searchable
-      self._augmentSchema();
-
+      
       var layerOptions = {
         schema: self.schema,
         nested: self.nested,
@@ -95,32 +84,49 @@ exports = module.exports = declare( Object,  {
       };
       if( self.position ){
         layerOptions.positionField = '__position';
-        layerOptions.positionBase = self.paramIds.slice( 0, -1 ); // TODO: Check, it was 1,-1, why?!?      
+        layerOptions.positionBase = self.paramIds.slice( 0, -1 );      
       }
 
       layerOptions.table = self.collectionName;
       // Actually create the layer with the given parameters
       self.dbLayer = new self.DbLayer( layerOptions );
     }
-     
-    // TODO: Check that each entry in self.sortableFields is actually marked as "searchable" in
-    // self.schema; otherwise, stop with an error. This is important as any sortable field MUST
-    // be searchable
 
-  },
-
-  // Augment schema making paramIds and onlineSearchSchema searchable
-  _augmentSchema: function( schema ){
-    var self = this;
-
-    if( ! schema ) schema = self.schema;
-
-    // TODO: I think this is now useless as SimpleDbLayer does it
+    var schema = self.schema;
+ 
     // By default, added paramIds will be set as `searchable` in DB `schema`
     for( var i = 0, l = self.paramIds.length; i < l; i ++ ){
-      var k = self.paramIds[ i ];
-      schema.structure[ k ].searchable = true;
+      self.dbLayer._makeFieldSearchable( self.paramIds[ i ] );
     }
+
+    // Make all LOCAL fields in a search side of any query condition "searchable"
+    // Remember: the _remote_ fields will be made searchable in path.field format by
+    // layer._makeTablesHashes()
+    function visitQueryConditions( o ){
+      //console.log("Visiting: ", require('util').inspect( o, { depth: 10 } ) );
+      if( o.name === 'and' || o.name === 'or'){
+        //console.log("WILL ENTER: ", require('util').inspect( o.args ));
+        o.args.forEach( function( condition ){
+          //console.log("Entering:", condition );
+          visitQueryConditions( condition );
+        });
+      } else {
+
+        var field = o.args[ 0 ]; 
+        // It's a local field: mark it as searchable 
+        if( field.indexOf( '.' ) === -1 ){
+
+          // It's a local field: it MUST be in the schema
+          if( typeof( self.onlineSearchSchema.structure[ field ] ) === 'undefined' )
+            throw new Error("Field " + field + " cannot be in query if it's not in the schema")
+
+          if( !self.onlineSearchSchema.structure[ field ].searchOptions ){ // TODO: DELETE ME LATER 
+            self.dbLayer._makeFieldSearchable( field );
+          }
+        }
+      }
+    }
+    visitQueryConditions( self.queryConditions );
 
     // Make sure that, for every entry present in onlineSearchSchema,
     // the corresponding DB-level schema is searchable
@@ -135,10 +141,10 @@ exports = module.exports = declare( Object,  {
       if( typeof( entry.searchOptions ) === 'undefined' ){
 
         if( self.paramIds.indexOf( k ) === -1 ){
-          if( schema.structure[ k ] ) schema.structure[ k ].searchable = true;
+          if( schema.structure[ k ] ){
+            self.dbLayer._makeFieldSearchable( k );
+          }
         } 
-
-      }
 
       // More complex case: `searchOptions` is there. This means that
       // the referenced field *might* be different.
@@ -146,7 +152,7 @@ exports = module.exports = declare( Object,  {
       // an object, or an array of objects.
       // Array or not, objects can define a `field` key specifying which field
       // should be used for the search.
-      else {
+      } else {
      
         if( Array.isArray( entry.searchOptions ) ){
           var elements = entry.searchOptions;
@@ -158,14 +164,15 @@ exports = module.exports = declare( Object,  {
           var fieldName = element.field ? element.field : k;
 
           if( self.schema.structure[ fieldName ]) {
-            self.schema.structure[ fieldName ].searchable = true;
+            self.dbLayer._makeFieldSearchable( fieldName );
           }
 
         });
 
       }
+      
     }
-
+    
 
   },
 
@@ -397,6 +404,19 @@ exports = module.exports = declare( Object,  {
     self.dbLayer.delete( conditions, { multi: false, skipValidation: true }, cb );
   },
 
+  /*
+  MERC: Go through searchOptions recursively to create the query
+
+  workoutArgs( schema, condition );
+
+* Field name is always first argument of eq, startsWith, endsWith, contains, lt, lte, gt, gte
+* When a value is expected (second argument of all operators), it's compared directly, except if it's '#something#', in which case it's the 'something' key in onlineSearchSchema (condition added only if entry in onlineSearchSchema defined).
+* The query is "shrunk" at the end: all 'and' and 'or' entries with only one entry are converted in the entry itself
+
+
+
+
+  */
   _queryMakeDbLayerFilter: function( remote, conditionsHash, sort, ranges, cb ){
  
     // The simleDbLayer filter that will get returned
@@ -431,9 +451,6 @@ exports = module.exports = declare( Object,  {
       //console.log("A");
       if( searchable || !remote ) {
 
-
-      //console.log("B");
-
         // searchOptions is not an object/is null: just set default conditions (equality with field)
         if( typeof( searchOptions ) !== 'object' || searchOptions === null ){
           //console.log("B1");
@@ -441,9 +458,6 @@ exports = module.exports = declare( Object,  {
 
         // searchOptions IS an object: it might be an array or a single condition set
         } else {
-
-      //console.log("C");
-
          
           // Make sure elements ends up as an array regardless
           if( Array.isArray( searchOptions ) ){
@@ -545,3 +559,28 @@ exports = module.exports = declare( Object,  {
 
 
 });
+
+
+        /*
+        // CHUNK #1
+        // Work out layer and fields
+        // Somebody please come up with a much more elegant way of doing this
+        var layer, field;
+        //console.log("First argument:", o.args[ 0 ] );
+        // The DB field is always the first parameter
+        var dbFieldEntries = o.args[ 0 ].split( '.' );
+        if( dbFieldEntries.length === 1 ){
+          field = dbFieldEntries[ 0 ];
+        } else {
+          layer = dbFieldEntries[ 0 ];
+          field = dbFieldEntries[ 1 ];
+        }
+
+        // This is for a local field: make it searchable
+        if( ! layer ){
+          }
+        } else {
+
+
+        }
+        */

@@ -21,24 +21,42 @@ PLAN OF ATTACK:
 
 ## IMPROVE searchSchema
 
-- [ ] Make new syntax for searchSchema, allowing any depth of querying, scheleton defined
+- [X] Decide on new syntax for searchSchema
+- [ ] Implement new syntax in JsonRestStores/SimpleDbLayerMixin, 
 - [ ] Change tests to see if it all works with new querying ability
-- [ ] Change hotplate to see if it all works with new queries
+- [ ] Change hotplate to see if it all works with new queries, search for searchOpts
+
+MILESTONE 2 COMPLETED: searchSchema is now very powerful, any query can be made. BookingDojo works!
+
+---------------------------
+Decided syntax for queryConditions:
+queryConditions: {
+  name: 'and', args: [
+    { name: 'eq', args: [ 'surname', '#surname#' ] }, // Default one
+    { name: 'eq', args: [ 'workspacesContactsEmails.email', '#email#' ] },
+    { name: 'eq', args: [ 'that.field', 'otherAgain' ] },
+  ]
+}
+-----------------------------
 
 ## MEMORY store
 
 - [ ] Implement sample store for documentation using memory, basic one with no searching nor adding
+- [ ] Write it in documentation, finally finish that infamous section
 - [ ] Implement proper memory store with querying, getting querying code from dstore 
 - [ ] Make sure tests run using new memory store
+- [ ] Maybe make JsonRestStore's query format match dstore's if needed
 - [ ] Try the whole of hotplate running on the memory store
 
-MILESTONE 2 COMPLETED: JsonRestStore has a memory store that works without buggy TingoDB, and hotplate runs on it
+MILESTONE 3 COMPLETED: JsonRestStore has a memory store that works without buggy TingoDB, and hotplate runs on it
+
+BONUS: I can finally, finally, FINALLY switch off MongoDb in my development machine as long as I write a function to load and save state (which I will). Nice one!
 
 ## IMPROVE dstore
 - [ ] Use new (and tested) memory store code to write querying code for dstore
 - [ ] Check that hotplate all works with new filtering, without ever doing a refresh
 
-MILESTONE 3 COMPLETED: JsonRestStores now works AMAZINGLY well with dstores, 
+MILESTONE 4 COMPLETED: JsonRestStores now works AMAZINGLY well with dstores, 
 
 ## DOCUMENTING
 
@@ -50,7 +68,6 @@ MILESTONE 3 COMPLETED: JsonRestStores now works AMAZINGLY well with dstores,
 - [ ] Party!
 
 MILESTONE 4 COMPLETED: All foundation work is actually finished.
-
 
 * **DRY approach**. Everything works as you'd expect it to, even though you are free to tweak things.
 * **Database-agnostic**. The module itself provides you with _everything_ except the data-manipulation methods, which are up to you to implement.
@@ -834,12 +851,6 @@ JsonRestStores allows you to decide how to query the database depending on what 
 
 So, for a query like `GET /people?name=tony&surname=mobily`, only records where `name` _and_ `surname` match will be returned as an array.
 
-You can decide to apply a different type of filter by defining `searchableOptions` for that field:
-
-        schema: new Schema({
-          name   : { type: 'string', trim: 20, searchable: true, searchOptions: { type: 'eq' } },
-          surname: { type: 'string', trim: 20, searchable: true, searchOptions: { type: 'startsWith' } },
-        }),
 
 In such a case, the request `GET /people?name=tony&surname=mob` will return all records where `name` is `Tony`, and surname starts with `mob`. ere, `type` can be any one condition allowed in simpledblayer: `is` `eq` `lt` `lte` `gt` `gte` `startWith` `startsWith` `contain` `contains` `endsWith` `endWith`.
 
