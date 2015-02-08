@@ -10,19 +10,11 @@ var
 
 /*
 KEEP IN MIND:
+- If collectionName is not passed, it's assumed to be the same as storeName
 - If two stores have the same collectionName, the second one will reuse the existing one.
 - This means that you can create the stores beforehand, and then get JsonRestStores to use them (nice!)
 - In case of reusing, schema, nested, idProperty and hardLimitOnQueries will be ignored (the dbLayer's are used)
 - SimpleDbLayerMixin must be passed schema, nested, hardLimitOnQueries, idproperty to create the layer with
-
-ALSO:
-- If collectionName is not passed, it's assumed to be the same as storeName
-*/
-
-/* I AM HERE:
-  * Make up the query based on queryConditions, adding the conditional ifDefined
-  * Change Hotplate and BookingDojo to use the new query style
-  * Make sure everything works as expected
 */
 
 exports = module.exports = declare( Object,  {
@@ -80,7 +72,8 @@ exports = module.exports = declare( Object,  {
         idProperty: self.idProperty,
 
         schemaError: self.UnprocessableEntityError,
-        children: true,
+        //children: true,
+        fetchChildrenByDefault: true,
       };
       if( self.position ){
         layerOptions.positionField = '__position';
@@ -103,6 +96,10 @@ exports = module.exports = declare( Object,  {
     // Remember: the _remote_ fields will be made searchable in path.field format by
     // layer._makeTablesHashes()
     function visitQueryConditions( o ){
+
+      if( ! o.name ) throw new Error("Filter's 'name' attribute missing");
+      if( ! Array.isArray( o.args) ) throw new Error("Filter's 'args' attribute must be an array");
+
       //console.log("Visiting: ", require('util').inspect( o, { depth: 10 } ) );
       if( o.name === 'and' || o.name === 'or'){
         //console.log("WILL ENTER: ", require('util').inspect( o.args ));
@@ -112,69 +109,20 @@ exports = module.exports = declare( Object,  {
         });
       } else {
 
+        //console.log( require('util').inspect( o, { depth: 10 } ) );
         var field = o.args[ 0 ]; 
         // It's a local field: mark it as searchable 
         if( field.indexOf( '.' ) === -1 ){
 
           // It's a local field: it MUST be in the schema
-          if( typeof( self.onlineSearchSchema.structure[ field ] ) === 'undefined' )
+          if( typeof( self.schema.structure[ field ] ) === 'undefined' )
             throw new Error("Field " + field + " cannot be in query if it's not in the schema")
 
-          if( !self.onlineSearchSchema.structure[ field ].searchOptions ){ // TODO: DELETE ME LATER 
-            self.dbLayer._makeFieldSearchable( field );
-          }
+          self.dbLayer._makeFieldSearchable( field );
         }
       }
     }
     visitQueryConditions( self.queryConditions );
-
-/*
-    // Make sure that, for every entry present in onlineSearchSchema,
-    // the corresponding DB-level schema is searchable
-    // (unless they are paramIds, in which case there is no point. AND YES, users might
-    // decide that paramIds are in onlineSearchSchema, it already happens in Hotplate)
-    for( var k in self.onlineSearchSchema.structure ){
-    
-      var entry = self.onlineSearchSchema.structure[ k ];
-      
-      // Simple case: no `searchOptions`. So, the search target is 
-      // the same as `k`.
-      if( typeof( entry.searchOptions ) === 'undefined' ){
-
-        if( self.paramIds.indexOf( k ) === -1 ){
-          if( schema.structure[ k ] ){
-            self.dbLayer._makeFieldSearchable( k );
-          }
-        } 
-
-      // More complex case: `searchOptions` is there. This means that
-      // the referenced field *might* be different.
-      // Things are made tricky by the fact that searchOptions can be
-      // an object, or an array of objects.
-      // Array or not, objects can define a `field` key specifying which field
-      // should be used for the search.
-      } else {
-     
-        if( Array.isArray( entry.searchOptions ) ){
-          var elements = entry.searchOptions;
-        } else {
-          var elements = [ entry.searchOptions ];
-        }
-
-        elements.forEach( function( element ){
-          var fieldName = element.field ? element.field : k;
-
-          if( self.schema.structure[ fieldName ]) {
-            self.dbLayer._makeFieldSearchable( fieldName );
-          }
-
-        });
-
-      }
-      
-    }
-  */  
-
   },
 
 
@@ -247,7 +195,6 @@ exports = module.exports = declare( Object,  {
 
     // If there is only one "and" condition, normalise it to the condition itself
     if( returnedConditions.name === 'and' && returnedConditions.args.length === 1 ){
-
       returnedConditions = returnedConditions.args[ 0 ];
     }
 
@@ -286,7 +233,7 @@ exports = module.exports = declare( Object,  {
     //console.log("Conditions:", require('util').inspect( conditions, { depth: 10 } ) ) ;
     //console.log("HERE: ", self.dbLayer );
 
-    //console.log("Conditions: ", { conditions: conditions } );
+    console.log("Conditions: ", require('util').inspect( conditions, { depth: 10 } ) );
 
     // Make the database call 
     self.dbLayer.select( { conditions: conditions }, { children: true }, function( err, docs ){
@@ -405,18 +352,6 @@ exports = module.exports = declare( Object,  {
     self.dbLayer.delete( conditions, { multi: false, skipValidation: true }, cb );
   },
 
-  /*
-  MERC: Go through searchOptions recursively to create the query
-
-  workoutArgs( schema, condition );
-
-* Field name is always first argument of eq, startsWith, endsWith, contains, lt, lte, gt, gte
-* When a value is expected (second argument of all operators), it's compared directly, except if it's '#something#', in which case it's the 'something' key in onlineSearchSchema (condition added only if entry in onlineSearchSchema defined).
-* The query is "shrunk" at the end: all 'and' and 'or' entries with only one entry are converted in the entry itself
-
-
-
-  */
   _queryMakeDbLayerFilter: function( remote, conditionsHash, sort, ranges, cb ){
  
     // The simleDbLayer filter that will get returned
@@ -521,24 +456,30 @@ exports = module.exports = declare( Object,  {
         }
       }
 
+
+
       // This will be returned
       var res = {};
       visitQueryConditions( self.queryConditions, res );
 
       // visitQueryConditions does a great job avoiding duplication, but
       // top-level duplication needs to be checked here
-      if( ( res.name === 'and' || res.name === 'or' ) && res.args.length === 1 ){
-        return res.args[ 0 ];
-      } 
-
-      return res;
+      if( ( res.name === 'and' || res.name === 'or' )){
+        if( res.args.length === 0 ) return {};
+        if( res.args.length === 1 ) return res.args[ 0 ];
+        return res;
+      }
     }
 
+    filter.conditions = getQueryFromQueryConditions();
 
-
+    console.log( self.collectionName );
+    console.log("QUERYCONDITIONS", require('util').inspect( self.queryConditions, { depth: 10 } ));
+    console.log("CONDITIONS HASH:", require('util').inspect( conditionsHash, { depth: 10 } ));
     console.log("ORIG: ", require('util').inspect( self.queryConditions, { depth: 10 } ));
     console.log("COPY: ", require('util').inspect( getQueryFromQueryConditions(), { depth: 10 } ));
 
+/*
     // Starting point, with an `and`. This will get trimmed to a straight condition if
     // filter.conditions.args.length is 1
     filter.conditions = { name: 'and', args: [ { name: 'or', args: [ ] } ] };
@@ -619,6 +560,8 @@ exports = module.exports = declare( Object,  {
     if( l === 1 ) filter.conditions = filter.conditions.args[ 0 ]
 
     //console.log("FILTER: ", filter );
+
+    */
 
     cb( null, filter );
 
