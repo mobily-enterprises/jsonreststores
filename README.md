@@ -22,11 +22,17 @@ PLAN OF ATTACK:
 ## IMPROVE searchSchema
 
 - [X] Decide on new syntax for searchSchema
-- [ ] Implement new syntax in JsonRestStores/SimpleDbLayerMixin, 
-- [ ] Change tests to see if it all works with new querying ability
-- [ ] Change hotplate to see if it all works with new queries, search for searchOpts
+- [X] Implement new syntax in JsonRestStores/SimpleDbLayerMixin, 
+- [X] Change hotplate/bookingDojo to see if it all works with new queries, search for searchOpts
+- [X] Change hotplate/bookingDojo so that it NEVER uses api* calls to do ANYTHING, use dbLayer instead
 
-MILESTONE 2 COMPLETED: searchSchema is now very powerful, any query can be made. BookingDojo works!
+- [ ] Change tests to make they work with queryconditions, search for searchoptions
+- [ ] Check tests for simpleDbLayer, casting on select might have changed things
+- [ ] Document extra features in email
+
+- [ ] Test EVERY functionality of BookingDojo/hotplate to make sure that EVERYTHING works as it should
+
+MILESTONE 2 COMPLETED: searchSchema is now very powerful, any query can be made. BookingDojo works! Also, code for hotplate is much better as it never uses the API anymore.
 
 ---------------------------
 Decided syntax for queryConditions:
@@ -41,33 +47,31 @@ queryConditions: {
 
 ## MEMORY store
 
-- [ ] Implement sample store for documentation using memory, basic one with no searching nor adding
-- [ ] Write it in documentation, finally finish that infamous section
-- [ ] Implement proper memory store with querying, getting querying code from dstore 
-- [ ] Make sure tests run using new memory store
-- [ ] Maybe make JsonRestStore's query format match dstore's if needed
-- [ ] Try the whole of hotplate running on the memory store
+- [ ] Implement sample store for documentation using memory, basic one with no searching
+- [ ] Write it in documentation, finally finish that infamous section which triggered this WHOLE rewrite
+- [ ] !!! Implement proper memory store with querying, getting querying code from dstore 
+- [ ] Make sure tests run using new memory store actually pass (!)
+- [ ] Try the whole of hotplate running on the new memory store
+- [ ] Write function to save DB state on disk (Json dump)
+- [ ] Eradicate TingoDB from the list of supported engines. Sorry guys.
 
-MILESTONE 3 COMPLETED: JsonRestStore has a memory store that works without buggy TingoDB, and hotplate runs on it
-
-BONUS: I can finally, finally, FINALLY switch off MongoDb in my development machine as long as I write a function to load and save state (which I will). Nice one!
+MILESTONE 3 COMPLETED: JsonRestStore has a memory store that works without buggy TingoDB and hotplate runs on it
+BONUS: I can finally, finally, FINALLY switch off MongoDb in my development machine!
 
 ## IMPROVE dstore
-- [ ] Use new (and tested) memory store code to write querying code for dstore
+- [ ] Change dstore so that querying is compatible with JsonRestStore's, so that ordering always matches
 - [ ] Check that hotplate all works with new filtering, without ever doing a refresh
+- [ ] Maybe make JsonRestStore's query format match dstore's if needed (add regexp?)
 
-MILESTONE 4 COMPLETED: JsonRestStores now works AMAZINGLY well with dstores, 
+MILESTONE 4 COMPLETED: JsonRestStores now works AMAZINGLY well with dstores, queries are 100% equivalent
 
 ## DOCUMENTING
 
 - [ ] Rewrite bdocumentation for basic JsonRestStores
 - [ ] Rewrite documentation with using SimpleDbLayerMixin
 
-## PARTY
+MILESTONE 5 COMPLETED: JsonRestStores, SimpleDbLayerMixin are now fully documented, I can release the first candidate release
 
-- [ ] Party!
-
-MILESTONE 4 COMPLETED: All foundation work is actually finished.
 
 * **DRY approach**. Everything works as you'd expect it to, even though you are free to tweak things.
 * **Database-agnostic**. The module itself provides you with _everything_ except the data-manipulation methods, which are up to you to implement.
@@ -197,7 +201,7 @@ Here is how you make a fully compliant store:
 
           switch( where ){
 
-            case 'at':
+            case 'before':
               // Move element somewhere
               function moveElement(array, from, to) {
                 if( to !== from ) array.splice( to, 0, array.splice(from, 1)[0]);
