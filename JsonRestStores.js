@@ -237,8 +237,8 @@ var Store = declare( Object,  {
   // -existing is true or false: true for existing records false for new ones
   // 
   // When calling implementReposition:
-  // - where can be 'start', 'end' or 'at'
-  // - beforeId is only meaningful for 'at' (tell is where to place it)
+  // - where can be 'start', 'end' or 'before'
+  // - beforeId is only meaningful for 'before' (tell is where to place it)
   // - existing is boolean, and it's only meaningful if this.position is there 
   _repositionBasedOnHeaders: function( fullDoc, putBefore, putDefaultPosition, existing, cb ){
 
@@ -249,7 +249,7 @@ var Store = declare( Object,  {
     
     // CASE #1: putBefore is set: where = at, beforeId = putBefore 
     if( putBefore ) {
-      this.implementReposition( fullDoc, 'at', putBefore, cb );
+      this.implementReposition( fullDoc, 'before', putBefore, cb );
 
     // CASE #2: putDefaultPosition is set: where = putDefaultPosition, beforeId = null
     } else if( putDefaultPosition ){
@@ -446,7 +446,7 @@ var Store = declare( Object,  {
 
       },
       function( err ){
-        if( err ) return callback( err );
+        if( err ) return cb( err );
 
         cb( null, docs, preparedDocs );
       }
@@ -658,15 +658,17 @@ var Store = declare( Object,  {
 
               self.afterCheckPermissions( request, 'post', {}, function( err ){
                 if( err ) return self._sendError( request, next, err );
-              
+
                 // Clean up body from things that are not to be submitted
                 self.schema.cleanup( request.body, 'doNotSave' );
               
                 self.schema.makeId( request.body, function( err, forceId ){
                   if( err ) return self._sendError( request, next, err );
-                                  
+
                   self.implementInsert( request, forceId, function( err, fullDoc ){
                     if( err ) return self._sendError( request, next, err );
+
+
 
                     self._repositionBasedOnHeaders( fullDoc, request.options.putBefore, request.options.putDefaultPosition, false, function( err ){
                       if( err ) return self._sendError( request, next, err );
@@ -918,26 +920,7 @@ var Store = declare( Object,  {
 
   },
 
-  // Helper function for _makeGetQuery
-  _validateSearchConditions: function( request, conditions, options, cb ){
-
-    var self = this;
-
-    // If it's a remote call, then simply validate using the onlineSearchSchema
-    if( request.remote ){
-      return self.onlineSearchSchema.validate( conditions, options, cb);
-    }
-
-    // If it's a local call, validate using a new schema made up with the onlineSearchSchema AND
-    // the common schema merged together. Priority is given to the onlineSearchSchema
-    var schemaStructure = {};
-    for( var k in self.schema.structure ) schemaStructure[ k ] = schemaStructure[ k ] || self.schema.structure[ k ];
-    for( var k in self.onlineSearchSchema.structure ) schemaStructure[ k ] = self.onlineSearchSchema.structure[ k ];
-
-    var newSchema = new self.onlineSearchSchema.constructor( schemaStructure );
-    newSchema.validate( conditions, options, cb );
-  },
-
+ 
   _makeGetQuery: function( request, next ){
 
     var self = this;
@@ -963,7 +946,7 @@ var Store = declare( Object,  {
         self.afterCheckPermissions( request, 'getQuery', {}, function( err ){
           if( err ) return self._sendError( request, next, err );
 
-          self._validateSearchConditions( request, request.options.conditions, { onlyObjectValues: true }, function( err, conditions, errors ){
+          self.onlineSearchSchema.validate( request.options.conditions, { onlyObjectValues: true }, function( err, conditions, errors ){
             if( err ) return self._sendError( request, next, err );
 
             // Actually assigning cast and validated conditions to `options`
@@ -1035,6 +1018,7 @@ var Store = declare( Object,  {
 
       // Fetch the doc.
       self.implementFetchOne( request, function( err, fullDoc ){
+
         if( err ) return self._sendError( request, next, err );
     
         if( ! fullDoc ) return self._sendError( request, next, new self.NotFoundError());
