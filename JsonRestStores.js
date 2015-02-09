@@ -686,7 +686,7 @@ var Store = declare( Object,  {
 
                           self.prepareBeforeSend( request, 'post', doc, function( err, preparedDoc ){
                             if( err ) return self._sendError( request, next, err );
-                    
+
                             self.afterEverything( request, 'post', { preparedDoc: preparedDoc, doc: doc, fullDoc: fullDoc }, function( err ){
                               if( err ) return self._sendError( request, next, err );
                
