@@ -240,6 +240,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       // Set the basic stores
       g.People = declare( g.JRS, {
 
+        
         schema: new Schema({
           id:          { type: 'id' },
           name:        { type: 'string', searchable: true },
@@ -249,12 +250,24 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         }),
 
         onlineSearchSchema: new Schema({
-          name:     { type: 'string', searchable: { type: 'eq' }  },
+          name:     { type: 'string', searchable: true },
           surname:  { type: 'string', max: 20, searchable: true },
           age:      { type: 'number', max: 99, searchable: true, },
           ageGt:    { type: 'number', max: 99, searchable: true, searchOptions: { field: 'age', type: 'gt' } },
-          nameSt:   { type: 'string', searchable: true, searchOptions: { field: 'surname', type: 'startsWith' } },
+          nameSt:   { type: 'string', searchable: true },
         }),
+
+        queryConditions: {
+          name: 'and',
+          args: [
+            { name: 'eq', args: [ 'name', "#name#" ] },
+            { name: 'eq', args: [ 'surname', "#surname#" ] },
+            { name: 'eq', args: [ 'age', "#age#" ] },
+            { name: 'gt', args: [ 'age', "#ageGt#" ] },
+            { name: 'startsWith', args: [ 'surname', "#nameSt#" ] },
+          ]
+        },
+
         sortableFields: [ 'name', 'surname', 'age' ],
 
         storeName: 'people',
@@ -284,13 +297,24 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         }),
 
         onlineSearchSchema: new Schema({
-          name:     { type: 'string', searchable: true, searchOptions: { type: 'eq' } },
+          name:     { type: 'string', searchable: true },
           surname:  { type: 'string', max: 20, searchable: true },
           age:      { type: 'number', max: 99, searchable: true },
           ageGt:    { type: 'number', max: 99, searchable: true, searchOptions: { field: 'age', type: 'gt' } },
-          nameSt:   { type: 'string', searchable: true, searchOptions: { field: 'surname', type: 'startsWith' } },
+          nameSt:   { type: 'string', searchable: true },
         }),
 
+        queryConditions: {
+          name: 'and',
+          args: [
+            { name: 'eq', args: [ 'name', "#name#" ] },
+            { name: 'eq', args: [ 'surname', "#surname#" ] },
+            { name: 'eq', args: [ 'age', "#age#" ] },
+            { name: 'gt', args: [ 'age', "#ageGt#" ] },
+            { name: 'startsWith', args: [ 'surname', "#nameSt#" ] },
+          ]
+        },
+        
         storeName: 'wsPeople',
 
         handlePut: true,
@@ -2680,12 +2704,13 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
          g.people._queryMakeDbLayerFilter( true, { nameSt: 'Mob', ageGt: 20 }, {}, {}, function( err, selector) {
 
            test.ifError( err ); if( err ) return test.done();
-           compareItems( test,  selector,
+           test.deepEqual( selector,
   
   { conditions: 
    { name: 'and', args: [ 
+        { name: 'gt', args: [ 'age', 20 ] } ,
         { name: 'startsWith', args: [ 'surname', 'Mob' ] },
-        { name: 'gt', args: [ 'age', 20 ] } ] },
+    ] },
   ranges: {},
   sort: {}  }
   
