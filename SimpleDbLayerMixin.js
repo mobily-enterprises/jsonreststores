@@ -230,11 +230,6 @@ exports = module.exports = declare( Object,  {
       conditions = { name: 'eq', args: [ self.idProperty, request.params[ self.idProperty ]  ] };
     }
 
-    //console.log("Conditions:", require('util').inspect( conditions, { depth: 10 } ) ) ;
-    //console.log("HERE: ", self.dbLayer );
-
-    console.log("Conditions: ", require('util').inspect( conditions, { depth: 10 } ) );
-
     // Make the database call 
     self.dbLayer.select( { conditions: conditions }, { children: true }, function( err, docs ){
       if( err ){
@@ -473,11 +468,11 @@ exports = module.exports = declare( Object,  {
 
     filter.conditions = getQueryFromQueryConditions();
 
-    console.log( self.collectionName );
-    console.log("QUERYCONDITIONS", require('util').inspect( self.queryConditions, { depth: 10 } ));
-    console.log("CONDITIONS HASH:", require('util').inspect( conditionsHash, { depth: 10 } ));
-    console.log("ORIG: ", require('util').inspect( self.queryConditions, { depth: 10 } ));
-    console.log("COPY: ", require('util').inspect( getQueryFromQueryConditions(), { depth: 10 } ));
+    //console.log( self.collectionName );
+    //console.log("QUERYCONDITIONS", require('util').inspect( self.queryConditions, { depth: 10 } ));
+    //console.log("CONDITIONS HASH:", require('util').inspect( conditionsHash, { depth: 10 } ));
+    //console.log("ORIG: ", require('util').inspect( self.queryConditions, { depth: 10 } ));
+    //console.log("COPY: ", require('util').inspect( getQueryFromQueryConditions(), { depth: 10 } ));
 
 /*
     // Starting point, with an `and`. This will get trimmed to a straight condition if
