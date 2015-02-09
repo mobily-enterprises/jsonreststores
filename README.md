@@ -25,31 +25,20 @@ PLAN OF ATTACK:
 - [X] Implement new syntax in JsonRestStores/SimpleDbLayerMixin, 
 - [X] Change hotplate/bookingDojo to see if it all works with new queries, search for searchOpts
 - [X] Change hotplate/bookingDojo so that it NEVER uses api* calls to do ANYTHING, use dbLayer instead
-
-- [ ] Change tests to make they work with queryconditions, search for searchoptions
-- [ ] Check tests for simpleDbLayer, casting on select might have changed things
-- [ ] Document extra features in email
-
+- [X] Check tests for simpleDbLayer, casting on select might have changed things
+- [X] Change tests to make them work with queryconditions, search for searchoptions
+- [X] Document extra features in email
+- [ ] Add simple event emitting in simpleDbLayer so that I can change stores.workspacesUsers.apiPost()
 - [ ] Test EVERY functionality of BookingDojo/hotplate to make sure that EVERYTHING works as it should
 
-MILESTONE 2 COMPLETED: searchSchema is now very powerful, any query can be made. BookingDojo works! Also, code for hotplate is much better as it never uses the API anymore.
-
----------------------------
-Decided syntax for queryConditions:
-queryConditions: {
-  name: 'and', args: [
-    { name: 'eq', args: [ 'surname', '#surname#' ] }, // Default one
-    { name: 'eq', args: [ 'workspacesContactsEmails.email', '#email#' ] },
-    { name: 'eq', args: [ 'that.field', 'otherAgain' ] },
-  ]
-}
------------------------------
+MILESTONE 2 COMPLETED: searchSchema is now very powerful, any kind of query can be made. BookingDojo works! Also, code for hotplate is much better as it never uses the API anymore.
 
 ## MEMORY store
 
 - [ ] Implement sample store for documentation using memory, basic one with no searching
 - [ ] Write it in documentation, finally finish that infamous section which triggered this WHOLE rewrite
-- [ ] !!! Implement proper memory store with querying, getting querying code from dstore 
+- [ ] Split documentation of JsonRestStores in half, with SimpleDBLayerMixin separately
+- [ ] !!!!!!!! Implement proper memory store with querying, getting querying code from dstore 
 - [ ] Make sure tests run using new memory store actually pass (!)
 - [ ] Try the whole of hotplate running on the new memory store
 - [ ] Write function to save DB state on disk (Json dump)
@@ -65,18 +54,17 @@ BONUS: I can finally, finally, FINALLY switch off MongoDb in my development mach
 
 MILESTONE 4 COMPLETED: JsonRestStores now works AMAZINGLY well with dstores, queries are 100% equivalent
 
-## DOCUMENTING
+## REDOCUMENTING
 
 - [ ] Rewrite bdocumentation for basic JsonRestStores
 - [ ] Rewrite documentation with using SimpleDbLayerMixin
 
 MILESTONE 5 COMPLETED: JsonRestStores, SimpleDbLayerMixin are now fully documented, I can release the first candidate release
 
-
 * **DRY approach**. Everything works as you'd expect it to, even though you are free to tweak things.
 * **Database-agnostic**. The module itself provides you with _everything_ except the data-manipulation methods, which are up to you to implement.
 * **Schema based**. Anything coming from the client will be validated and cast.
-* **API-ready**. Every store function can be called via API. API calls have more relaxed constraints.
+* **API-ready**. Every store function can be called via API. API calls bypass permissions constraints
 * **Tons of hooks**. You can hook yourself to every step of the store processing process: `afterValidate()`,   `afterCheckPermissions()`, `afterDbOperation()`, `afterEverything()`
 * **Authentication hooks**. Only implement things once, and keep authentication tight.
 * **Mixin-based**. You can add functionalities easily.
