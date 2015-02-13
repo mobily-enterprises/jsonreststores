@@ -2091,7 +2091,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
     //process.exit();
       zap( function(){
   
-        g.dbPeople.insert( { id: 1234, name: 'Tony', surname: 'Mobily', age: 37 }, { multi: true, returnRecord: true }, function( err, person ){
+        g.dbPeople.insert( { id: 1234, name: 'Tony', surname: 'Mobily', age: 37 }, { multi: true }, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
   
           g.people.apiGet( person.id, function( err, personGet ){
@@ -2118,7 +2118,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         var p = { id: 1234, name: 'Tony', surname: 'Mobily', age: 37 };
-        g.dbPeople.insert( p, { multi: true, returnRecord: true }, function( err, person ){
+        g.dbPeople.insert( p, { multi: true }, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
   
           var req = makeReq( { params: { id: 1234 } } );
@@ -2200,7 +2200,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var ageBeforeCast;
   
         var p = { id: 1234, name: 'Tony', surname: 'Mobily', age: 37 };
-        g.dbPeople.insert( p, { multi: true, returnRecord: true, skipValidation: true }, function( err, person ){
+        g.dbPeople.insert( p, { multi: true, skipValidation: true }, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
   
           var People2 = declare( g.People, {
@@ -2611,10 +2611,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         // NOTE! The age is '37', and then `r` is corrected to 37 for comparison.
         async.series([
-          function( done ){ g.dbPeople.insert( { id: 1234, name: 'Tony', surname: "Mobily", age: 37 }, { returnRecord: true }, function( err, r ){ if( err ) return done( err ); r.surname += "_extrapolated"; l.push( r ); done() }) },
-          function( done ){ g.dbPeople.insert( { id: 1235, name: 'Chiara', surname: "Mobily", age: 24 }, { returnRecord: true }, function( err, r ){ if( err ) return done( err ); r.surname += "_extrapolated"; l.push( r ); done() }) },
-          function( done ){ g.dbPeople.insert( { id: 1236, name: 'Daniela', surname: "Mobily", age: 64 }, { returnRecord: true }, function( err, r ){ if( err ) return done( err ); r.surname += "_extrapolated"; l.push( r ); done() }) },
-          function( done ){ g.dbPeople.insert( { id: 1237, name: 'Sara', surname: "Fabbietti", age: 14 }, { returnRecord: true }, function( err, r ){ if( err ) return done( err ); done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1234, name: 'Tony', surname: "Mobily", age: 37 }, , function( err, r ){ if( err ) return done( err ); r.surname += "_extrapolated"; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1235, name: 'Chiara', surname: "Mobily", age: 24 }, , function( err, r ){ if( err ) return done( err ); r.surname += "_extrapolated"; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1236, name: 'Daniela', surname: "Mobily", age: 64 }, , function( err, r ){ if( err ) return done( err ); r.surname += "_extrapolated"; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1237, name: 'Sara', surname: "Fabbietti", age: 14 }, , function( err, r ){ if( err ) return done( err ); done() }) },
         ], function( err ){
 
           test.ifError( err ); if( err ) return test.done();
@@ -2664,10 +2664,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var people2 = new People2();
    
         async.series([
-          function( done ){ g.dbPeople.insert( { id: 1234, name: 'Tony', surname: "Mobily", age: 37 }, { returnRecord: true }, function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
-          function( done ){ g.dbPeople.insert( { id: 1235, name: 'Chiara', surname: "Mobily", age: 24 }, { returnRecord: true }, function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
-          function( done ){ g.dbPeople.insert( { id: 1236, name: 'Daniela', surname: "Mobily", age: 64 }, { returnRecord: true }, function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
-          function( done ){ g.dbPeople.insert( { id: 1237, name: 'Sara', surname: "Fabbietti", age: 14 }, { returnRecord: true }, function( err, r ){ if( err ) return done( err );             done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1234, name: 'Tony', surname: "Mobily", age: 37 }, , function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1235, name: 'Chiara', surname: "Mobily", age: 24 }, , function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1236, name: 'Daniela', surname: "Mobily", age: 64 }, , function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1237, name: 'Sara', surname: "Fabbietti", age: 14 }, , function( err, r ){ if( err ) return done( err );             done() }) },
         ], function( err ){
           test.ifError( err ); if( err ) return test.done();
   
