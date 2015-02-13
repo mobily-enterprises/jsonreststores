@@ -28,13 +28,13 @@ PLAN OF ATTACK:
 - [X] Check tests for simpleDbLayer, casting on select might have changed things
 - [X] Change tests to make them work with queryconditions, search for searchoptions
 - [X] Document extra features in email
-- [ ] Add simple event emitting in simpleDbLayer so that I can change stores.workspacesUsers.apiPost()
-- [ ] Test EVERY functionality of BookingDojo/hotplate to make sure that EVERYTHING works as it should
+- [X] Add simple event emitting in simpleDbLayer
+- [X] Change stores.workspacesUsers.apiPost() so that it uses simpleDbLayer's events instead
+- [X] Test EVERY functionality of BookingDojo/hotplate to make sure that EVERYTHING works as it should
 
 MILESTONE 2 COMPLETED: searchSchema is now very powerful, any kind of query can be made. BookingDojo works! Also, code for hotplate is much better as it never uses the API anymore.
 
 ## MEMORY store
-
 - [ ] Implement sample store for documentation using memory, basic one with no searching
 - [ ] Write it in documentation, finally finish that infamous section which triggered this WHOLE rewrite
 - [ ] Split documentation of JsonRestStores in half, with SimpleDBLayerMixin separately
@@ -48,7 +48,9 @@ MILESTONE 3 COMPLETED: JsonRestStore has a memory store that works without buggy
 BONUS: I can finally, finally, FINALLY switch off MongoDb in my development machine!
 
 ## IMPROVE dstore
-- [ ] Change dstore so that querying is compatible with JsonRestStore's, so that ordering always matches
+- [ ] Change dstore so that querying is compatible with JsonRestStore's, extend it so that it searches
+      in _children as well
+- [ ] Implement queryConditions in dstore: if defined, filtering will be based on those fields      
 - [ ] Check that hotplate all works with new filtering, without ever doing a refresh
 - [ ] Maybe make JsonRestStore's query format match dstore's if needed (add regexp?)
 
