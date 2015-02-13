@@ -270,7 +270,7 @@ exports = module.exports = declare( Object,  {
     // that id
     if( forceId ) record[ self.idProperty ] = forceId;
 
-    self.dbLayer.insert( record, { returnRecord: true, skipValidation: true, children: true }, cb );
+    self.dbLayer.insert( record, { skipValidation: true, children: true }, cb );
   },
 
   implementUpdate: function( request, deleteUnsetFields, cb ){
@@ -294,38 +294,9 @@ exports = module.exports = declare( Object,  {
     for( var i in request.body ) updateObject[ i ] = request.body[ i ];
     delete updateObject._children;
 
-    // Only delete unset fields if there is no piggyField.
-    // If piggyField is there, this is a single-field update
-    // var deleteUnsetFields = ! self.piggyField;
-
-    self.dbLayer.update( conditions, updateObject, { deleteUnsetFields: deleteUnsetFields, multi: false, skipValidation: true }, function( err, howMany ){
-      if( err ){
-        cb( err );
-      } else {
-
-        self.dbLayer.select( { conditions: conditions }, { children: true }, function( err, docs ){
-          if( err ){
-            cb( err );
-          } else {
-            if( docs.length === 0 ){
-              cb( null, null );
-            } else if( docs.length !== 1 ){
-
-              cb( new self.ServiceUnavailableError({
-                message: "dbLayer.update updated more than 1 record",
-                data: { 
-                  length: docs.length,
-                  conditions: conditions,
-                  store: self.storeName
-                }
-              }));
-
-            } else {
-              cb( null, docs[ 0 ] );
-            }
-          }
-        });
-      }
+    self.dbLayer.update( conditions, updateObject, { deleteUnsetFields: deleteUnsetFields, multi: false, skipValidation: true }, function( err, howMany, record ){
+      if( err ) return cb( err );
+      cb( null, record );
     });
   },
 
@@ -474,90 +445,6 @@ exports = module.exports = declare( Object,  {
     //console.log("ORIG: ", require('util').inspect( self.queryConditions, { depth: 10 } ));
     //console.log("COPY: ", require('util').inspect( getQueryFromQueryConditions(), { depth: 10 } ));
 
-/*
-    // Starting point, with an `and`. This will get trimmed to a straight condition if
-    // filter.conditions.args.length is 1
-    filter.conditions = { name: 'and', args: [ { name: 'or', args: [ ] } ] };
-
-      //console.log("0", conditionsHash );
-
-    // Add filters to the selector
-    for( var searchField in conditionsHash ){
-
-      // There is a slim chance that self.onlineSearchSchema.structure[ searchField ] is not there:
-      // it happens in case the request is from API and it required a field available
-      // in the main schema but NOT in the search schema
-      //var searchable = self.onlineSearchSchema.structure[ searchField ] && self.onlineSearchSchema.structure[ searchField ].searchable;
-      var searchable = self.onlineSearchSchema.structure[ searchField ];
-      var searchOptions = self.onlineSearchSchema.structure[ searchField ] && self.onlineSearchSchema.structure[ searchField ].searchOptions;
-
-      //console.log("A");
-      if( searchable || !remote ) {
-
-        // searchOptions is not an object/is null: just set default conditions (equality with field)
-        if( typeof( searchOptions ) !== 'object' || searchOptions === null ){
-          //console.log("B1");
-          filter.conditions.args.push( { name: 'eq', args: [ searchField, conditionsHash[ searchField ] ] } );
-
-        // searchOptions IS an object: it might be an array or a single condition set
-        } else {
-         
-          // Make sure elements ends up as an array regardless
-          if( Array.isArray( searchOptions ) ){
-            var elements = searchOptions;
-          } else {
-            var elements = [ searchOptions ];
-          }
-
-          elements.forEach( function( element ){
-
-            //console.log("D", element );
-            field = element.field || searchField;
-            condition = element.condition || 'and';
-            value = element.value || conditionsHash[ searchField ];
-            name = element.type;
-
-            //console.log("condition, field, name, value:", condition, field, name, value );
-
-            if( condition === 'and' ){
-              filter.conditions.args.push( { name: name, args: [ field, value ] } );
-            } else {
-              filter.conditions.args[ 0 ].args.push( { name: name, args: [ field, value ] } );              
-            }
-          });
-        }
-
-      // Field is not searchable: error!
-      } else {
-        errors.push( { field: searchField, message: 'Field not allowed in search: ' + searchField + ' in ' + self.storeName } );
-      }      
-    }
-
-    //console.log("FILTERS BEFORE TRIMMING: ", require('util').inspect( filter, {  depth: 10 } ) );
-
-    // Call the callback with an error, or with the selector (containing conditions, ranges, sort)
-    if( errors.length ) return cb( new self.UnprocessableEntityError( { errors: errors } ) ); 
-
-    var l = filter.conditions.args[ 0 ].args.length;
-
-    // No 'or' conditions: take the whole or condition (the first one) out  
-    if( l === 0 ) filter.conditions.args.shift();
-
-    // Only one 'or' condition: place it as a normal 'and' one
-    if( l === 1 ) filter.conditions.args[ 0 ] = filter.conditions.args[ 0 ].args[ 0 ];
-
-    var l = filter.conditions.args.length;
-
-    // And is empty: no conditions to speak of
-    if( l === 0 ) filter.conditions = {};
-
-    // Only one 'and' condition: shrink it to the condition itself
-    if( l === 1 ) filter.conditions = filter.conditions.args[ 0 ]
-
-    //console.log("FILTER: ", filter );
-
-    */
-
     cb( null, filter );
 
   },
@@ -584,7 +471,6 @@ exports = module.exports = declare( Object,  {
     if( typeof( request.options.sort ) === 'undefined' || request.options.sort === null ) request.options.sort = {}; 
     if( typeof( request.options.ranges ) === 'undefined' || request.options.ranges === null ) request.options.ranges = {}; 
 
-
     self._queryMakeDbLayerFilter( request.remote, request.options.conditions, request.options.sort, request.options.ranges, function( err, filter ){
       if( err ){
         next( err );
@@ -598,34 +484,6 @@ exports = module.exports = declare( Object,  {
         self.dbLayer.select( filter, dbLayerOptions, next );
       }
     });
-
   },
 
-
-
 });
-
-
-        /*
-        // CHUNK #1
-        // Work out layer and fields
-        // Somebody please come up with a much more elegant way of doing this
-        var layer, field;
-        //console.log("First argument:", o.args[ 0 ] );
-        // The DB field is always the first parameter
-        var dbFieldEntries = o.args[ 0 ].split( '.' );
-        if( dbFieldEntries.length === 1 ){
-          field = dbFieldEntries[ 0 ];
-        } else {
-          layer = dbFieldEntries[ 0 ];
-          field = dbFieldEntries[ 1 ];
-        }
-
-        // This is for a local field: make it searchable
-        if( ! layer ){
-          }
-        } else {
-
-
-        }
-        */
