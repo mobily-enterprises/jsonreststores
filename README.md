@@ -4,78 +4,19 @@ JsonRestStores
 JsonRestStores is the best way to create REST stores that return JSON data.
 Rundown of features:
 
-**WARNING: JsonRestStore is now going through a very extensive rewrite (I am now working on improving the underlying db layer, which will change the way you define queries). Do not use this module till this writing is gone**.
-
-PLAN OF ATTACK:
----------------
-
-## BACK TO SimpleDbLayer with Hotplate
-
-- [X] Fix API calls in tests, making that the only tests that fails are the ones for different SimpleDbLayer
-- [X] Fix querying in JsonRestStores, KEEPING the current onlineSearchSchema definitions
-- [X] Make sure ALL tests pass (!!!) and that SimpleDbLayerMixin actually works
-- [X] Update querying API everywhere, in hotplate and bd. Search for `dbLayer.` (db operations) and apiGetQuery (`filters` is now `conditions`), changed hooks 
-- [X] Make sure BookingDojo itself works 100%
-
-**MILESTONE 1 COMPLETED: SimpleDbLayer V.2 is fully working, BookingDojo works again!**
-
-## IMPROVE searchSchema
-
-- [X] Decide on new syntax for searchSchema
-- [X] Implement new syntax in JsonRestStores/SimpleDbLayerMixin, 
-- [X] Change hotplate/bookingDojo to see if it all works with new queries, search for searchOpts
-- [X] Change hotplate/bookingDojo so that it NEVER uses api* calls to do ANYTHING, use dbLayer instead
-- [X] Check tests for simpleDbLayer, casting on select might have changed things
-- [X] Change tests to make them work with queryconditions, search for searchoptions
-- [X] Document extra features in email
-- [X] Add simple event emitting in simpleDbLayer
-- [X] Change stores.workspacesUsers.apiPost() so that it uses simpleDbLayer's events instead
-- [X] Test EVERY functionality of BookingDojo/hotplate to make sure that EVERYTHING works as it should
-
-MILESTONE 2 COMPLETED: searchSchema is now very powerful, any kind of query can be made. BookingDojo works! Also, code for hotplate is much better as it never uses the API anymore.
-
-## MEMORY store
-- [ ] Implement sample store for documentation using memory, basic one with no searching
-- [ ] Write it in documentation, finally finish that infamous section which triggered this WHOLE rewrite
-- [ ] Split documentation of JsonRestStores in half, with SimpleDBLayerMixin separately
-- [ ] !!!!!!!! Implement proper memory store with querying, getting querying code from dstore 
-- [ ] Make sure tests run using new memory store actually pass (!)
-- [ ] Try the whole of hotplate running on the new memory store
-- [ ] Write function to save DB state on disk (Json dump)
-- [ ] Eradicate TingoDB from the list of supported engines. Sorry guys.
-
-MILESTONE 3 COMPLETED: JsonRestStore has a memory store that works without buggy TingoDB and hotplate runs on it
-BONUS: I can finally, finally, FINALLY switch off MongoDb in my development machine!
-
-## IMPROVE dstore
-- [ ] Change dstore so that querying is compatible with JsonRestStore's, extend it so that it searches
-      in _children as well
-- [ ] Implement queryConditions in dstore: if defined, filtering will be based on those fields      
-- [ ] Check that hotplate all works with new filtering, without ever doing a refresh
-- [ ] Maybe make JsonRestStore's query format match dstore's if needed (add regexp?)
-
-MILESTONE 4 COMPLETED: JsonRestStores now works AMAZINGLY well with dstores, queries are 100% equivalent
-
-## REDOCUMENTING
-
-- [ ] Rewrite bdocumentation for basic JsonRestStores
-- [ ] Rewrite documentation with using SimpleDbLayerMixin
-
-MILESTONE 5 COMPLETED: JsonRestStores, SimpleDbLayerMixin are now fully documented, I can release the first candidate release
+**WARNING: JsonRestStore Release Candidate 1 is finished, and I am in the process of rewriting its documentation. Please keep un mind that the current documentation does NOT reflect how the module curretly works! Anything after the heading "DOCUMENTATION UPDATED UP TO THIS POINT" is horribly out of date**
 
 * **DRY approach**. Everything works as you'd expect it to, even though you are free to tweak things.
-* **Database-agnostic**. The module itself provides you with _everything_ except the data-manipulation methods, which are up to you to implement.
+* **Database-agnostic**. You can either use a generic database connector, or implement the data-manipulation methods yourself.
 * **Schema based**. Anything coming from the client will be validated and cast.
-* **API-ready**. Every store function can be called via API. API calls bypass permissions constraints
+* **API-ready**. Every store function can be called via API, which bypass permissions constraints
 * **Tons of hooks**. You can hook yourself to every step of the store processing process: `afterValidate()`,   `afterCheckPermissions()`, `afterDbOperation()`, `afterEverything()`
 * **Authentication hooks**. Only implement things once, and keep authentication tight.
 * **Mixin-based**. You can add functionalities easily.
 * **Inheriting stores**. You can easily derive a store from another one.
 * **Simple error management**. Errors can be chained up, or they can make the store return them to the client.
 
-JsonRestStores even comes with its own database layer mixin, SimpleDbLayerMixin, which will implement all of the important methods that will read, write and delete elements from a database. The mixin uses [simpledblayer](https://github.com/mercmobily/simpledblayer) to access the database. For now, only MongoDb is supported but more will come.
-
-And don't worry, after an overly long introduction, I do have a [quickstart](https://github.com/mercmobily/JsonRestStores#quick-start)!
+JsonRestStores even comes with its own database layer mixin, SimpleDbLayerMixin, which will implement all of the important methods that will read, write and delete elements from a database. The mixin uses [simpledblayer](https://github.com/mercmobily/simpledblayer) to access the database. For now, only MongoDb is supported but more will surely come.
 
 # Introduction to (JSON) REST stores
 
@@ -117,17 +58,15 @@ With JsonRestStores, you can create JSON REST stores without ever worrying about
 
 If you are new to REST and web stores, you will probably benefit by reading a couple of important articles. Understanding the concepts behind REST stores will make your life easier.
 
-I suggest you read [John Calcote's article about REST, PUT, POST, etc.](http://jcalcote.wordpress.com/2008/10/16/put-or-post-the-rest-of-the-story/). (It's a fantastic read, and I realised that it was written by John, who is a long term colleague and fellow writer at Free Software Magazine, only much later!).
+I suggest you read [John Calcote's article about REST, PUT, POST, etc.](http://jcalcote.wordpress.com/2008/10/16/put-or-post-the-rest-of-the-story/). It's a fantastic read, and I realised that it was written by John, who is a long term colleague and fellow writer at Free Software Magazine, only much later!
 
 You should also read my small summary of [what a REST store actually provides](https://github.com/mercmobily/JsonRestStores/blob/master/jsonrest.md).
 
 At this stage, the stores are 100% compatible with [Dojo's JsonRest](http://dojotoolkit.org/reference-guide/1.8/dojo/store/JsonRest.html) as well as [Sitepen's dstore](http://dstorejs.io/).
 
-# Quickstart
+# Dependencies overview
 
 Jsonreststores is a module that creates managed routes for you, and integrates very easily with existing ExpressJS applications.
-
-## Modules used by JsonRestStores
 
 Here is a list of modules used by JsonRestStores. You should be at least slightly familiar with them.
 
@@ -137,93 +76,98 @@ Here is a list of modules used by JsonRestStores. You should be at least slightl
 
 * [Allhttperrors](https://npmjs.org/package/allhttperrors). A simple module that creats `Error` objects for all of the possible HTTP statuses.
 
+* [SimpleDbLayer](https://github.com/mercmobily/simpledblayer). The database layer used to access the database
+
 Note that all of these modules are fully unit-tested, and are written and maintained by me.
 
-# Store examples
+# Your first Json REST store
 
-Here are three very common use-cases for JsonRest stores, fully explained: 
+Creating a store with JsonRestStores is very simple. Here is how you make a fully compliant store, ready to be added to your Express application:
 
-## A basic store
+````Javascript
+    var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
+    var Schema = require('simpleschema');  // The main schema module
+    var SimpleDbLayer = require('simpledblayer');
+    var MongoMixin = require('simpledblayer-mongo')
+    var declare = require('simpledeclare');
 
-Here is how you make a fully compliant store:
+    // The DbLayer constructor will be a mixin of SimpleDbLayer (base) and
+    // MongoMixin (providing mongo-specific driver to SimpleDbLayer)
+    var DbLayer = declare( SimpleDbLayer, MongoMixin, { db: db } );
 
-      var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
-      var SimpleSchema = require('simpleschema');  // The main schema module
+    // Basic definition of the manages store
+    var Managers = declare( JsonRestStores, JsonRestStores.SimpleDbLayerMixin, {
 
-      var Managers = declare( JRS, {
+      // Constructor class for database-access objects, which in this case
+      // will access MongoDNB collections
+      DbLayer: DbLayer,
 
-        schema: new Schema({
-          name   : { type: 'string', trim: 60 },
-          surname: { type: 'string', trim: 60 },
-        }),
+      schema: new Schema({
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', searchable: true, trim: 60 },
+      }),
 
-        storeName: 'managers',
-        publicURL: '/managers/:id',
+      storeName: 'managers',
+      publicURL: '/managers/:id',
 
-        handlePut: true,
-        handlePost: true,
-        handleGet: true,
-        handleGetQuery: true,
-        handleDelete: true,
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
 
-        constructor: function(){
-          this.data = [];
-        },
+    var managers = new Managers(); 
+    managers.setAllRoutes( app );
+````
 
-        implementFetchOne: function( request, cb ){
-          var d = this.data[ request.params[ self.idProperty ] ];
-          return d ? d : null;
-        }, 
+Note that since you will be mixing in `JsonRestStores` and `JsonRestStores.SimpleDbLayerMixin` for every single store you create, you might decide to create the mixin once for all making the code less verbose:
 
-        implementInsert: function( request, generatedId, cb ){
-        },
+````Javascript
+    var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
+    var Schema = require('simpleschema');  // The main schema module
+    var SimpleDbLayer = require('simpledblayer');
+    var MongoMixin = require('simpledblayer-mongo')
+    var declare = require('simpledeclare');
 
-        implementUpdate: function( request, cb ){
-        },
+    // The DbLayer constructor will be a mixin of SimpleDbLayer (base) and
+    // MongoMixin (providing mongo-specific driver to SimpleDbLayer)
+    var DbLayer = declare( SimpleDbLayer, MongoMixin, { db: db } );
 
-        implementDelete: function( request, cb ){
-        },
+    // Common mixin of JsonRestStores, JsonRestStores.SimpleDbLayerMixin and the DbLayer parameter
+    // already set
+    var Store = declare( JsonRestStores, JsonRestStores.SimpleDbLayerMixin, { DbLayer: DbLayer } );
 
-        implementQuery: function( request, cb ){
-        },
+    // Basic definition of the manages store
+    var Managers = declare( Store, {
 
-        implementReposition: function( doc, where, beforeId, cb ){
+      schema: new Schema({
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', searchable: true, trim: 60 },
+      }),
 
-          switch( where ){
+      storeName: 'managers',
+      publicURL: '/managers/:id',
 
-            case 'before':
-              // Move element somewhere
-              function moveElement(array, from, to) {
-                if( to !== from ) array.splice( to, 0, array.splice(from, 1)[0]);
-              }
-            break;
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
 
-            case 'start':
-              // Move element at the beginning of the array
-            break;
+    var managers = new Managers(); 
+    managers.setAllRoutes( app );
+````
 
-            case 'end':
-              // Move element at the end of the array
-            break;
-          }
+That's it: this is enough to add, to your Express application, a a full store which will handly properly all of the HTTP calls.
 
-          cb( null );
-        }
-
-      });
-
-      var managers = new Managers(); 
-      managers.setAllRoutes( app );
-
-
-That's it: this is enough to make a full store which will handly properly all of the HTTP calls. Try it if you don't believe me!
-
-* `Managers` is a new class that inherits from `JRS`. Creating the derived class is the first step towards creating a store
-* `schema` is an object of type Schema that will define what's acceptable in a REST call
+* `Managers` is a new constructor function that inherits from `JsonRestStores` (the main constructor for Json REST stores) mixed in with `JsonRestStores.SimpleDbLayerMixin` (which gives `JsonRestStores` the ability to manipulate data on a database).
+* `DbLayer` is a SimpleDbLayer constructor mixed in with `MongoMixin`, the MongoDB-specific layer for SimpleDbLayer. So, `DbLayer` will be used by `Managers` to manipulate MongoDB collections. 
+* `schema` is an object of type Schema that will define what's acceptable in a REST call.
 * `publicURL` is the URL the store is reachable at. ***The last one ID is the most important one***: the last ID in `publicURL` (in this case it's also the only one: `id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
-* `storeName` (_mandatory_) needs to be a unique name for your store. It is mandatory to have one, as (when used with a database) it will define the name of the DB table/collection
-* `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error
-* `implementXXX` methods are the ones that actually implement the data access functionality
+* `storeName` (_mandatory_) needs to be a unique name for your store. It is mandatory to have one. 
+* `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error.
 * `managers.setAllRoutes( app )` creates the right Express routes to actually activate your stores. Specifically:
 
     // Make entries in "app", so that the application
@@ -234,14 +178,149 @@ That's it: this is enough to make a full store which will handly properly all of
     app.post(     url,          this.getRequestHandler( 'Post') );
     app.delete(   url + idName, this.getRequestHandler( 'Delete') );
 
-
 So, the following routes will be defined:
 
     GET /managers/:id (returns a specific workspace)
-    GET /managers/ (returns a collection of elements)
+    GET /managers/ (returns a collection of elements; you can filter by surname, which is searchable)
     PUT /managers/:id (writes over an existing workspace object)
     POST /managers/ (creates a new workspace object)
     DELETE /managers/:id (deletes a workspace)
+
+## The store live in action in your express application
+
+JsonRestStores is very unobtrusive of your Express application. In order to make everything work, you can just:
+
+ * Generate a new ExpressJS application
+ * Connect to the database
+ * Define the stores using the code above.
+
+This is how the stock express code would change to implement the store above (please note that this is mostly code autogenerated when you generate an Express application):
+
+````Javascript
+    var express = require('express');
+    var path = require('path');
+    var favicon = require('serve-favicon');
+    var logger = require('morgan');
+    var cookieParser = require('cookie-parser');
+    var bodyParser = require('body-parser');
+
+    var routes = require('./routes/index');
+    var users = require('./routes/users');
+
+    var app = express();
+
+    // CHANGED: ADDED AN INCLUDE `dbConnect`
+    var dbConnect = require('./dbConnect');
+
+    // view engine setup
+    app.set('views', path.join(__dirname, 'views'));
+    app.set('view engine', 'jade');
+
+    // uncomment after placing your favicon in /public
+    //app.use(favicon(__dirname + '/public/favicon.ico'));
+    app.use(logger('dev'));
+    app.use(bodyParser.json());
+    app.use(bodyParser.urlencoded({ extended: false }));
+    app.use(cookieParser());
+    app.use(express.static(path.join(__dirname, 'public')));
+
+    app.use('/', routes);
+    app.use('/users', users);
+
+    // CHANGED: Added call to dbConnect, and waiting for the db
+    dbConnect( function( db ){
+
+      // ******************************************************
+      // ********** CUSTOM CODE HERE **************************
+      // ******************************************************
+
+      var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
+      var Schema = require('simpleschema');  // The main schema module
+      var SimpleDbLayer = require('simpledblayer');
+      var MongoMixin = require('simpledblayer-mongo')
+      var declare = require('simpledeclare');
+
+      // The DbLayer constructor will be a mixin of SimpleDbLayer (base) and
+      // MongoMixin (providing mongo-specific driver to SimpleDbLayer)
+      var DbLayer = declare( SimpleDbLayer, MongoMixin, { db: db } );
+
+      // Common mixin of JsonRestStores, JsonRestStores.SimpleDbLayerMixin and the DbLayer parameter
+      // already set
+
+      var Store = declare( JsonRestStores, JsonRestStores.SimpleDbLayerMixin, { DbLayer: DbLayer } );
+
+      var Managers = declare( Store, {
+
+        schema: new Schema({
+          name   : { type: 'string', trim: 60 },
+          surname: { type: 'string', searchable: true, trim: 60 },
+        }),
+
+        storeName: 'managers',
+        publicURL: '/managers/:id',
+
+        handlePut: true,
+        handlePost: true,
+        handleGet: true,
+        handleGetQuery: true,
+        handleDelete: true,
+      });
+      var managers = new Managers(); 
+      managers.setAllRoutes( app );
+
+      // ******************************************************
+      // ********** END OF CUSTOM CODE      *******************
+      // ******************************************************
+  
+      // catch 404 and forward to error handler
+      app.use(function(req, res, next) {
+          var err = new Error('Not Found');
+          err.status = 404;
+          next(err);
+      });
+
+      // error handlers
+
+      // development error handler
+      // will print stacktrace
+      if (app.get('env') === 'development') {
+          app.use(function(err, req, res, next) {
+              res.status(err.status || 500);
+              res.render('error', {
+                  message: err.message,
+                  error: err
+              });
+          });
+      }
+
+      // production error handler
+      // no stacktraces leaked to user
+      app.use(function(err, req, res, next) {
+          res.status(err.status || 500);
+          res.render('error', {
+              message: err.message,
+              error: {}
+          });
+      });
+
+
+    });
+    module.exports = app;
+````
+
+The `dbConnect.js` file is simply something that will connect to the database and all the callback with the `db` instance:
+
+    var mongo = require('mongodb');
+    exports = module.exports = function( done ){
+      // Connect to the database
+      mongo.MongoClient.connect('mongodb://localhost/storeTesting', {}, function( err, db ){
+        if( err ){
+          console.error( "Error connecting to the database: ", err );
+          process.exit( 1 );
+        }   
+        return done( db );
+      }); 
+    }
 
 This store is _actually_ fully live and working! It will manipulate your database and will respond to any HTTP requests appropriately.
 
@@ -342,11 +421,50 @@ A bit of testing with `curl`:
 
 It all works!
 
-## A note on `onlineAll` and `paramIds`
+## Clarification on mixins
+
+Mixins are a powerful way to specialise a generic constructor.
+
+For example, the constructor `JsonRestStores` use on its own is hardly useful: it creates Json REST stores with the following data-manipulation methods left unimplemented (they will throw if they are run):
+
+ * implementFetchOne: function( request, cb ){
+ * implementInsert: function( request, forceId, cb ){
+ * implementUpdate: function( request, deleteUnsetFields, cb ){
+ * implementDelete: function( request, cb ){
+ * implementQuery: function( request, next ){
+ * implementReposition: function( doc, where, beforeId, cb ){
+  
+Implementing these methods is important to tell `JsonRestStores` how to actualy manipulate the store's data. This is exactly what `JsonRestStores.SimpleDbLayerMixin` does: it's a mixin that enriches the basic `JsonRestStore` objects with all of the methods listed above.
+
+So when you write:
+
+    var Managers = declare( JsonRestStores, `JsonRestStores.SimpleDbLayerMixin`, {
+
+You are creating a constructor function, `Managers`, mixing in the prototypes of `JsonRestStores` (the generic, unspecialised constructor for Json REST stores) and `JsonRestStores.SimpleDbLayerMixin` (which provides working methods actually implementing `implementFetchOne()`, `implementInsert(), etc.).
+
+`SimpleDbLayerMixin` will use the `DbLayer` attribute of the store as the constructor used to create "table" objects, and will manipulate data with them.
+
+`DbLayer` itself is created using the same pattern as `Managers`.
+
+SimpleDbLayer on its own is useless: it creates a DB layer with the following methods left unimplemented:
+
+* select( filters, options, cb )
+* update( conditions, updateObject, options, cb )
+* insert( record, options, cb )
+* delete( conditions, options, cb )
+* reposition: function( record, where, beforeId, cb )
+
+The implementation will obviously depend on the database layer. So, when you type:
+
+    var DbLayer = declare( SimpleDbLayer, MongoMixin );
+
+You are creating a constructor function, `DbLayer`, that is the mixin of `SimpleDbLayer` (where `select()` `update()` etc. are not implemented) and `MongoMixin` (which implements `select()`, `update()` etc. using MongoDB as the database layer).
+
+## A note on `publicURL` and `paramIds`
 
 When you define a store like this:
 
-    var Managers = declare( JRS, {
+    var Managers = declare( Store, {
 
       schema: new Schema({
         name   : { type: 'string', trim: 60 },
@@ -369,12 +487,12 @@ When you define a store like this:
 
 The `publicURL` is used to:
 
-* Add `id: { type: id }` to the schema automatically. This is done so that you don't have to do the grunt work of defining id fields both in `publicURL` and in the schema
+* Add `id: { type: id }` to the schema automatically. This is done so that you don't have to do the grunt work of defining `id` in the schema if they are already in `publicURL`.
 * Create the `paramIds` array for the store. In this case, `paramIds` will be `[ 'id' ]`.
 
 So, you could reach the same goal without `publicURL`:
 
-    var Managers = declare( JRS, {
+    var Managers = declare( Store, {
 
       schema: new Schema({
         id     : { type: 'id' },
@@ -382,7 +500,7 @@ So, you could reach the same goal without `publicURL`:
         surname: { type: 'string', trim: 60 },
       }),
 
-      storeName: 'Managers',
+      storeName: 'managers',
       paramIds: [ 'id' ],
 
       handlePut: true,
@@ -400,116 +518,104 @@ So, you could reach the same goal without `publicURL`:
 Note that:
  * The `id` parameter had to be defined in the schema
  * The `paramIds` array had to be defined by hand
- * `managers.setAllRoutes( app )` couldn't be used as the public URL is not there
- * You cannot define, in the prototype, both publicURL and paramIds
+ * `managers.setAllRoutes( app )` can't be used as the public URL is not there
 
-This pattern is much more verbose, and it doesn't allow the store to be placed online.
+This pattern is much more verbose, and it doesn't allow the store to be placed online with setAllRoutes.
+
+In any case, the property `idProperty` is set as last element of `paramIds`; in this example, it is `id`.
 
 In the documentation, I will often refers to `paramIds`, which is an array of element in the schema which match the ones in the route. However, in all examples I will use the "shortened" version without repeating IDs unnecessarily.
 
-## A nested store
+# A nested store
 
 Stores are never "flat" as such: you have workspaces, and then you have users who "belong" to a workspace. Here is how you create a "nested" store:
 
-      var Managers= declare( JRS, {
+    var Managers = declare( Store, {
 
-        schema: new Schema({
-          name   : { type: 'string', trim: 60 },
-          surname: { type: 'string', trim: 60 },
-        }),
+      schema: new Schema({
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', searchable: true, trim: 60 },
+      }),
 
-        storeName: 'Managers',
-        publicURL: '/managers/:id',
+      storeName: 'managers',
+      publicURL: '/managers/:id',
 
-        handlePut: true,
-        handlePost: true,
-        handleGet: true,
-        handleGetQuery: true,
-        handleDelete: true,
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+    var managers = new Managers(); 
+    managers.setAllRoutes( app );
 
-        hardLimitOnQueries: 50,
-      });
-      var managers = new Managers();
-      managers.setAllRoutes( app );
+    var ManagersCars = declare( Store, {
 
+      schema: new Schema({
+        make     : { type: 'string', trim: 60, required: true },
+        model    : { type: 'string', trim: 60, required: true },
+      }),
 
-      var ManagersCars = declare( JRS, {
+      storeName: 'managersCars',
+      publicURL: '/managers/:managerId/cars/:id',
 
-        schema: new Schema({
-          make     : { type: 'string', trim: 60, required: true },
-          model    : { type: 'string', trim: 60, required: true },
-        }),
-
-        storeName: 'managersCars',
-        publicURL: '/managers/:managerId/cars/:id',
-
-        handlePut: true,
-        handlePost: true,
-        handleGet: true,
-        handleGetQuery: true,
-        handleDelete: true,
-
-        hardLimitOnQueries: 50,
-      });
-
-      var managersCars = new ManagersCars();
-      managersCars.setAllRoutes( app );
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+    var managersCars = new ManagersCars();
+    managersCars.setAllRoutes( app );
  
-
 You have two stores: one is the simple `managers` store with a list of names and surname; the other one is the `managersCars` store: note how the URL for `managersCars` includes `managerId`.
 
 The managersCars store will will respond to `GET /managers/2222/cars/3333` (to fetch car 3333 of manager 2222), `GET /workspace/2222/users` (to get all cars of manager 2222), and so on.
 
-Remember that in `managersCars`:
+Remember that in `managersCars` _remote queries will **always** honour the filter on `managerId`, both in queries and single-record operations_.
 
-* Remote queries will _always_ honour the filter on `managerId`, both in queries and single-record operations.
-
-### On naming conventions
+# Variable naming conventions
 
 It's important to be consistent in naming conventions while creating stores. In this case, code is cleared than a thousand bullet points:
 
-#### Naming convertions for simple stores
+## Naming convertions for simple stores
 
-    var Managers = declare( JRS, { 
+    var Managers = declare( Store, { 
 
       schema: new Schema({
         // ...
       });
 
-      // ...
       storeName: `managers`
       // ...
     }
     var managers = new Managers();
     managers.setAllRoutes( app );
 
-
-
-    var People = declare( JRS, { 
+    var People = declare( Store, { 
 
       schema: new Schema({
         // ...
       });
 
-      // ...
       storeName: `people`
       // ...
     }
     var people = new People();
     people.setAllRoutes( app );
 
-* Store names anywhere are plural (they are collections representing multiple entries)
+* Store names anywhere lowercase and are plural (they are collections representing multiple entries)
 * Irregulars (Person => People) are a fact of life
-* Store constructors (derived from JRS) are in capital letters (as constructors, they should be)
+* Store constructors (derived from Store) are in capital letters (as constructors, they should be)
 * Store variables are in small letters (they are normal variables)
 * storeName attributes are in small letters (to follow the lead of variables)
 * URL are in small letters (following the stores' names, plus `/Capital/Urls/Are/Silly`)
 
-# YOU ARE HERE (REDOCUMENTING)
+# DOCUMENTATION UPDATED UP TO THIS POINT
 
-#### Naming conventions for nested stores    
+## Naming conventions for nested stores    
 
-    var Cars = declare( JRS, { 
+    var Cars = declare( Store, { 
 
       schema: new Schema({
         // ...
@@ -519,8 +625,8 @@ It's important to be consistent in naming conventions while creating stores. In 
       storeName: `managers`
       // ...
     }
-    Cars.onlineAll( app );
-
+    var cars = new Cars();
+    cars.setAllRoutes( app );
 
     var ManagersCars = declare( Store, { 
 
@@ -529,31 +635,22 @@ It's important to be consistent in naming conventions while creating stores. In 
       });
 
       // ...
-      storeName: `ManagerCars`
+      storeName: `ManagersCars`
       // ...
     }
-    ManagersCars.onlineAll( app );
-
-    var PeopleCars = declare( Store, { 
-
-      schema: new Schema({
-        // ...
-      });
- 
-      // ...
-      storeName: `PeopleCars`
-      // ...
-    }
-    PeopleCars.onlineAll( app );
+    var managerCars = new ManagersCars();
+    managerCars.setAllRoutes( app );
 
 * Nested store's name a combination of IDs
 * storeName attribute still the same as the store name
 * URL in small letters, starting with URL of parent store
 * parent store's ID in schema first, singular
 
-## A store derived/inherited from another store
+## Inheriting a store from another one
 
-Sometimes, you need to create a basic store that interfaces with a specific database table/collection, and then create different ways to "view" that table as a store.
+Sometimes, you need to create a basic store that interfaces with a specific database table, and then create other stores that query the same database table.
+
+For example:
 
     var PeopleCars = declare( Store, { 
 
@@ -562,7 +659,7 @@ Sometimes, you need to create a basic store that interfaces with a specific data
       });
  
       // ...
-      storeName: `PeopleCars`
+      storeName: `peopleCars`
       publicURL: '/people/:personId/cars/:id',
 
       handleGet: true,
@@ -578,7 +675,6 @@ Sometimes, you need to create a basic store that interfaces with a specific data
       publicURL: '/people/:personId/carsList/:id',
     }
     PeopleCarsList.onlineAll( app );
-
 
 The store PeopleCarsList is nearly exactly the same as PeopleCars: the only difference is that it doesn't allow anything except GetQuery (that is, `GET /people/1234/carslist/` ).
 
@@ -694,7 +790,18 @@ This function will run SimpleDbLayer's generateSchemaIndexes(), as well as addin
 * Will create a new index for each searchable field, in the form `workspaceId + searchableField` since most searches will be run by users within their `workspaceId` domain
 * Will create a compound index with `paramIds + field` for each `sortable` field
 
+
 ## Queries
+
+searchSchema: new Schema({
+          name: { type: 'string', trim: 60 }
+        }),
+
+        // This defines what query will be generated when searching by `name`
+        queryConditions: { 
+          name: 'eq', 
+          args: [ 'name', '#name#']
+        }
 
 ### `deleteAfterGetQuery`
 
