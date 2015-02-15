@@ -66,10 +66,9 @@ exports = module.exports = declare( Object,  {
       var layerOptions = {
         schema: self.schema,
         nested: self.nested,
-        hardLimitOnQueries: self.hardLimitOnQueries,
-        strictSchemaOnFetch: self.strictSchemaOnFetch,
-
         idProperty: self.idProperty,
+        hardLimitOnQueries: self.hardLimitOnQueries,
+        strictSchemaOnFetch: self.strictSchemaOnFetch,        
 
         schemaError: self.UnprocessableEntityError,
         //children: true,
@@ -151,15 +150,6 @@ exports = module.exports = declare( Object,  {
   // *** FUNCTIONS THAT ACTUALLY ACCESS DATA THROUGH THE DB DRIVER
   // ********************************************************************* 
 
-  /*
-      * FIRST:
-      *   REMOTE: options.conditions, options.sort, options.ranges are created by _initOptionsFromReq
-      *   LOCAL: user sets options.conditions, options.sort, options.ranges, options.skipHardLimitOnQueries
-
-      * AND THEN:
-      *   self._queryMakeDbLayerFilter( conditions, sort, ranges ) is called, and returns the full db selector for those options
-  */
-
   _enrichConditionsWithParams: function( conditions, params ){
     
     var self = this;
@@ -231,27 +221,11 @@ exports = module.exports = declare( Object,  {
     }
 
     // Make the database call 
-    self.dbLayer.select( { conditions: conditions }, { children: true }, function( err, docs ){
-      if( err ){
-        cb( err );
-      } else {
+    self.dbLayer.select( { conditions: conditions, ranges: { limit: 1 } }, { children: true }, function( err, docs ){
+      if( err ) return cb( err );
 
-        if( docs.length === 0 ){
-          cb( null, null );
-        } else if( docs.length !== 1 ){
-
-          cb( new self.ServiceUnavailableError({
-            message: "implementFetchOne fetched more than 1 record",
-            data: {
-              length: docs.length,
-              filter: { conditions: conditions },
-              store: self.storeName
-            }
-          }));
-        } else {
-          cb( null, docs[ 0 ] );
-        }
-      }
+      if( docs.length === 0 ) return cb( null, null );
+      cb( null, docs[ 0 ] );
     });
 
   }, 
@@ -260,10 +234,9 @@ exports = module.exports = declare( Object,  {
    
     var self = this;
 
-    var record = {};
+    var record = self._co( request.body );
 
-    // Make up the `record` variable, based on the passed `body`
-    for( var k in request.body ) record[ k ] = request.body[ k ];
+    // _children are not inserted
     delete record._children;
 
     // If generatedId was passed, force the record to
@@ -276,7 +249,7 @@ exports = module.exports = declare( Object,  {
   implementUpdate: function( request, deleteUnsetFields, cb ){
 
     var self = this;
-    var updateObject = {};
+    var updateObject;
 
     // Make up the condition, based on the store's IDs
     var conditions = {};
@@ -291,7 +264,7 @@ exports = module.exports = declare( Object,  {
     }
 
     // Make up the `updateObject` variable, based on the passed `body`
-    for( var i in request.body ) updateObject[ i ] = request.body[ i ];
+    updateObject = self._co( request.body );
     delete updateObject._children;
 
     self.dbLayer.update( conditions, updateObject, { deleteUnsetFields: deleteUnsetFields, multi: false, skipValidation: true }, function( err, howMany, record ){
