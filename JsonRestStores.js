@@ -80,7 +80,7 @@ var Store = declare( Object,  {
   }, 
 
   // NB: request.body (data), self.idProperty (assign to generatedId)
-  implementInsert: function( request, generatedId, cb ){
+  implementInsert: function( request, forceId, cb ){
     throw("implementInsert not implemented, store is not functional");
   },
 
@@ -117,7 +117,7 @@ var Store = declare( Object,  {
   // Permission stock functions
   checkPermissions: function( request, method, p, cb ){ cb( null, true ); },// p takes: { doc, fullDoc} only for putExisting, get, delete
   
-  // post* functions 
+  // after* functions 
   afterValidate: function( request, method, p, cb ){ cb( null ); }, // p takes: {}
   afterCheckPermissions: function( request, method, p, cb ){ cb( null ); }, // p takes same as  checkPermissions
   afterDbOperation: function( request, method, p, cb ){ cb( null ); },// p takes: { fullDoc || queryDoc }
@@ -171,7 +171,7 @@ var Store = declare( Object,  {
 
     // If paramId is not specified, takes it from publicURL
     if( self.paramIds.length === 0 && typeof( self.publicURL ) === 'string' ){
-      self.paramIds =  ( self.publicURL + '/').match(/:.*?\/+/g).map( function(i){return i.substr(1, i.length - 2 )  } );
+      self.paramIds =  ( self.publicURL + '/').match(/:.*?\/+/g).map( function( i ){ return i.substr(1, i.length - 2 )  } );
     }
    
     // If idProperty is not set, derive it from self._lastParamId()
@@ -210,7 +210,6 @@ var Store = declare( Object,  {
 
     // If queryConditions is not defined, create one
     // based on the onlineSearchSchema (each field is searchable)
-    // MERC
     if( self.queryConditions == null ){
       self.queryConditions = { name: 'and', args: [ ] };
       for( var k in self.onlineSearchSchema.structure )
@@ -667,8 +666,6 @@ var Store = declare( Object,  {
 
                   self.implementInsert( request, forceId, function( err, fullDoc ){
                     if( err ) return self._sendError( request, next, err );
-
-
 
                     self._repositionBasedOnHeaders( fullDoc, request.options.putBefore, request.options.putDefaultPosition, false, function( err ){
                       if( err ) return self._sendError( request, next, err );
@@ -1290,7 +1287,7 @@ var Store = declare( Object,  {
       if( typeof( idInBody ) !== 'undefined'){
         request.params[ this.idProperty ] = body[ this.idProperty ];
       } else {
-        throw( new Error("When calling Store. Put with an ID of null, id MUST be in body") );
+        throw( new Error("When calling Store.apiPut with an ID of null, id MUST be in body") );
       }
     }
 
@@ -1454,7 +1451,7 @@ Store.OneFieldStoreMixin = declare( Object,  {
                 });
               });
             });
-          });
+          });_makePu
         });
       });
     });
