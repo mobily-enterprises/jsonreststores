@@ -8,11 +8,11 @@ Rundown of features:
 
 * **DRY approach**. Everything works as you'd expect it to, even though you are free to tweak things.
 * **Database-agnostic**. You can either use a generic database connector, or implement the data-manipulation methods yourself.
-* **Schema based**. Anything coming from the client will be validated and cast.
+* **Schema based**. Anything coming from the client will be validated and cast to the right type.
 * **API-ready**. Every store function can be called via API, which bypass permissions constraints
 * **Tons of hooks**. You can hook yourself to every step of the store processing process: `afterValidate()`,   `afterCheckPermissions()`, `afterDbOperation()`, `afterEverything()`
 * **Authentication hooks**. Only implement things once, and keep authentication tight.
-* **Mixin-based**. You can add functionalities easily.
+* **Mixin-based**. You can add functionality easily.
 * **Inheriting stores**. You can easily derive a store from another one.
 * **Simple error management**. Errors can be chained up, or they can make the store return them to the client.
 
@@ -24,7 +24,7 @@ Here is an introduction on REST, JSON REST, and this module. If you are a vetera
 
 ## Implementing REST stores
 
-Imagine that you have a web application with bookings, and users connected to each booking, and that you want to make this information available via a JSON Rest API. You would have to define the following route in your application:
+Imagine that you have a web application with bookings, and users connected to each booking, and that you want to make this information available via a JSON Rest API. You would have to define the following routes in your application:
 
 * `GET /bookings/`
 * `GET /bookings/:bookingId`
@@ -42,10 +42,10 @@ And then to access users for that booking:
 
 It sounds simple enough (although it's only two tables and it already looks rather boring). It gets tricky when you consider that:
 
-* You need to make sure that permissions are always carefully checked. For example, only users that are part of booking `1234` can `GET /bookings/:bookingId/users`
+* You need to make sure that permissions are always carefully checked. For example, only users that are part of booking `1234` can `GET /bookings/1234/users`
 * When implementing `GET /bookings/`, you need to parse the URL in order to enable data filtering (for example, `GET /bookings?dateFrom=1976-01-10&name=Tony` will need to filter, on the database, all bookings made after the 10th of January 1976 by Tony).
 * When implementing `GET /bookings/`, you need to return the right `Content-Range` HTTP headers in your results so that the clients know what range they are getting.
-* When implementing `GET /bookings/`, you also need to make sure you take into account any `Range` header set by the client, who might only want to receive a subset of the data
+* When implementing `GET /bookings/`, you also need to make sure you take into account any `Range` header set by the client, which might only want to receive a subset of the data
 * With `POST` and `PUT`, you need to make sure that data is validated against some kind of schema, and return the appropriate errors if it's not.
 * With `PUT`, you need to consider the HTTP headers `If-match` and `If-none-match` to see if you can//should//must overwrite existing records 
 * All unimplemented methods should return a `501 Unimplemented Method` server response
@@ -58,7 +58,7 @@ With JsonRestStores, you can create JSON REST stores without ever worrying about
 
 If you are new to REST and web stores, you will probably benefit by reading a couple of important articles. Understanding the concepts behind REST stores will make your life easier.
 
-I suggest you read [John Calcote's article about REST, PUT, POST, etc.](http://jcalcote.wordpress.com/2008/10/16/put-or-post-the-rest-of-the-story/). It's a fantastic read, and I realised that it was written by John, who is a long term colleague and fellow writer at Free Software Magazine, only much later!
+I suggest you read [John Calcote's article about REST, PUT, POST, etc.](http://jcalcote.wordpress.com/2008/10/16/put-or-post-the-rest-of-the-story/). It's a fantastic read, and I realised that it was written by John, who is a long term colleague and fellow writer at Free Software Magazine, only after posting this link here!
 
 You should also read my small summary of [what a REST store actually provides](https://github.com/mercmobily/JsonRestStores/blob/master/jsonrest.md).
 
@@ -162,7 +162,7 @@ Note that since you will be mixing in `JsonRestStores` and `JsonRestStores.Simpl
 
 That's it: this is enough to add, to your Express application, a a full store which will handly properly all of the HTTP calls.
 
-* `Managers` is a new constructor function that inherits from `JsonRestStores` (the main constructor for Json REST stores) mixed in with `JsonRestStores.SimpleDbLayerMixin` (which gives `JsonRestStores` the ability to manipulate data on a database).
+* `Managers` is a new constructor function that inherits from `JsonRestStores` (the main constructor for JSON REST stores) mixed in with `JsonRestStores.SimpleDbLayerMixin` (which gives `JsonRestStores` the ability to manipulate data on a database).
 * `DbLayer` is a SimpleDbLayer constructor mixed in with `MongoMixin`, the MongoDB-specific layer for SimpleDbLayer. So, `DbLayer` will be used by `Managers` to manipulate MongoDB collections. 
 * `schema` is an object of type Schema that will define what's acceptable in a REST call.
 * `publicURL` is the URL the store is reachable at. ***The last one ID is the most important one***: the last ID in `publicURL` (in this case it's also the only one: `id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
@@ -180,11 +180,11 @@ That's it: this is enough to add, to your Express application, a a full store wh
 
 So, the following routes will be defined:
 
-    GET /managers/:id (returns a specific workspace)
+    GET /managers/:id (returns a specific manager)
     GET /managers/ (returns a collection of elements; you can filter by surname, which is searchable)
-    PUT /managers/:id (writes over an existing workspace object)
-    POST /managers/ (creates a new workspace object)
-    DELETE /managers/:id (deletes a workspace)
+    PUT /managers/:id (writes over an existing manager object)
+    POST /managers/ (creates a new manager object)
+    DELETE /managers/:id (deletes a manager)
 
 ## The store live in action in your express application
 
@@ -425,7 +425,7 @@ It all works!
 
 Mixins are a powerful way to specialise a generic constructor.
 
-For example, the constructor `JsonRestStores` use on its own is hardly useful: it creates Json REST stores with the following data-manipulation methods left unimplemented (they will throw if they are run):
+For example, the constructor `JsonRestStores` use on its own is hardly useful: it creates Json REST stores with the following data-manipulation methods left unimplemented (they will throw an error if they are run):
 
  * implementFetchOne: function( request, cb ){
  * implementInsert: function( request, forceId, cb ){
@@ -434,7 +434,7 @@ For example, the constructor `JsonRestStores` use on its own is hardly useful: i
  * implementQuery: function( request, next ){
  * implementReposition: function( doc, where, beforeId, cb ){
   
-Implementing these methods is important to tell `JsonRestStores` how to actualy manipulate the store's data. This is exactly what `JsonRestStores.SimpleDbLayerMixin` does: it's a mixin that enriches the basic `JsonRestStore` objects with all of the methods listed above.
+Implementing these methods is important to tell `JsonRestStores` how to actualy manipulate the store's data. This is exactly what `JsonRestStores.SimpleDbLayerMixin` does: it's a mixin that enriches the basic `JsonRestStore` objects with all of the methods listed above, using a database as data storage.
 
 So when you write:
 
@@ -459,6 +459,8 @@ The implementation will obviously depend on the database layer. So, when you typ
     var DbLayer = declare( SimpleDbLayer, MongoMixin );
 
 You are creating a constructor function, `DbLayer`, that is the mixin of `SimpleDbLayer` (where `select()` `update()` etc. are not implemented) and `MongoMixin` (which implements `select()`, `update()` etc. using MongoDB as the database layer).
+
+This is the beauty of mixins: they implement the missing methods in a generic, unspecialised constructor.
 
 ## A note on `publicURL` and `paramIds`
 
@@ -572,11 +574,11 @@ You have two stores: one is the simple `managers` store with a list of names and
 
 The managersCars store will will respond to `GET /managers/2222/cars/3333` (to fetch car 3333 of manager 2222), `GET /workspace/2222/users` (to get all cars of manager 2222), and so on.
 
-Remember that in `managersCars` _remote queries will **always** honour the filter on `managerId`, both in queries and single-record operations_.
+Remember that in `managersCars` _remote queries will **always** honour the filter on `managerId`, both in queries (`GET` without an `id` as last parameter) and single-record operations_ (`GET` with a specific `id`).
 
-# Variable naming conventions
+# Naming conventions for stores
 
-It's important to be consistent in naming conventions while creating stores. In this case, code is cleared than a thousand bullet points:
+It's important to be consistent in naming conventions while creating stores. In this case, code is clearer than a thousand bullet points:
 
 ## Naming convertions for simple stores
 
@@ -585,6 +587,8 @@ It's important to be consistent in naming conventions while creating stores. In 
       schema: new Schema({
         // ...
       });
+
+      publicUrl: '/managers/:id',
 
       storeName: `managers`
       // ...
@@ -598,6 +602,8 @@ It's important to be consistent in naming conventions while creating stores. In 
         // ...
       });
 
+      publicUrl: '/people/:id',
+
       storeName: `people`
       // ...
     }
@@ -605,28 +611,27 @@ It's important to be consistent in naming conventions while creating stores. In 
     people.setAllRoutes( app );
 
 * Store names anywhere lowercase and are plural (they are collections representing multiple entries)
-* Irregulars (Person => People) are a fact of life
-* Store constructors (derived from Store) are in capital letters (as constructors, they should be)
-* Store variables are in small letters (they are normal variables)
-* storeName attributes are in small letters (to follow the lead of variables)
-* URL are in small letters (following the stores' names, plus `/Capital/Urls/Are/Silly`)
-
-# DOCUMENTATION UPDATED UP TO THIS POINT
+* Irregulars (`Person` => `People`) are a fact of life
+* Store constructors (derived from `Store`) are in capital letters (as constructors, they should be)
+* Store variables are in small letters (they are normal object variables)
+* `storeName` attributes are in small letters (to follow the lead of variables)
+* URL are in small letters (following the stores' names, since everybody knows that `/Capital/Urls/Are/Silly`)
 
 ## Naming conventions for nested stores    
 
-    var Cars = declare( Store, { 
+var Managers = declare( Store, { 
 
       schema: new Schema({
         // ...
       });
 
-      // ...
+      publicUrl: '/managers/:id',
+
       storeName: `managers`
       // ...
     }
-    var cars = new Cars();
-    cars.setAllRoutes( app );
+    var managers = new Managers();
+    managers.setAllRoutes( app );
 
     var ManagersCars = declare( Store, { 
 
@@ -634,51 +639,188 @@ It's important to be consistent in naming conventions while creating stores. In 
         // ...
       });
 
+      publicUrl: '/managers/:managerId/cars/:id',
+
       // ...
-      storeName: `ManagersCars`
+      storeName: `managersCars`
       // ...
     }
     var managerCars = new ManagersCars();
     managerCars.setAllRoutes( app );
 
-* Nested store's name a combination of IDs
-* storeName attribute still the same as the store name
-* URL in small letters, starting with URL of parent store
-* parent store's ID in schema first, singular
+* The nested store's name starts with the parent store's name (`managers`) keeping pluralisation
+* The URL is in small letters, starting with the URL of the parent store
 
-## Inheriting a store from another one
+# The `position` attribute
 
-Sometimes, you need to create a basic store that interfaces with a specific database table, and then create other stores that query the same database table.
+When creating a store, you can set the `position` parameter as `true`. For example:
 
-For example:
-
-    var PeopleCars = declare( Store, { 
+````Javascript
+    var Managers= declare( Store, {
 
       schema: new Schema({
-        // ...
-      });
- 
-      // ...
-      storeName: `peopleCars`
-      publicURL: '/people/:personId/cars/:id',
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', trim: 60 },
+      }),
 
+      position: true,
+
+      storeName: 'managers',
+      publicURL: '/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
       handleGet: true,
       handleGetQuery: true,
-      handlePut: true
-      // ...
-    }
-    PeopleCars.onlineAll( app );
+      handleDelete: true,
+    });
+    var managers = new Managers();
 
-    var PeopleCarsList = declare( PeopleCars, { 
-      handleGet: false,
-      handlePut: false 
-      publicURL: '/people/:personId/carsList/:id',
-    }
-    PeopleCarsList.onlineAll( app );
+````
 
-The store PeopleCarsList is nearly exactly the same as PeopleCars: the only difference is that it doesn't allow anything except GetQuery (that is, `GET /people/1234/carslist/` ).
+The `position` attribute means that `PUT` and `POST` calls will have to honour the positioning headers if they are passed (or the `options.putBefore` and `options.putDefaultPosition` options if using the API).
 
-You might even create a basic store _without_ running `onlineAll()` for it, and then derive several stores from it, each with a slightly different URL and (most likely) different permissions.
+Specifically:
+
+* `X-put-default-position`. It can be `start` and `end`, and it defines where items will be placed if `X-put-before` is not set.
+* `X-put-before`. If set, the item will be placed _before_ the one with the ID corresponding to the header value (and `X-put-default-position` is ignored).
+
+The default position is set to `end` by default.
+
+The main use of `position: true` is that when no sorting is requested by the client, the items will be ordered correctly depending on their "natural" positioning.
+
+Positioning will keep into account the store's `paramIds` when applying positioning. This means that if you have a store like this:
+
+````Javascript
+    var Managers= declare( Store, {
+
+      schema: new Schema({
+        workspaceId: { type: 'id' },
+        name       : { type: 'string', trim: 60 },
+        surname    : { type: 'string', trim: 60 },
+      }),
+
+      position: true,
+
+      storeName: 'managers',
+      publicURL: '/workspaces/:workspaceId/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+    var managers = new Managers();
+````
+
+Positioning will have to take into account `workspaceId` when repositioning: if an user in workspace `A` repositions an item, it mustn't affect positioning in workspace `B`. Basically, when doing positioning, `paramIds` define the _domain_ of repositioning (in this case, elements with matching `workspaceId`s will belong to the same domain).
+
+SimpleDbLayerMixin leverage on the positioning features of SimpleDbLayer to implement element positioning in JsoNRestStores.
+
+# Stores and collections when using SimpleDbLayerMixin
+
+When using SimpleDbLayerMixin (which is the most common case, unless you are [implementing data manipulation functions on your own](TODO)), a SimpleDbLayer collection will be created using the following attributes passed to the store:
+
+  * `idProperty`: the same as `store.idProperty`
+  * `schema`: the same as `store.schema`
+  * `nested`: the same as `store.nested`
+  * `hardLimitOnQueries`: the same as `store.hardLimitOnQueries`
+  * `strictSchemaOnFetch`: the same as `store.strictSchemaOnFetch`
+
+  * `schemaError`: set as `store.UnprocessableEntityError`, which is the same as `e.UnprocessableEntityError` (from the `allhttperrors` module)
+  * `fetchChildrenByDefault`: set to true
+  * `positionField`: set to `__position` if `store.position` is set to `true`
+  * `positionBase`: set as a copy of `store.paramIds`, after cutting out the last item
+
+The collection's name will match `storeName`, unless you pass a `store.collectionName` attribute.
+
+Note that _if a collection with a matching `collectionName` was already defined, then that collection is effectively reused by SimpleDbLayerMixin_. In this case, the following attribute in the JsonRestStore store will be forced to match the SimpleDbLayer's collection's attributes:
+
+  * `idProperty` (actually if the collection's idProperty doesn't match the store's, an error is thrown)
+  * `store.schema`
+  * `store.nested`
+  * `store.hardLimitOnQueries`
+  * `store.strictSchemaOnFetch`
+
+This allows you to potentially define SimpleDbLayer's layers beforehand, and then use them in JsonRestStores.
+If you decide to do so, remember to set `fetchChildrenByDefault` to true, and `schemaError` to `e.UnprocessableEntityError`. You will also need to set your own `positionField` and `positionBase` manually if you want positioning to happen. Generally speaking, it's just easier and better to let JsonRestStores create your SimpleDbLayer collections.
+
+# Inheriting a store from another one (advanced)
+
+At this point it's clear that stores are defined as constructor classes, which are then used -- only once -- to create a store variable. For example the constructor `Managers()` is used to create the `managers` store with `managers = new Managers()`.
+
+This allows you to define a base store, and derive stores off that base store. For example:
+
+````Javascript
+
+    // The base WorkspacesUsersBase constructor
+    // Note that the collectionName is defined to something different to
+    // storeName
+
+    var WorkspacesUsersBase = declare( Store, {
+
+      schema: new HotSchema({
+        id         : { type: 'id', searchable: true },
+        userId     : { type: 'id', searchable: true },
+        workspaceId: { type: 'id', searchable: true },
+      }),
+
+      storeName: 'workspacesUsersBase',
+      collectionName: 'workspacesUsers',
+
+      idProperty: 'id',
+
+      // NOTE: no idParams nor publicURL is defined.
+    });
+    stores.workspacesUsersBase = new WorkspacesUsersBase();
+
+    // The specialised WorkspacesUsers constructor, which
+    // define an onlineSearchSchema and publicURL
+
+    var WorkspacesUsers = declare( WorkspacesUsersBase, {
+
+      storeName:  'workspacesUsers',
+      collectionName: 'workspacesUsers',
+
+      publicURL: '/workspaces/:workspaceId/users/:id',
+
+      handleGetQuery: true,
+
+    });
+    stores.workspacesUsers = new WorkspacesUsers();
+
+    // The specialised UsersWorkspaces constructor, which
+    // define an onlineSearchSchema and publicURL
+
+    var UsersWorkspaces = declare( WorkspacesUsersBase, {
+
+      storeName:  'usersWorkspaces',
+      collectionName: 'workspacesUsers',
+
+      publicURL: '/users/:userId/workspaces/:id',
+      
+      handleGetQuery: true,
+
+    });
+    stores.usersWorkspaces = new UsersWorkspaces();
+````
+
+In this example, `WorkspacesUsersBase` is used as a starting point, defining `schema` and `idProperty`. Note that all `id` fields are defined in the schema manually (since there was no `paramIds` nor `publicURL` defined to do it magically). `WorkspacesUsersBase` also defines `workspacesUsers` as `collectionName` (otherwise, `collectionName` would have been `workspacesUsersBase`). Two specialised stores are then inherited from `WorkspacesUsersBase`: `WorkspacesUsers` and `UsersWorkspaces`. They both enable `handleGetQuery` and are assigned different URLs, and therefore have different paramIds; however, they both use the same database collection called `workspacesUsers`.
+
+When you inherit a store using SimpleDbLayerMixin, you need to remember that **collections are always recycled if they were already defined by a previous store**.
+
+In this particular case, when you run `stores.workspacesUsersBase = new WorkspacesUsersBase();` you are actually creating a SimpleDbLayer collection called `workspacesUsers`. Since derived constructors `WorkspacesUsers` and `UsersWorkspaces` define `workspacesUsers` as their collection, _the collection will be recycled since it already exists_.
+This means that the following attributes of the store will be reused (and redefining them in the derived store will have no effect):
+
+* idProperty (from the store's `idProperty` attribute)
+* schema (from the store's `schema` attribute)
+* hardLimitOnQueries (from the store's `hardLimitOnQueries` attribute)
+* strictSchemaOnFetch (from the store's `strictSchemaOnFetch` attribute)
+
+This means that a derived store cannot redefine `idProperty`, `schema`, `hardLimitOnQueries`, `strictSchemaOnFetch` (since they are used to create the store when the base store is created).
+
+This also means that position grouping will depend on the _base_ constructor's `paramIds`, since the collection's `positionBase` will depend _only_ on the base class' `paramIds`. (Note: `positionBase` in a collection defines which fields are used to 'group' ordering, see [how repositioning works in SimpleDbLayer](https://github.com/mercmobily/simpledblayer#nested-record-positioning)). This will only affect you if you are creating derived stores with positioning.
 
 # Artificial delays
 
@@ -691,40 +833,15 @@ In order for force JsonRestStores to add an artificial delay to _every_ online r
 
 This will apply to _every_ online request, which will be delayed by 8 seconds.
 
-# Reposition and before
+# DOCUMENTATION UPDATED UP TO THIS POINT
 
-Both `PUT` and `POST` calls will check for headers to see if an item is being repositioned:
+# TODO:
+ * Document `nested` in simpleDbLayer (reference to it), it will be necessary when explaining sorting
+ * Document querying properly
+ * Document _exactly_ how to implement implement*** fields
+ * Document _exactly_ how the API works (check that everything is correct)
+ * Fix rest of documentation which is horribly outdated
 
-* `X-rest-before`. If set, the item will be placed _before_ the one with the ID corresponding to the header value.
-* `X-rest-just-reposition`. If set, JsonRestStore will actually ignore the data, and will simply reposition the item as it was. This is useful if you want your client to trigger a reposition without re-submitting (useless) data to the server.
-
-Note that the way items are repositioned is beyond the scope of JsonRestStores, which calls the DB layer's `position()` function. All you have to do to allow repositioning is pass the store `position: true`:
-
-      var Managers= declare( JRS, {
-
-        schema: new Schema({
-          name   : { type: 'string', trim: 60 },
-          surname: { type: 'string', trim: 60 },
-        }),
-
-        position: true,
-
-        storeName: 'Managers',
-        publicURL: '/managers/:id',
-
-        handlePut: true,
-        handlePost: true,
-        handleGet: true,
-        handleGetQuery: true,
-        handleDelete: true,
-
-        hardLimitOnQueries: 50,
-      });
-
-Note that:
-
-* The position field is not exposed in any way. In fact, the way it's implemented by the DB layer is irrelevant to JsonRestStores
-* JsoNRestStores will return items in the right order when no sorting option is provided
 
 # Important methods and attributes you can override
 
@@ -810,6 +927,7 @@ If set to `true`, any "get query" method will have the side effect of deleting t
 ### `hardLimitOnQueries`
 
 This is the limit of the number of elements that can be returned by a query without ID (GetQuery). The default is 50. 
+
 ## Permissions
 
 By default, everything is allowed: stores allow pretty much anything and anything; anybody can DELETE, PUT, POST, etc. Furtunately, JsonRestStores allows you to decide exactly what is allowed and what isn't, by overriding specific methods.
@@ -953,7 +1071,7 @@ JsonRestStores allows you to decide how to query the database depending on what 
 So, for a query like `GET /people?name=tony&surname=mobily`, only records where `name` _and_ `surname` match will be returned as an array.
 
 
-In such a case, the request `GET /people?name=tony&surname=mob` will return all records where `name` is `Tony`, and surname starts with `mob`. ere, `type` can be any one condition allowed in simpledblayer: `is` `eq` `lt` `lte` `gt` `gte` `startWith` `startsWith` `contain` `contains` `endsWith` `endWith`.
+In such a case, the request `GET /people?name=tony&surname=mob` will return all records where `name` is `Tony`, and surname starts with `mob`. Here, `type` can be any one condition allowed in simpledblayer: `is` `eq` `lt` `lte` `gt` `gte` `startWith` `startsWith` `contain` `contains` `endsWith` `endWith`.
 
 ## `and` and `or` in queries
 
