@@ -58,20 +58,20 @@ exports = module.exports = declare( Object,  {
       self.schema = existingDbLayer.schema;
       self.nested = existingDbLayer.nested;
       self.hardLimitOnQueries = existingDbLayer.hardLimitOnQueries;
+      self.strictSchemaOnFetch = existingDbLayer.strictSchemaOnFetch;
 
       self.dbLayer = existingDbLayer;
   
     } else {
       
       var layerOptions = {
+        idProperty: self.idProperty,
         schema: self.schema,
         nested: self.nested,
-        idProperty: self.idProperty,
         hardLimitOnQueries: self.hardLimitOnQueries,
         strictSchemaOnFetch: self.strictSchemaOnFetch,        
 
         schemaError: self.UnprocessableEntityError,
-        //children: true,
         fetchChildrenByDefault: true,
       };
       if( self.position ){
