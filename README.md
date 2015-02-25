@@ -1045,6 +1045,120 @@ It's totally up to you how you want organise your searches. For example, you mig
 
 In this case, the only allowed field in the query string will be `searchAll` which will look for a match anywhere.
 
+
+# Sorting options and default sort
+
+A client can require data sorting by setting the `sortBy` parameter in the query string. This means that there shouldn't be a `sortBy` element in the `onlineSearchSchema` attribute. JsonRestStores will parse the query string, and make sure that data is fetched in the right order.
+
+In JsonRestStores you can also decide some default fields that will be used for sorting, in case no sorting option is defined in the query string.
+
+## The `sortBy` option
+
+The `sortBy` attribute is in the format `+field1,+field2,-field3` which will instruct JsonRestStores to sort by `field1`, `field2` and `field3` (with `field3` being sorted in reverse).
+
+When you create a store, you can decide which fields are sortable:
+
+For example:
+
+    var Managers = declare( Store, {
+
+      schema: new Schema({
+        name   : { type: 'string', searchable: true, trim: 60 },
+        surname: { type: 'string', searchable: true, trim: 60 },
+      }),
+
+      storeName: 'managers',
+      publicURL: '/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+
+      sortableFields: [ 'name', 'surname' ],
+
+      nested: [
+        {
+          type: 'multiple',
+          layer: 'managersCars',
+          join: { managerId: 'id' },
+        }
+      ],
+
+    });
+    var managers = new Managers(); 
+    managers.setAllRoutes( app );
+
+    var ManagersCars = declare( Store, {
+
+      schema: new Schema({
+        make     : { type: 'string', trim: 60, searchable: true, required: true },
+        model    : { type: 'string', trim: 60, searchable: true, required: true },
+      }),
+
+      storeName: 'managersCars',
+      publicURL: '/managers/:managerId/cars/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+
+      sortableFields: [ 'make', 'model', 'managers.name' ],
+
+      nested: [
+        {
+          type: 'lookup',
+          localField: 'managerId',
+          layer: 'managers',
+          layerField: 'id'
+        }
+      ],
+    });
+    var managersCars = new ManagersCars();
+    managersCars.setAllRoutes( app );
+
+In this case, I didn't define `onlineSearchSchema` nor `queryConditions`: the store will get the default ones provided by JsonRestStores.
+
+Note how `sortableFields` is an array of fields that will be taken into consideration. Each element of the array will be a field in the schema itself.
+
+It is interesting how one of the sortable fields is `managers.name`: since `managers` is a nested table, its sub-fields can be used as sorting fields (as long as they are searchable).
+
+## The `defaultSort` option
+
+If the client doesn't provide any sorting options, you can decide a list of default fields that will be applied automatically. This is useful when you want to retrieve, for example, a list of comments and want to make sure that they are returned in chronological order without having to get the client to specify any sorting optinons.
+
+For example:
+
+    var Comments = declare( Store, {
+
+      schema: new Schema({
+        subject: { type: 'string', searchable: true, trim: 60 },
+        body   : { type: 'string', searchable: true, trim: 4096 },
+        posted : { type: 'date',   searchable: true, protected: true, default: function(){ return new Date() } },
+      }),
+
+      storeName: 'comments',
+      publicURL: '/comments/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+
+      defaultSort: {
+        posted: -1
+      },
+
+    });
+    var comments = new Comments(); 
+    comments.setAllRoutes( app );
+
+This will ensure that comments are always retrieved in reversed order, newest first. Since `sortableFields` is not defined, the default order (by `posted`) is the only possible one for this store.
+
 # The `position` attribute
 
 When creating a store, you can set the `position` parameter as `true`. For example:
@@ -1301,7 +1415,6 @@ Whenever an error happens, JsonRestStore will run `self.logError()`. This happen
 # DOCUMENTATION UPDATED UP TO THIS POINT
 
 # TODO:
- * Document sorting (sortableFields)
  * Document what happens to schema thanks to SimpleDbLayerMixin (fields made searchable)
  * Document properly all of the hooks (2 types)
  * Document what happens when a request arrives
