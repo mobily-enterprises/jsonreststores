@@ -215,6 +215,7 @@ var Store = declare( Object,  {
       for( var k in self.onlineSearchSchema.structure )
         self.queryConditions.args.push( { name: 'eq', args: [ k, '#' + k + '#' ] } );
 
+      // TODO: take AND out if Object.keys( self.onlineSearchSchema.structure ).length is only 1
     }
 
 
