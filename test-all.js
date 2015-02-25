@@ -2038,41 +2038,6 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
     },
   
     */
-
-    'Get() API toughness test: fetching data with non-unique ids': function( test ){
-  
-      zap( function( err ){
-  
-        // Set the basic stores
-        var PeopleWrongId = declare( g.People, {
-          storeName: 'peopleWrongId',
-          collectionName: 'people',
-        });
-        
-        var peopleWrongId = new PeopleWrongId();
-
-        // Forcefully setting idProperty and paramIds
-        peopleWrongId.idProperty =  'surname',
-        peopleWrongId.paramIds = [ 'surname' ],
-  
-        g.people.apiPost( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person1 ){
-          test.ifError( err ); if( err ) return test.done();
-          g.people.apiPost( { name: 'Chiara', surname: "Mobily", age: 24 }, function( err, person2 ){
-            test.ifError( err ); if( err ) return test.done();
-  
-            peopleWrongId.apiGet( 'Mobily', function( err, person3 ){
-              test.ok( typeof( err ) === 'object' );
-              test.ok( err.message === 'implementFetchOne fetched more than 1 record' );
-              test.done();
-            });
-          });
-  
-        });
-      });  
-  
-    },
-  
-  
   
     // *********************************
     // ********** DELETE ***************
@@ -2611,10 +2576,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         // NOTE! The age is '37', and then `r` is corrected to 37 for comparison.
         async.series([
-          function( done ){ g.dbPeople.insert( { id: 1234, name: 'Tony', surname: "Mobily", age: 37 }, , function( err, r ){ if( err ) return done( err ); r.surname += "_extrapolated"; l.push( r ); done() }) },
-          function( done ){ g.dbPeople.insert( { id: 1235, name: 'Chiara', surname: "Mobily", age: 24 }, , function( err, r ){ if( err ) return done( err ); r.surname += "_extrapolated"; l.push( r ); done() }) },
-          function( done ){ g.dbPeople.insert( { id: 1236, name: 'Daniela', surname: "Mobily", age: 64 }, , function( err, r ){ if( err ) return done( err ); r.surname += "_extrapolated"; l.push( r ); done() }) },
-          function( done ){ g.dbPeople.insert( { id: 1237, name: 'Sara', surname: "Fabbietti", age: 14 }, , function( err, r ){ if( err ) return done( err ); done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1234, name: 'Tony', surname: "Mobily", age: 37 }, function( err, r ){ if( err ) return done( err ); r.surname += "_extrapolated"; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1235, name: 'Chiara', surname: "Mobily", age: 24 }, function( err, r ){ if( err ) return done( err ); r.surname += "_extrapolated"; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1236, name: 'Daniela', surname: "Mobily", age: 64 }, function( err, r ){ if( err ) return done( err ); r.surname += "_extrapolated"; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1237, name: 'Sara', surname: "Fabbietti", age: 14 }, function( err, r ){ if( err ) return done( err ); done() }) },
         ], function( err ){
 
           test.ifError( err ); if( err ) return test.done();
@@ -2664,10 +2629,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var people2 = new People2();
    
         async.series([
-          function( done ){ g.dbPeople.insert( { id: 1234, name: 'Tony', surname: "Mobily", age: 37 }, , function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
-          function( done ){ g.dbPeople.insert( { id: 1235, name: 'Chiara', surname: "Mobily", age: 24 }, , function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
-          function( done ){ g.dbPeople.insert( { id: 1236, name: 'Daniela', surname: "Mobily", age: 64 }, , function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
-          function( done ){ g.dbPeople.insert( { id: 1237, name: 'Sara', surname: "Fabbietti", age: 14 }, , function( err, r ){ if( err ) return done( err );             done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1234, name: 'Tony', surname: "Mobily", age: 37 }, function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1235, name: 'Chiara', surname: "Mobily", age: 24 }, function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1236, name: 'Daniela', surname: "Mobily", age: 64 }, function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
+          function( done ){ g.dbPeople.insert( { id: 1237, name: 'Sara', surname: "Fabbietti", age: 14 }, function( err, r ){ if( err ) return done( err );             done() }) },
         ], function( err ){
           test.ifError( err ); if( err ) return test.done();
   
@@ -2793,7 +2758,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
        var req = {};
        req.headers = {};
   
-       req.url = "http://www.example.org/people?name=Tony&surname=Mobily&sortBy=+name,-surname";
+       req.url = "http://www.example.org/people?name=Tony&surname=Mobily&sortBy=%2Bname,-surname";
   
        var options = g.people._initOptionsFromReq( 'GetQuery', req, true );
        compareItems( test,  options, 
@@ -2804,7 +2769,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
        );
   
-       req.url = "http://www.example.org/people?name=Tony&surname=Mobily&sortBy=+name,surname";
+       req.url = "http://www.example.org/people?name=Tony&surname=Mobily&sortBy=%2Bname,surname";
   
        var options = g.people._initOptionsFromReq( 'GetQuery', req, true );
        compareItems( test,  options, 
