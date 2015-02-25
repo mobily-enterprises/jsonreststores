@@ -80,6 +80,8 @@ Here is a list of modules used by JsonRestStores. You should be at least slightl
 
 Note that all of these modules are fully unit-tested, and are written and maintained by me.
 
+**It is recommended that you have a working knowledge of SimpleDbLayer (focusing on querying and automatic loading of children) before delving too deep into JsonRestStores, as JsonRestStores uses the same syntax to create queries and to define nested layers.**
+
 # Your first Json REST store
 
 Creating a store with JsonRestStores is very simple. Here is how you make a fully compliant store, ready to be added to your Express application:
@@ -389,6 +391,40 @@ A bit of testing with `curl`:
       }
     ]
 
+
+    $ curl -i -GET  http://localhost:3000/managers/?surname=mobily
+    HTTP/1.1 200 OK
+    X-Powered-By: Express
+    Content-Type: application/json; charset=utf-8
+    Content-Length: 136
+    ETag: "1058662527"
+    Date: Mon, 02 Dec 2013 02:22:29 GMT
+    Connection: keep-alive
+
+    [
+      {
+        "id": 2,
+        "name": "Tony",
+        "surname": "Mobily"
+      },
+      {
+        "id": 4,
+        "name": "Chiara",
+        "surname": "Mobily"
+      }
+    ]
+
+    $ curl -i -GET  http://localhost:3000/managers/?surname=fabbietti
+    HTTP/1.1 200 OK
+    X-Powered-By: Express
+    Content-Type: application/json; charset=utf-8
+    Content-Length: 2
+    ETag: "1058662527"
+    Date: Mon, 02 Dec 2013 02:22:29 GMT
+    Connection: keep-alive
+
+    []
+
     $ curl -i -X PUT -d "name=Merc&surname=Mobily"  http://localhost:3000/managers/2
     HTTP/1.1 200 OK
     X-Powered-By: Express
@@ -576,6 +612,73 @@ The managersCars store will will respond to `GET /managers/2222/cars/3333` (to f
 
 Remember that in `managersCars` _remote queries will **always** honour the filter on `managerId`, both in queries (`GET` without an `id` as last parameter) and single-record operations_ (`GET` with a specific `id`).
 
+## Fetching children records automatically in nested stores
+
+If you have two nested tables like the ones shown above, you might want to be able to look up fields automatically. JsonRestStores allows you to to so using the `nested` property.
+
+For example:
+
+    var Managers = declare( Store, {
+
+      schema: new Schema({
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', searchable: true, trim: 60 },
+      }),
+
+      storeName: 'managers',
+      publicURL: '/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+
+      nested: [
+        {
+          type: 'multiple',
+          layer: 'managersCars',
+          join: { managerId: 'id' },
+        }
+      ],
+
+    });
+    var managers = new Managers(); 
+    managers.setAllRoutes( app );
+
+    var ManagersCars = declare( Store, {
+
+      schema: new Schema({
+        make     : { type: 'string', trim: 60, required: true },
+        model    : { type: 'string', trim: 60, required: true },
+      }),
+
+      storeName: 'managersCars',
+      publicURL: '/managers/:managerId/cars/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+
+      nested: [
+        {
+          type: 'lookup',
+          localField: 'managerId',
+          layer: 'managers',
+          layerField: 'id'
+        }
+      ],
+    });
+    var managersCars = new ManagersCars();
+    managersCars.setAllRoutes( app );
+
+
+This is an example where using JsonRestStores really shines: when you use `GET` to fetch a manager, the object's attribute `manager._children.managersCars` will be an array of all cars joined to that manager. Also, when yu use `GET` to fetch a car, the object's attribute `car._children.managerId` will be an object representing the correct manager. This is immensely useful in web applications, as it saves tons of HTTP calls for lookups.
+
+Fetching of nested data is achieved by SimpleDbLayerMixin by using [SimpleDbLayer's nesting abilities](https://github.com/mercmobily/simpledblayer#automatic-loading-of-children-joins), which you should check out. 
+
 # Naming conventions for stores
 
 It's important to be consistent in naming conventions while creating stores. In this case, code is clearer than a thousand bullet points:
@@ -650,6 +753,297 @@ var Managers = declare( Store, {
 
 * The nested store's name starts with the parent store's name (`managers`) keeping pluralisation
 * The URL is in small letters, starting with the URL of the parent store
+
+# Customise search rules
+
+In the previous examples, I explained how marking a field as `searchable` in the schema has the effect of making it searchable in queries:
+
+    var Managers = declare( Store, {
+
+      schema: new Schema({
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', searchable: true, trim: 60 },
+      }),
+
+      storeName: 'managers',
+      publicURL: '/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+
+    var managers = new Managers(); 
+    managers.setAllRoutes( app );
+
+
+If you query the store with `http://localhost:3000/managers/?surname=mobily`, it will only return elements where the `surname` field matches.
+
+## Custom `onlineSearchSchema`
+
+In JsonRestStores you actually define what fields are acceptable as filters with the parameter `onlineSearchSchema`, which is defined exactly as a schema. So, writing this is equivalent:
+
+    var Managers = declare( Store, {
+
+      schema: new Schema({
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', searchable: true, trim: 60 },
+      }),
+
+      onlineSearchSchema: new Schema( {
+        surname: { type: 'string', trim: 60 },
+      }),
+
+      storeName: 'managers',
+      publicURL: '/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+
+    var managers = new Managers(); 
+    managers.setAllRoutes( app );
+
+If `onlineSearchSchema` is not defined, JsonRestStores will create one based on your main schema by doing a shallow copy, excluding `paramIds` (which means that `id` is not added automatically to `onlineSearchSchema`, which is most likely what you want).
+
+If you define your own `onlineSearchSchema`, you are able to decide exactly how you want to filter the values. For example you could define a different default, or trim value, etc. However, in common applications you can probably live with the auto-generated `onlineSearchSchema`.
+
+## Custom `queryConditions`
+
+You can decide how the elements in `onlineSearchSchema` will be turned into a search with the `queryConditions` parameter.
+
+`queryConditions` is normally automatically generated for you if it's missing. So, not passing it is the same as writing:
+
+    var Managers = declare( Store, {
+
+      schema: new Schema({
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', searchable: true, trim: 60 },
+      }),
+
+      onlineSearchSchema: new Schema( {
+        surname: { type: 'string', trim: 60 },
+      }),
+
+      queryConditions: { 
+        name: 'eq', 
+        args: [ 'name', '#name#']
+      },
+
+      storeName: 'managers',
+      publicURL: '/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+
+    var managers = new Managers(); 
+    managers.setAllRoutes( app );
+
+Basically, `queryConditions` is automatically generated with the `name` field in the database that matches the `name` entry in the query string (that's what `#name#` stands for).
+
+If you had defined both `name` and `surname` as searchable, `queryConditions` would have been generated as:
+
+    queryConditions: {
+        name: 'and',
+        args: [
+          { name: 'eq', args: [ 'name', '#name#' ] },
+          { name: 'eq', args: [ 'surname', '#surname#' ]
+        ]
+      },
+     
+Basically, _both_ `name` and `surname` need to match their respective values in the query string. To know more about the syntax of `queryConditions`, please have a look at [the conditions object in SimpleDbLayer](https://github.com/mercmobily/simpledblayer#the-conditions-object).
+
+Keep in mind that the syntax of JsonRestStore's `queryConditions` is identical to the syntax of the `conditions` object in SimpleDbLayer, with the following extras:
+
+* In JsonRestStores, when a value is in the format `#something#`, that `something` will be replaced by the value in the corresponding value in the query string when making queries. _If `something` is not passed in the query string, that section of the query is ignored._ 
+* You can have the attribute `ifDefined` set as a value in `queryConditions`: in this case, that section of the query will only be evaluated if the corresponding value in the query string is defined.
+
+For example, you could define `queryConditions` as:
+
+    queryConditions: {
+      name: 'and',
+      args: [
+
+        {
+          name: 'and', ifDefined: 'surname', args: [
+            { name: 'startsWith', args: [ 'surname', '#surname#' ] },
+            { name: 'eq', args: [ 'active', true ] },              
+          ]
+        },
+
+        { 
+          name: 'startsWith', args: [ 'name', '#name#']
+        }
+      ]
+    },
+
+The strings `#surname#` and `#name#` are translated into their corresponding values in the query string. The `ifDefined` means that that whole section of the query will be ignored unless `surname` is passed to the query string. The comparison operators, which were `eq` in the generated `queryConditions`, are now much more useful `startsWith`.
+
+You can clearly see that thanks to `queryConditions` you can effectively create _any_ kind of query based on the passed parameter. For exampe, you could create a `searchAll` field like this:
+
+    onlineSearchSchema: new Schema( {
+      searchAll: { type: 'string', trim: 60 },
+    }),
+
+    queryConditions: {
+      name: 'or',
+      ifDefined: 'searchAll',
+      args: [
+        { name: 'startsWith', args: [ 'number', '#searchAll#' ] },
+        { name: 'startsWith', args: [ 'firstName', '#searchAll#' ] },
+        { name: 'startsWith', args: [ 'lastName', '#searchAll#' ] },
+      ]
+    },
+
+This example highlights that `onlineSearchSchema` fields don't have to match existing fields in the schema: they can be _anything_, which is then used as a `#field#` value in `queryConditions`. They are basically values that will be used when constructing the actual query in `queryConditions`.
+
+This makes JsonRestStores immensely flexible in terms of what queries can be implemented.
+
+## Nested data and queries
+
+Thanks to `queryConditions` you can define any kind of query you like. The good new is that you can also search in _children_ tables that are defined as `nested` in the store definitions.
+
+For example:
+
+    var Managers = declare( Store, {
+
+      schema: new Schema({
+        name   : { type: 'string', searchable: true, trim: 60 },
+        surname: { type: 'string', searchable: true, trim: 60 },
+      }),
+
+      storeName: 'managers',
+      publicURL: '/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+
+      onlineSearchSchema: new HotSchema({
+        name    : { type: 'string', trim: 60 },
+        surname : { type: 'string', trim: 60 },
+        carInfo : { type: 'string', trim: 30 },
+      }),
+
+      queryConditions: {
+        name: 'and',
+        args: [
+
+          {
+            name: 'startsWith', args: [ 'surname', '#surname#']
+          },
+
+          {
+            name: 'or',
+            ifDefined: 'carInfo',
+            args: [
+              { name: 'startsWith', args: [ 'managersCars.make', '#carInfo#' ] },
+              { name: 'startsWith', args: [ 'managersCars.model','#carInfo#' ] },
+            ]
+          }
+        ]
+      },
+
+      nested: [
+        {
+          type: 'multiple',
+          layer: 'managersCars',
+          join: { managerId: 'id' },
+        }
+      ],
+
+    });
+    var managers = new Managers(); 
+    managers.setAllRoutes( app );
+
+    var ManagersCars = declare( Store, {
+
+      schema: new Schema({
+        make     : { type: 'string', trim: 60, searchable: true, required: true },
+        model    : { type: 'string', trim: 60, searchable: true, required: true },
+      }),
+
+      onlineSearchSchema: new HotSchema({
+        make       : { type: 'string', trim: 60 },
+        model      : { type: 'string', trim: 60 },
+        managerInfo: { type: 'string', trim: 60 }
+      }),
+
+      queryConditions: {
+        name: 'and',
+        args: [
+
+          {
+            name: 'startsWith', args: [ 'make', '#make#'],            
+          },
+
+          {
+            name: 'startsWith', args: [ 'model', '#model#'],            
+          },
+
+          {
+            name: 'or',
+            ifDefined: 'managerInfo',
+            args: [
+              { name: 'startsWith', args: [ 'managers.name', '#managerInfo#' ] },
+              { name: 'startsWith', args: [ 'managers.surname','managerInfo#' ] },
+            ]
+          }
+        ]
+      },
+
+      storeName: 'managersCars',
+      publicURL: '/managers/:managerId/cars/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+
+      nested: [
+        {
+          type: 'lookup',
+          localField: 'managerId',
+          layer: 'managers',
+          layerField: 'id'
+        }
+      ],
+    });
+    var managersCars = new ManagersCars();
+    managersCars.setAllRoutes( app );
+
+You can see how for example in `Managers`, `onlineSearchSchema` has a mixture of fields that match the ones in the schema (`name`, `surname`) that look for a match in the correponding fields, as well as search-specific fields (like `carInfo`) that end up looking into the nested children.
+
+It's totally up to you how you want organise your searches. For example, you might decide to make a `searchAll` field instead for `Managers`:
+
+    onlineSearchSchema: new HotSchema({
+      searchAll : { type: 'string', trim: 60 },
+    }),
+
+    queryConditions: {
+      name: 'or',
+      ifDefined: 'searchAll',
+      args: [
+        { name: 'startsWith', args: [ 'name', '#searchAll#'] }
+        { name: 'startsWith', args: [ 'surname', '#searchAll#'] }
+        { name: 'startsWith', args: [ 'managersCars.make', '#searchAll#' ] },
+        { name: 'startsWith', args: [ 'managersCars.model','#searchAhh#' ] },
+      ]
+    },
+
+In this case, the only allowed field in the query string will be `searchAll` which will look for a match anywhere.
 
 # The `position` attribute
 
@@ -739,7 +1133,7 @@ Note that _if a collection with a matching `collectionName` was already defined,
 
   * `idProperty` (actually if the collection's idProperty doesn't match the store's, an error is thrown)
   * `store.schema`
-  * `store.nested`
+  * `store.nested` (see next section)
   * `store.hardLimitOnQueries`
   * `store.strictSchemaOnFetch`
 
@@ -833,14 +1227,86 @@ In order for force JsonRestStores to add an artificial delay to _every_ online r
 
 This will apply to _every_ online request, which will be delayed by 8 seconds.
 
+# Errors returned and error management
+
+JsonRestStores has very careful error management.
+
+## The error objects
+
+This is the comprehensive list of errors the class can create:
+
+  * `BadRequestError` Like this: `new BadRequestError( { errors: errors } )`
+  * `UnauthorizedError`
+  * `ForbiddenError`
+  * `NotFoundError`
+  * `PreconditionFailedError`
+  * `UnprocessableEntityError` Like this: `UnprocessableEntityError( { errors: errors } )`
+  * `NotImplementedError`
+  * `ServiceUnavailableError`. Like this: `ServiceUnavailableError( { originalErr: error } )`
+
+These error constructors are borrowed from the [Allhttperrors](https://npmjs.org/package/allhttperrors) module -- you should its short and concise documentation. The short version is that `errorObject.httpError` will be set, and the constructor can have either a string or an object as parameters.
+
+The error objects are all pretty standard. However:
+
+* `ServiceUnavailableError` errors will be created with an `originalErr` parameter containing the original error object. For example if the database server goes down, the module will return a `ServiceUnavailableError` error object which will include the original MongoDB error in its `originalErr` parameter.
+
+* `UnprocessableEntityError` and `BadRequestError` are both created when field validation fails. They error objects will always have an `errors` attribute, which will represent an array of errors as they were returned by SimpleSchema. For example:
+
+
+````Javascript
+    [
+      { field: 'nameOfFieldsWithProblems', message: 'Message to the user for this field' },
+      { field: 'nameOfAnotherField', message: 'Message to the user for this other field' },
+    ]
+````
+
+JsonRestStores only ever throws (generic) Javascript errors if the class constructor was called incorrectly, or if an element in `paramIds` is not found within the schema. So, it will only ever happen if you use the module incorrectly. Any other case is chained through.
+
+## Error management
+
+At some point in your program, one of your callbacks might have the dreaded `err` first parameter set to an error rather than null. This might happen  with your database driver (for example your MongoDB process dies), or within your own module (validation after a `PUT` fails).
+
+JsonRestStores allows you to decide what to do when this happens.
+
+### `chainErrors`
+
+You can control what happens when an error occurs with the `chainErrors` attribute. There are three options:
+
+#### `all`
+
+If you have `chainErrors: all` in your class definition: JsonRestStores will simply call `next( error )` where `error` is the error object. This means that it will be up to another Express middleware to deal with the problem.
+
+#### `none`
+
+If you have `chainErrors: none` in your class definition: if there is a problem, JsonRestStores will _not_ call the `next()` callback at all: it will respond to the client directly, after formatting it with the object's `self.formatErrorResponse()` method (see below).
+
+Do this if you basically want to make absolute sure that every single request will end right there, whether it went well or not. If you do this, you might want to define your own `self.formatErrorResponse()` method for your store classes, so that the output is what you want it to be.
+
+#### `nonhttp`
+
+If you have `chainErrors: nonhttp` in your class definition, JsonRestStores will only call `next( err ) ` for non-HTTP errors --  any other problem (like your MongoDB server going down) will be handled by the next Express error management middleware. Use this if you want the server to respond directly in case of an HTTP problem (again using `self.formatErrorResponse()` to send a response to the client), but then you want to manage other problems (for example a MongoDB problem) with Express.
+
+### `self.formatErrorResponse()`
+
+In those cases where you decide to send a response to the client directly (with `chainErrors` being `none` or `nonhttp`), the server will send a response to the client directly. The body of the response will depend on what you want to send back.
+
+The stock `self.formatErrorResponse()` method will simply return a Json representation of the error message and, if present, the `errors` array within the error.
+
+### `self.logError()`
+
+Whenever an error happens, JsonRestStore will run `self.logError()`. This happens regardless of what `self.chainErrors` contains (that is, whether the error is chained up to Express or it's managed internally). Note that there is no `callback` parameter to this method: since it's only a logging method, if it fails, it fails.
+
+
+
 # DOCUMENTATION UPDATED UP TO THIS POINT
 
 # TODO:
- * Document `nested` in simpleDbLayer (reference to it), it will be necessary when explaining sorting
- * Document querying properly
+ * Document sorting (sortableFields)
+ * Document what happens to schema thanks to SimpleDbLayerMixin (fields made searchable)
+ * Document properly all of the hooks (2 types)
+ * Document what happens when a request arrives
  * Document _exactly_ how to implement implement*** fields
- * Document _exactly_ how the API works (check that everything is correct)
- * Fix rest of documentation which is horribly outdated
+ * Document _exactly_ how the API works
 
 
 # Important methods and attributes you can override
@@ -907,18 +1373,6 @@ This function will run SimpleDbLayer's generateSchemaIndexes(), as well as addin
 * Will create a new index for each searchable field, in the form `workspaceId + searchableField` since most searches will be run by users within their `workspaceId` domain
 * Will create a compound index with `paramIds + field` for each `sortable` field
 
-
-## Queries
-
-searchSchema: new Schema({
-          name: { type: 'string', trim: 60 }
-        }),
-
-        // This defines what query will be generated when searching by `name`
-        queryConditions: { 
-          name: 'eq', 
-          args: [ 'name', '#name#']
-        }
 
 ### `deleteAfterGetQuery`
 
@@ -1004,7 +1458,6 @@ Note that if your store is derived from another one, and you want to preserve yo
  
 This will ensure that the inherited `checkPermissionsDelete()` method is called and followed, and _then_ further checks are carried on.
 
-
 ## "Prepare Body" and "after afterValidate" hooks
 
 These hooks are there so that you can manpulate the data passed to your store both _before_ it's validated against the schema, and _after_ it's been validated.
@@ -1034,185 +1487,9 @@ You can redefine them as you wish.
 
 Note that these hooks are run **after** data has been written to the database, but **before** a response is provided to the user.
 
-# Searching in queries
 
-`GetQuery` is the only method that allows searches, and that returns an array of objects (rather than a specific one). `GetQuery` is called whenever the route is called without specifying the object ID in the URL. So, if `GET /users/1` will return the JSON representation of the user with `id` `1`, `GET /users` will return an array of all users that satisfy the filter specified in the `GET` request (in this case, there is no filter).
 
-## Searchable fields
 
-When querying a store you are able to specify a list of field/value pairs via URL.
-A typical URL would be:
-
-    GET /people?name=tony&surname=mobily
-
-JsonRestStores allows you to decide how to query the database depending on what was passed by the user. For example, a basic usage would be:
-
-      var People = declare( Store, {
-
-        schema: new Schema({
-          name   : { type: 'string', trim: 20, searchable: true },
-          surname: { type: 'string', trim: 20, searchable: true },
-        }),
-
-        storeName: 'People',
-        publicURL: '/people/:id',
-
-        handlePut: true,
-        handlePost: true,
-        handleGet: true,
-        handleGetQuery: true,
-        handleDelete: true,
-
-      });
-
-      // Create the right hooks to access the store
-      People.onlineAll( app );
-
-So, for a query like `GET /people?name=tony&surname=mobily`, only records where `name` _and_ `surname` match will be returned as an array.
-
-
-In such a case, the request `GET /people?name=tony&surname=mob` will return all records where `name` is `Tony`, and surname starts with `mob`. Here, `type` can be any one condition allowed in simpledblayer: `is` `eq` `lt` `lte` `gt` `gte` `startWith` `startsWith` `contain` `contains` `endsWith` `endWith`.
-
-## `and` and `or` in queries
-
-You can decide if you want to apply `or` or `and` when filter searchable fields by setting the `condition` attribute in `searchable`. For example:
-
-        schema: new Schema({
-          age    : { type: 'number', max: 130, searchable: true, searchOptions: { type: 'eq' },
-          name   : { type: 'string', trim: 20, searchable: true, searchOptions: { type: 'startsWith', condition: 'or' } },
-          surname: { type: 'string', trim: 20, searchable: true, searchOptions: { type: 'startsWith', condition: 'or' } },
-        }),
-
-In such a case, _the `or` conditions will be grouped together_; so, the request `GET /people?age=37&name=ton&surname=mob` will return all records where `age` is `37`, and then _either_ the name starts with `ton`, _or_ the surname starts with `mob`.  This is probably an uncommon scenario, but there might be cases where `or` is actually useful.
-
-## Search schema
-
-Specifying `searchable` straight into the schema limits you to decide how each field will be searched; so, there is a 1:1 correspondence between a field and how it's searched.
-
-To overcome this limitation, JsonRestStores allows you to define an additional schema, called `onlineSearchSchema`, which gives you a lot more power.
-
-Consider this example:
-
-      var People = declare( Store, {
-
-        schema: new Schema({
-          name   : { type: 'string', trim: 20 },
-          surname: { type: 'string', trim: 20 },
-        }),
-
-        onlineSearchSchema: new Schema({
-          name             : { type: 'string', trim: 20, searchable: true, searchOptions: { type: 'is' } },
-          surname          : { type: 'string', trim: 20, searchable: true, searchOptions: { type: 'is' } },
-          nameContains     : { type: 'string', trim: 4, searchable: true, searchOptions: { type: 'contains',   field: 'name' } },
-          surnameContains  : { type: 'string', trim: 4, searchable: true, searchOptions: { type: 'contains',   field: 'surname' } },
-          surnameStartsWith: { type: 'string', trim: 4, searchable: true, searchOptions: { type: 'startsWith', field: 'surname' } },
-          nameOrSurnameStartsWith: { type: 'string', trim: 4, searchable: true, searchOptions: [ { field: 'surname', type: 'startsWith', condition: 'or' }, { field: 'name', type: 'startsWith', condition: 'or' } ] },
-        }),
-
-        storeName: 'People',
-        publicURL: '/people/:id',
-
-        handlePut: true,
-        handlePost: true,
-        handleGet: true,
-        handleGetQuery: true,
-        handleDelete: true,
-      });
-
-      // Create the right hooks to access the store
-      People.onlineAll( app );
-
-
-This is neat! Basically, you are still bound to the limitations of HTTP GET requests (you can only specify a bunch of key/values in th GET); but, you can easily decide how each key/value pair will affect your search. For example, requesting `GET /people?nameContains=ony&surname=mobily` will match all records where the name _contains_ `ony` and the surname _is_ `mobily`.
-
-This is achieved thanks to the `field` attribute in `searchOptions`, which allows you to specify which field the filter will apply to.
-
-Note that you can pass an array of options to `searchOptions` (see `nameOrSurnameStartsWith`). In this case, all conditions will be applied.
-
-### Schema and search schema: security
-
-Note that when a store is queried, only fields marked as `searchable` in the schema will actually be searchable. If a `onlineSearchSchema` is provided, only fields in the `onlineSearchSchema` will actually be searchable.
-
-It's advisable to define a `onlineSearchSchema` for every store in a production site, so that you have full control of what is searchable by remote calls.
-
-## Schema attribute `sortable`
-
-If a field is marked as `searchable`, then it may or may not be sortable too. This is what a URL will look like:
-
-    /workspaces/?workspaceName=something&sortBy=+workspaceName,-workGroup
-
-The field `sorBy` is interpreted by the GetQuery function: it's a list of comma-separated fields, each one starting with a `+` or with a `-`. If those fields are marked as `sortable` in the schema, then they will be sorted accordingly.
-
-***NOTE TO DOJO USERS***: while using these stores with Dojo, you will _need_ to define them like so: `var store = new JsonRest( { target: "/workspaces/", sortParam: "sortBy" });`. The `sortParam` element is mandatory, as it needs to be `sortBy`. At this stage, JsonRestStores is _not_ able to interpret correctly URLs such as `/workspaces/?workspaceName=something&sort(+workspaceName,-workgroup)` (which is what Dojo will request if you do not specify `sortParam`).
-
-# Errors returned and error management
-
-JsonRestStores has very careful error management.
-
-## The error objects
-
-This is the comprehensive list of errors the class can create:
-
-  * `BadRequestError` Like this: `new BadRequestError( { errors: errors } )`
-  * `UnauthorizedError`
-  * `ForbiddenError`
-  * `NotFoundError`
-  * `PreconditionFailedError`
-  * `UnprocessableEntityError` Like this: `UnprocessableEntityError( { errors: errors } )`
-  * `NotImplementedError`
-  * `ServiceUnavailableError`. Like this: `ServiceUnavailableError( { originalErr: error } )`
-
-These error constructors are borrowed from the [Allhttperrors](https://npmjs.org/package/allhttperrors) module -- you should its short and concise documentation. The short version is that `errorObject.httpError` will be set, and the constructor can have either a string or an object as parameters.
-
-The error objects are all pretty standard. However:
-
-* `ServiceUnavailableError` errors will be created with an `originalErr` parameter containing the original error object. For example if the database server goes down, the module will return a `ServiceUnavailableError` error object which will include the original MongoDB error in its `originalErr` parameter.
-
-* `UnprocessableEntityError` and `BadRequestError` are both created when field validation fails. They error objects will always have an `errors` attribute, which will represent an array of errors as they were returned by SimpleSchema. For example:
-
-.
-
-    [
-      { field: 'nameOfFieldsWithProblems', message: 'Message to the user for this field' },
-      { field: 'nameOfAnotherField', message: 'Message to the user for this other field' },
-    ]
-
-
-JsonRestStores only ever throws (generic) Javascript errors if the class constructor was called incorrectly, or if an element in `paramIds` is not found within the schema. So, it will only ever happen if you use the module incorrectly. Any other case is chained through.
-
-## Error management
-
-At some point in your program, one of your callbacks might have the dreaded `err` first parameter set to an error rather than null. This might happen  with your database driver (for example your MongoDB process dies), or within your own module (validation after a `PUT` fails).
-
-JsonRestStores allows you to decide what to do when this happens.
-
-### `chainErrors`
-
-You can control what happens when an error occurs with the `chainErrors` attribute. There are three options:
-
-#### `all`
-
-If you have `chainErrors: all` in your class definition: JsonRestStores will simply call `next( error )` where `error` is the error object. This means that it will be up to another Express middleware to deal with the problem.
-
-#### `none`
-
-If you have `chainErrors: none` in your class definition: if there is a problem, JsonRestStores will _not_ call the `next()` callback at all: it will respond to the client directly, after formatting it with the object's `self.formatErrorResponse()` method (see below).
-
-Do this if you basically want to make absolute sure that every single request will end right there, whether it went well or not. If you do this, you might want to define your own `self.formatErrorResponse()` method for your store classes, so that the output is what you want it to be.
-
-#### `nonhttp`
-
-If you have `chainErrors: nonhttp` in your class definition, JsonRestStores will only call `next( err ) ` for non-HTTP errors --  any other problem (like your MongoDB server going down) will be handled by the next Express error management middleware. Use this if you want the server to respond directly in case of an HTTP problem (again using `self.formatErrorResponse()` to send a response to the client), but then you want to manage other problems (for example a MongoDB problem) with Express.
-
-### `self.formatErrorResponse()`
-
-In those cases where you decide to send a response to the client directly (with `chainErrors` being `none` or `nonhttp`), the server will send a response to the client directly. The body of the response will depend on what you want to send back.
-
-The stock `self.formatErrorResponse()` method will simply return a Json representation of the error message and, if present, the `errors` array within the error.
-
-### `self.logError()`
-
-Whenever an error happens, JsonRestStore will run `self.logError()`. This happens regardless of what `self.chainErrors` contains (that is, whether the error is chained up to Express or it's managed internally). Note that there is no `callback` parameter to this method: since it's only a logging method, if it fails, it fails.
 
 # Store APIs
 
