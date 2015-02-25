@@ -306,6 +306,8 @@ var Store = declare( Object,  {
 
     }
 
+    // TODO: Check what happens when sorting for a nested field with a 1:n relationship with table (?!)
+
     // Set the 'SortBy', 'ranges' and 'conditions' in
     // the options, based on the passed headers
 
@@ -324,45 +326,40 @@ var Store = declare( Object,  {
       }
     }
 
-
     return options;
 
 
     function parseSortBy( req ){
-
       var url_parts = url.parse( req.url, false );
       var q = url_parts.query || '';
-      var sortField;
-      var tokens, subTokens, subToken, subTokenClean, i;
       var sortObject = {};
+      var sortBy, tokens, token, tokenClean;
+      var sortDirection, sortField;
 
-      q.split( '&' ).forEach( function( item ) {
+      result = querystring.decode( q );
+      sortBy = result.sortBy;
 
-        var tokens = item.split('=');
-        var tokenLeft = tokens[0];
-        var tokenRight = tokens[1];
+      // No sort options: return an empty object
+      if( ! sortBy ) return {};
 
-        if(tokenLeft === 'sortBy'){
-          subTokens = tokenRight.split(',');
-          for( i = 0; i < subTokens.length; i++ ){
+      tokens = sortBy.split(',');
+      for( i = 0; i < tokens.length; i++ ){
 
-            subToken = subTokens[ i ];
-            subTokenClean = subToken.replace( '+', '' ).replace( '-', '' );
+        token = tokens[ i ];
+        tokenClean = token.replace( '+', '' ).replace( '-', '' );
 
-            if( self.sortableFields.indexOf( subTokenClean ) === -1 ){
-              throw( new Error("Field selected for sorting invalid: " + subTokenClean) );
-            }
-
-            if( subTokens[ i ][ 0 ] === '+' || subTokens[ i ][ 0 ] === '-' ){
-              var sortDirection = subTokens[ i ][ 0 ] == '-' ? -1 : 1;
-              sortField = subTokens[ i ].replace( '+', '' ).replace( '-', '' );
-              sortObject[ sortField ] = sortDirection;
-            }
-          }
+        if( self.sortableFields.indexOf( tokenClean ) === -1 ){
+          throw( new Error("Field selected for sorting invalid: " + tokenClean) );
         }
-      });
+
+        if( tokens[ i ][ 0 ] === '+' || tokens[ i ][ 0 ] === '-' ){
+          sortDirection = tokens[ i ][ 0 ] == '-' ? -1 : 1;
+          sortField = tokens[ i ].replace( '+', '' ).replace( '-', '' );
+          sortObject[ sortField ] = sortDirection;
+        }
+      }
       return sortObject;
-    }
+    }      
 
     function parseRangeHeaders( req ){
 
