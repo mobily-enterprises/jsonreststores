@@ -832,7 +832,7 @@ You can decide how the elements in `onlineSearchSchema` will be turned into a se
 
       queryConditions: { 
         name: 'eq', 
-        args: [ 'name', '#name#']
+        args: [ 'surname', '#surname#']
       },
 
       storeName: 'managers',
@@ -849,6 +849,15 @@ You can decide how the elements in `onlineSearchSchema` will be turned into a se
     managers.setAllRoutes( app );
 
 Basically, `queryConditions` is automatically generated with the `name` field in the database that matches the `name` entry in the query string (that's what `#name#` stands for).
+
+Remember that here:
+
+    queryConditions: { 
+      name: 'eq', 
+      args: [ 'surname', '#surname#']
+    },
+
+`surname` refers to the database field `surname`, whereas `#surname#` refers to the query string's `surname` element.
 
 If you had defined both `name` and `surname` as searchable, `queryConditions` would have been generated as:
 
@@ -1226,6 +1235,17 @@ Positioning will have to take into account `workspaceId` when repositioning: if 
 
 SimpleDbLayerMixin leverage on the positioning features of SimpleDbLayer to implement element positioning in JsoNRestStores.
 
+
+# `deleteAfterGetQuery`: automatic deletion of records after retrieval
+
+If your store has the `deleteAfterGetQuery` set to `true`, it will automatically delete any elements fetched with a `getQuery` method (that is, a `GET` run without the final `id`, and therefore fetching elements based on a filter).
+
+This is especially useful when a store has, for example, a set of records that need to be retrieved by a user only once (like message queues).
+
+# `hardLimitOnQueries`: limit the number of records
+
+If your store has the `hardLimitOnQueries` set, any `getQuery` method (that is, a `GET` without the final `id`, and therefore fetching elements based on a filter) will never return more than `hardLimitOnQueries` results (unless `options.skipHardLimitOnQueries` is `true`).
+
 # Stores and collections when using SimpleDbLayerMixin
 
 When using SimpleDbLayerMixin (which is the most common case, unless you are [implementing data manipulation functions on your own](TODO)), a SimpleDbLayer collection will be created using the following attributes passed to the store:
@@ -1252,7 +1272,130 @@ Note that _if a collection with a matching `collectionName` was already defined,
   * `store.strictSchemaOnFetch`
 
 This allows you to potentially define SimpleDbLayer's layers beforehand, and then use them in JsonRestStores.
-If you decide to do so, remember to set `fetchChildrenByDefault` to true, and `schemaError` to `e.UnprocessableEntityError`. You will also need to set your own `positionField` and `positionBase` manually if you want positioning to happen. Generally speaking, it's just easier and better to let JsonRestStores create your SimpleDbLayer collections.
+If you decide to do so, remember to set `fetchChildrenByDefault` to true, and `schemaError` to `e.UnprocessableEntityError` (where `e` comes from the module `allhttperrors`). You will also need to set your own `positionField` and `positionBase` manually if you want positioning to happen. Generally speaking, it's just easier and better to let JsonRestStores create your SimpleDbLayer collections.
+
+# Automatic schema changes done by SimpleDbLayerMixin
+
+The `searchable` attribute in the schema is really important: in SimpleDbLayer, for example, only `searchable` fields are actually searchable, and indexes are created automatically for them.
+
+When defining a schema in JsonRestStores with SimpleDbLayerMixin mixed in, the following happens automatically:
+
+* Any element in paramIds will be marked as `searchable` in the store's schema. This means that writing:
+
+````Javascript
+    var Managers= declare( Store, {
+
+      schema: new Schema({
+        workspaceId: { type: 'id' },
+        name       : { type: 'string', trim: 60 },
+        surname    : { type: 'string', trim: 60 },
+      }),
+
+      position: true,
+
+      storeName: 'managers',
+      publicURL: '/workspaces/:workspaceId/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+    var managers = new Managers();
+````
+
+Is the same as writing:
+
+````Javascript
+    var Managers= declare( Store, {
+
+      schema: new Schema({
+        id         : { type: 'id', searchable: true },
+        workspaceId: { type: 'id', searchable: true },
+        name       : { type: 'string', trim: 60 },
+        surname    : { type: 'string', trim: 60 },
+      }),
+
+      position: true,
+
+      storeName: 'managers',
+      publicURL: '/workspaces/:workspaceId/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+    var managers = new Managers();
+````
+
+Note that `searchable` is set both for `id` and for `workspaceId` (which are the store's `paramIds`, as they are defined in `publicURL`).
+
+* Any database field mentioned _anywhere_ in `queryConditions` will also be made searchable in the main schema. This means that writing:
+
+    var Managers = declare( Store, {
+
+      schema: new Schema({
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', trim: 60 }, // Note: surname is NOT searchable
+      }),
+
+      onlineSearchSchema: new Schema( {
+        surnameSearch: { type: 'string', trim: 60 },
+      }),
+
+      queryConditions: { 
+        name: 'startsWith', 
+        args: [ 'surname', '#surnameSearch#']
+      },
+
+      storeName: 'managers',
+      publicURL: '/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+
+    var managers = new Managers(); 
+    managers.setAllRoutes( app );
+
+Is the same as writing:
+
+    var Managers = declare( Store, {
+
+      schema: new Schema({
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', searchable: true, trim: 60 }, // Note: surname IS searchable
+      }),
+
+      onlineSearchSchema: new Schema( {
+        surnameSearch: { type: 'string', trim: 60 },
+      }),
+
+      queryConditions: { 
+        name: 'startsWith', 
+        args: [ 'surname', '#surnameSearch#']
+      },
+
+      storeName: 'managers',
+      publicURL: '/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+
+    var managers = new Managers(); 
+    managers.setAllRoutes( app );
+
+This is accomplished by SimpleDbLayerMixin by actually going through the whole `queryConditions` and checking that every database field mentioned in it is made searchable in the main schema.
 
 # Inheriting a store from another one (advanced)
 
@@ -1314,7 +1457,7 @@ This allows you to define a base store, and derive stores off that base store. F
     stores.usersWorkspaces = new UsersWorkspaces();
 ````
 
-In this example, `WorkspacesUsersBase` is used as a starting point, defining `schema` and `idProperty`. Note that all `id` fields are defined in the schema manually (since there was no `paramIds` nor `publicURL` defined to do it magically). `WorkspacesUsersBase` also defines `workspacesUsers` as `collectionName` (otherwise, `collectionName` would have been `workspacesUsersBase`). Two specialised stores are then inherited from `WorkspacesUsersBase`: `WorkspacesUsers` and `UsersWorkspaces`. They both enable `handleGetQuery` and are assigned different URLs, and therefore have different paramIds; however, they both use the same database collection called `workspacesUsers`.
+In this example, `WorkspacesUsersBase` is used as a starting point, defining `schema` and `idProperty`. Note that all `id` fields are defined in the schema manually (since there was no `paramIds` nor `publicURL` defined to do it automagically). `WorkspacesUsersBase` also defines `workspacesUsers` as `collectionName` (otherwise, `collectionName` would have been `workspacesUsersBase`). Two specialised stores are then inherited from `WorkspacesUsersBase`: `WorkspacesUsers` and `UsersWorkspaces`. They both enable `handleGetQuery` and are assigned different URLs, and therefore have different paramIds; however, they both use the same database collection called `workspacesUsers`.
 
 When you inherit a store using SimpleDbLayerMixin, you need to remember that **collections are always recycled if they were already defined by a previous store**.
 
@@ -1326,7 +1469,7 @@ This means that the following attributes of the store will be reused (and redefi
 * hardLimitOnQueries (from the store's `hardLimitOnQueries` attribute)
 * strictSchemaOnFetch (from the store's `strictSchemaOnFetch` attribute)
 
-This means that a derived store cannot redefine `idProperty`, `schema`, `hardLimitOnQueries`, `strictSchemaOnFetch` (since they are used to create the store when the base store is created).
+As a consequence, a derived store cannot redefine `idProperty`, `schema`, `hardLimitOnQueries`, `strictSchemaOnFetch` (since they are used to create the store when the base store is created).
 
 This also means that position grouping will depend on the _base_ constructor's `paramIds`, since the collection's `positionBase` will depend _only_ on the base class' `paramIds`. (Note: `positionBase` in a collection defines which fields are used to 'group' ordering, see [how repositioning works in SimpleDbLayer](https://github.com/mercmobily/simpledblayer#nested-record-positioning)). This will only affect you if you are creating derived stores with positioning.
 
@@ -1410,69 +1553,176 @@ The stock `self.formatErrorResponse()` method will simply return a Json represen
 
 Whenever an error happens, JsonRestStore will run `self.logError()`. This happens regardless of what `self.chainErrors` contains (that is, whether the error is chained up to Express or it's managed internally). Note that there is no `callback` parameter to this method: since it's only a logging method, if it fails, it fails.
 
+# Data preparation hooks
 
+With JsonRestStores, you are able to redefine specific methods to enrich the functionality of your stores. There are two classes of methods:
+
+* Methods to manipulate data fetched from external sources. They are:
+
+  prepareBody: function( request, method, body, cb ){ cb( null, body ); }
+  extrapolateDoc: function( request, method, doc, cb ){ cb( null, doc ); }
+  prepareBeforeSend: function( request, method, doc, cb ){ cb( null, doc ); }
+
+* Methods to hook code at specific stages in the request's lifecycle. They are:
+
+  afterValidate: function( request, method, p, cb ){ cb( null ); }
+  afterCheckPermissions: function( request, method, p, cb ){ cb( null ); }
+  afterDbOperation: function( request, method, p, cb ){ cb( null ); }
+  afterEverything: function( request, method, p, cb ) { cb( null ); }
+
+All of these methods have the (very important) `request` object in common. For each request made by the client, a new `request` object is created. At the end of the request, the `request` object is destroyed.
+
+The `request` object has the following attributes:
+
+* `remote`. Set to `true` if the connection actually comes from a remote connection, or `false` if it's made by an API call
+* `_req` and `_res`. Only set if `remote` is true: the values of Express' `req` and `res` variables.
+* `params`. The actual parameters in the query string. For example, a request like this: `PUT /managers/10/cars/20` will have `params` set as `{ managerId: 10, id: 20 }`.
+* `body`. A hash with the values of the `body` parameters in the HTTP request. For example `{ maker: 'Toyota', model: 'Camry' }.
+* `bodyBeforePrepare`, `bodyBeforeValidation`. For methods with a body (like `PUT` and `POST`), a shallow copy of the `body` object before `prepareBody()` is run, and before schema validation is run.
+* `options`. An object with the request options. The contents of this will depend on the method used:
+  * Method `put`:
+    * `putBefore`. If set, and if the store supports positioning, the entry will be placed before the entry with id `putBefore`.
+    * `putDefaultPosition`. If set, and if the store supports positioning, this option will instruct JsonRestStores where to place the entry: `start` or `end`.
+    * `overwrite`. If set to `true`, the `put` will only be successful if the record is an existing one. If set to `false`, the `put` will only be successful if the record didn't exist. If not set, the `put` will work either way.
+  * Method `post`:
+    * `putBefore`. Same as the method `put`
+    * `putDefaultPosition`. Same as the method `put`.
+  * Method `getQuery`:
+    * `conditions`. An hash object containing the filter criteria, which will have to match `onlineSearchSchema`.
+    * `ranges`. It can have `skip` and `count`.
+    * `sort`. An hash that defines how to sort the query. For example `{ model: -1, maker: 1 }`. Note that each key needs to be listed in the `sortableFields` element of the store.
+    * `skipHardLimitOnQueries`. If set to `true`, the attribute `hardLimitOnQueries` will be ignored when making `getQuery` calls.
+    * `delete`. If set to `true`, each record will be deleted after retrieval. Note that if `this.deleteAfterGetQuery` is set to `true`, then `delete` will automatically be set to true for each request.
+
+Internally, JsonRestStores only ever uses `res.setHeader()` (to set the location), `res.json()` (to send Json data back to the client) and `res.send()` (to send empty values back to the client).
+
+## Data manipulation methods
+
+These hooks share the same signature (the third parameter is always the data to be manipulated), and must call the callback passing an object containing computed data; to minimise side effects, it's best to base the new data on a new object; to facilitate the shallow copying process, JsonRestStores provides the `_co()` method (which stands for _C_opy _O_bject). For example, to implement `prepareBody()` you would write:
+
+    prepareBody: function( request, method, body, cb ){
+
+      // Make a copy of body into newBody
+      var newBody = this._co( body );
+
+      // Some elaboration.
+      newBody.headerName = newBody.headerName + "." + newBody.name;
+
+      // Forces `createdBy` to the value passed to the session
+      if( request.remote ) newBody.createdBy = request._req.session.userId;
+
+      cb( null, newBody );
+    },
+
+
+###  `prepareBody()`
+
+`prepareBody()` is called with the data passed from the client _as is_ (no casting, nor anything). Any manipolation done by `prepareBody()` will need to satisfy the schema, or validation will actually fail. This hook is useful if you want to force some fields to specific values, maybe depending on a session variable for the specific user. For example, when a record is created, you will have `creatorId` in the schema, but you won't want users to be able to specify any ID there. So, you can simply assign body.creatorId in the `prepareBody()` hook.
+
+The parameters are:
+
+ * `request`. The `request` object for this REST call.
+ * `method`. It can be `post` or `put`.
+ * `body`. The request's body.
+ * `cb( err, body ) `. The callback, which will need to be passed a `body` object as its second parameter.
+
+### `extrapolateDoc()`
+
+You can use this method to manipulate your data every time it's fetched from the data source. Fetching can happen for a number of reasons:
+
+* in `post`: after a new item is written, it's then fetched and then sent it to the client after `extrapolateDoc()`
+* in `putNew`: after a new item is written, it's then fetched and then sent it to the client after `extrapolateDoc()`
+* in `putExisting`: `extrapolateDoc()` is actually called twice: the first time after the item is fetched, and then again when it's re-fetched after writing it to the database
+* in `get`: when an item is fetched
+* in `getQuery`: when several items are fetched
+* in `delete`: when an item is about to be deleted, it's fetched first
+
+Basically, think of `extrapolateDoc` as a hook to manipulate whatever is in the database in order to add fields or dynamic information as needed.
+
+The parameters are:
+
+ * `request`. The `request` object for this REST call.
+ * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`
+ * `doc`. The record after fetching
+ * `cb( err, doc ) `. The callback, which will need to be passed a `doc` object as its second parameter.
+
+### `prepareBeforeSend()`
+
+You can use this method to manipulate your data just before it's sent over to the client requesting it.
+
+Think of `extrapolateDoc` as a hook to make very-last-nanosecond changes to the result object before it's sent over to the client.
+
+The difference from `extrapolateDoc()` is conceptual: `extrapolateDoc()` extracts the right information from the data source, whereas `prepareBeforeSend()` makes very-last-nanosecond changes to keep the client happy.
+
+The parameters are:
+
+ * `request`. The `request` object for this REST call.
+ * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`
+ * `doc`. The entry after fetching
+ * `cb( err, doc ) `. The callback, which will need to be passed a `doc` object as its second parameter.
+
+## Stage methods
+
+Stage methods allow you to hook yourself to several stages of the request processing stages. You can manipulate the `request` object, or can simply make things happen.
+
+They all share the same signature: (`request, method, p, cb`). The `p` parameter is an object, and its elements will depend on the call and the method for that specific call.
+
+### `afterValidate()`
+
+This method is called once validation is completed.
+
+ * `request`. The `request` object for this REST call.
+ * `method`. It can be `post`, `put` or `getQuery`. 
+ * `p`. The method's parameters. In this case, it's always empty (it's there for consistency with the rest of the API)
+ * `cb( err ) `. The callback
+
+### `afterCheckPermissions()`
+
+This method is called once permission checks have passed.
+
+ * `request`. The `request` object for this REST call.
+ * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`. 
+ * `p`. The method's parameters. Its contents will depend on `method`:
+   * For methods `post`, `putNew`: `p` is empty.
+   * For methods `putExisting`, `getQuery`, `get`, `delete`: `p` has the following keys: `fullDoc` (the data as it was fetched from the database), `doc` (`fullDoc` after `extrapolateDoc()`).
+ * `cb( err ) `. The callback
+
+### `afterDbOperation()`
+
+This method is called once data is read from, or written to, the data source for that request.
+
+ * `request`. The `request` object for this REST call.
+ * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`. 
+ * `p`. The method's parameters. Its contents will depend on `method`:
+   * For methods `post`, `putNew`, `delete`, `get`: `p` has the key `fullDoc` (the data as it was fetched from the database).
+   * For method `putExisting`: `p` has the following keys: `fullDoc` (the data as it was fetched from the database before overwriting it), `doc` (`fullDoc` after `extrapolateDoc()`), `fullDocAfter` (the data as it was fetched from the database after overwriting it).
+   * For methods `getQuery`: `p` has the key `fullDocs`, which is an array with all of the data as it was fetched from the database
+ * `cb( err ) `. The callback
+
+### `afterEverything()`
+
+This method is the very last one called before sending the response out.
+
+ * `request`. The `request` object for this REST call.
+ * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`. 
+ * `p`. The method's parameters. Its contents will depend on `method`:
+   * For methods `post`, `putNew`, `delete`, `get`: `p` has the following keys: `fullDoc` (the data as it was fetched from the database), `doc` (`fullDoc` after `extrapolateDoc()`), `preparedDoc`  (`doc` after `prepareBeforeSend()`).
+   * For method `putExisting`: `p` has the following keys: `fullDoc` (the data as it was fetched from the database before overwriting it), `doc` (`fullDoc` after `extrapolateDoc()`), `fullDocAfter` (the data as it was fetched from the database after overwriting it), `docAfter` (`fullDocAfter` after `extrapolateDoc()`), `preparedDoc`  (`docAfter` after `prepareBeforeSend()`, ).
+   * For method `getQuery`: `fullDocs` (an array with all of the data as it was fetched from the database), `doc` (`fullDocs` after each item is gone through `extrapolateDoc()`), `preparedDocs`  (`docs` after each item is gone through `prepareBeforeSend()`).
+ * `cb( err ) `. The callback
 
 # DOCUMENTATION UPDATED UP TO THIS POINT
 
 # TODO:
- * Document what happens to schema thanks to SimpleDbLayerMixin (fields made searchable)
- * Document properly all of the hooks (2 types)
- * Document what happens when a request arrives
- * Document _exactly_ how to implement implement*** fields
+ * Document indexing functions
  * Document _exactly_ how the API works
-
+ * Document _exactly_ how to write implement*** fields
+ * Document what happens when a request arrives
 
 # Important methods and attributes you can override
 
 The basic `Store` class uses a rather long list of stock methods to complete requests. Some of them are there so that you can override them.
 
-## Data manipulation
-
-### `extrapolateDoc()`
-
-In the documentation and the code, you will often see that two versions of the object are passed: `doc` and `fullDoc`. This is because JsonRestStores allows you to define a method, `extrapolateDoc()`, which will extrapolate the information you actually want to read. Basically, `extrapolateDoc()` is run every time a record is fetched from the database.
-
-You can use this method to manipulate your data every time it's fetched from the database. However, the resulting data _must still conform with the schema after manipulation _, or JsonRestStore will get into an error.
-
-Note that permission functions have both `doc` and `fullDoc` so that they can easily make an "informed" decision on granting or denying access regardless of how the data was manipulated by `extrapolateDoc()`.
-
-The method's signature is:
-
-    extrapolateDoc( request, fullDoc, cb( err, doc ) )`
-
-It's important that you create a copy of `fullDoc` rather than changing it directly. E.g.:
-
-...this is wrong:
-    
-    extrapolateDoc: function( request, fullDoc, cb){
-      // WRONG!!! This will effectively change fullDoc, which IS a side-effect
-      doc = fullDoc;
-      doc.name = doc.name.toUpperCase();
-      cb( null, name );
-    }
-
-...this is correct:
-
-    extrapolateDoc: function( request, fullDoc, cb){
-      // CORRECT! This will create a copy of fullDoc, and THEN manipulate it
-      var doc = {};
-      for( var k in fullDoc ) doc[ k ] = fullDoc[ k ];
-      doc.name = doc.name.toUpperCase();
-      cb( null, name );
-    }
-
-
-### `prepareBeforeSend( request, doc, cb )`(
-
-The method `prepareBeforeSend()` does exactly what it says: it will manipulate `doc` just before it's sent over to the client who requested it. This is especialy useful if you want to apply last minute changes to the data you send.
-
-An important difference between `prepareBeforeSend()` and `extrapolateDoc()` is that the data in `prepareBeforeSend()` does __not__ have to conform to the schema at all. This is the right time to add _anything_ you want to it without worrying about breaking the schema.
-
-The method's signature is:
-
-    prepareBeforeSend( request, doc, cb )
-
-The function will manipulate `doc` directly, and will just run `cb( err )` (no extra parameters)
 
 ## Indexing functions
 
@@ -1485,15 +1735,6 @@ This function will run SimpleDbLayer's generateSchemaIndexes(), as well as addin
 * Will create an index with all `idParams`
 * Will create a new index for each searchable field, in the form `workspaceId + searchableField` since most searches will be run by users within their `workspaceId` domain
 * Will create a compound index with `paramIds + field` for each `sortable` field
-
-
-### `deleteAfterGetQuery`
-
-If set to `true`, any "get query" method will have the side effect of deleting the fetched records from the database. Whatever is set here will be used as the default for `GetQuery` calls from the API.
-
-### `hardLimitOnQueries`
-
-This is the limit of the number of elements that can be returned by a query without ID (GetQuery). The default is 50. 
 
 ## Permissions
 
@@ -1571,35 +1812,6 @@ Note that if your store is derived from another one, and you want to preserve yo
  
 This will ensure that the inherited `checkPermissionsDelete()` method is called and followed, and _then_ further checks are carried on.
 
-## "Prepare Body" and "after afterValidate" hooks
-
-These hooks are there so that you can manpulate the data passed to your store both _before_ it's validated against the schema, and _after_ it's been validated.
-
-When data is submitted to the store, sometimes you want to manipulate it *before* it gets validated against the schema. For example, your application might pass extra parameters (which are not part of the schema) that will influence the actual schema fields. Or, you might want to manipulate the passed data _after_ validation (which is useful if you want to make absolute sure that all the fields are cast and valid).
-
-* `prepareBody( request, body, method, cb )`
-* `afterValidate( request, body, method, cb )`
-
-In both hooks, `method` can be either `"put"` or `"post"`.
-
-`prepareBody()` is called with the data passed from the client _as is_ (no casting, nor anything). Any manipolation done by prepareBody will need to satisfy the schema, or validation will actually fail. This hook is useful if you want to force some fields to specific values, maybe depending on a session variable for the specific user. For example, when a record is created, you will have `creatorId` in the schema, but you won't want users to be able to specify any ID there. So, you can simply assign body.creatorId in the `prepareBody()` hook.
-
-`afterValidate()` is called once validation is completed. This hook is especially useful if you want to make some cross-check on other stores (for example that IDs are correct, etc.); since everything is cast and validated, all IDs are already of the right type.
-
-## "After" hooks
-
-These functions are handy where, in your own applications, you want "something" to happen after one of those operations is complete.
-
-You can redefine them as you wish.
-
- * `afterPutNew( request, doc, fullDoc, overwrite, cb )` (Called after a new record is PUT)
- * `afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, overwrite, cb )` (After a record is overwritten with PUT)
- * `afterPost( request, doc, fullDoc, cb )` (After a new record is POSTed)
- * `afterDelete( request, doc, fullDoc, cb )` (After a record is deleted)
- * `afterGet( request, doc, fullDoc, cb  )` (After a record is retrieved)
-
-Note that these hooks are run **after** data has been written to the database, but **before** a response is provided to the user.
-
 
 
 
@@ -1638,92 +1850,6 @@ When a request comes from a remote operation, the `options` object is populated 
 
 When using API functions, can pass directly pass `overwrite`, `sort`, `ranges`, `filters`, `skipHardLimitOnQueries`.
 
-**Note:** When using `GetQuery()` from the API, you are not limited to searching for fields defined in the `onlineSearchSchema` (a limitation that is present for all remote queries for obvious security reasons). When using `GetQuery()` from the API, you can search for any field _either_ in the `schema` _or_ in the `onlineSearchSchema`.
-
-Here is a detailed explanation of these options:
-
-## overwrite
-
-This option applies to Put calls.
-
-* if `options.overwrite` is not set, the `Put` request will happily overwrite an existing record, or create a new one.
-* if `options.overwrite` is set:
- * If it's set to `false`, then the module will only allow the creation of new records on the database
- * If it's set to `true`, then the module will only allow overwriting existing records on the database
-
-Example:
-
-    // Will never overwrite an existing workspace
-    Workspaces.Put( someId, { workspaceName: "Some workspace name" }, { overwrite: false }, function( res, err ){
-
-For non-API calls, this option is set by the headers 'if-match' and 'if-none-match'.
-
-# delete
-
-This options applies to GetQuery calls.
-
-If `delete` is set to true, then the fetched records will be deleted after fetching. Whatever is returned by GetQuery will no longer be available on the database.
-
-The deletion is more of an "attempt" to delete them. If deletion fails, GetQuery will still return the fetched values and deletion will fail silently.
-
-If `delete` is not passed, then the store's default, set by `deleteAfterGetQuery`, will be used.
-
-## filters
-
-This option applies to GetQuery calls.
-
-It's a simple object, where the keys are the field names, and their respective values are the filters. For example:
-
-    { workspaceName: "Booker" }
-
-A typical example could be:
-
-    Workspaces.GetQuery( { conditions: { workspaceName: 'Booker'} }, function( err, doc ) {
-    })
-
-For non-API calls, this option is set by the query string in the URL.
-
-## ranges
-
-This option applies to GetQuery calls.
-
-Ranges are important as they allow you to define a limit on the number of records returned.
-
-It represents an objects with the keys `rangeFrom`, `rangeTo`, `limit`. E.g.:
-
-    // Will return records with workspaceName starting with "Boo" 
-    Workspaces.GetQuery( { 
-      conditions: { workspaceNameStartsWith: 'Boo' }, 
-      ranges: { from: 0, to: 24 }
-    } , function( err, doc ) {
-      // ...
-    });
-
-For non-API calls, ranges are set by the 'range' headers. For example `Range: items=0-24`. Note that the server will also return, after a range query, a header that will detail the range returned. For example `Content-Range: items 0-24/66`
-
-## sort
-
-This option applies to GetQuery calls.
-
-This option is an object where each key is the key you want to sort by, and that key's value is either `1` (ascending order) or `-1` (descending order).
-
-For example:
-
-    // Will return records with workspaceName starting with "Boo" and workGroup equals to "Full match"
-    Workspaces.GetQuery( {
-      conditions: { workspaceNameStartsWith: 'Boo' },
-      sort: { workspaceName: 1, score: -1 },
-    } , function( err, doc ) {
-      // ...
-    });
-
-For non-API calls, this option is set by the query string in the URL. E.g. `/workspaces/?workspaceName=something&sortBy=+workspaceName,-score`.
-
-## skipHardLimitOnQueries
-
-This option applies to GetQuery calls.
-
-If set to `true`, then the `hardLimitOnQueries` will be ignored. Use with care: returning large number of records will result in memory hogging.
 
 # Behind the scenes
 
