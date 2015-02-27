@@ -1018,38 +1018,42 @@ var Store = declare( Object,  {
     
         if( ! fullDoc ) return self._sendError( request, next, new self.NotFoundError());
     
-        self.extrapolateDoc( request, 'get', fullDoc, function( err, doc) {
+        self.afterDbOperation( request, 'get', { fullDoc: fullDoc }, function( err ){
           if( err ) return self._sendError( request, next, err );
-    
-          // Check the permissions 
-          self._checkPermissionsProxy( request, 'get', { doc: doc, fullDoc: fullDoc }, function( err, granted ){
+
+          self.extrapolateDoc( request, 'get', fullDoc, function( err, doc) {
             if( err ) return self._sendError( request, next, err );
-        
-            if( ! granted ) return self._sendError( request, next, new self.ForbiddenError() ); 
-        
-            self.afterCheckPermissions( request, 'get', { doc: doc, fullDoc: fullDoc }, function( err ){
+      
+            // Check the permissions 
+            self._checkPermissionsProxy( request, 'get', { doc: doc, fullDoc: fullDoc }, function( err, granted ){
               if( err ) return self._sendError( request, next, err );
           
-              // "preparing" the doc. The same function is used by GET for collections 
-              self.prepareBeforeSend( request, 'get', doc, function( err, preparedDoc ){
+              if( ! granted ) return self._sendError( request, next, new self.ForbiddenError() ); 
+          
+              self.afterCheckPermissions( request, 'get', { doc: doc, fullDoc: fullDoc }, function( err ){
                 if( err ) return self._sendError( request, next, err );
-          
-                self.schema.cleanup( doc, 'doNotSave' );
-          
-                self.afterEverything( request, 'get', { preparedDoc: preparedDoc, doc: doc, fullDoc: fullDoc }, function( err ) {
+            
+                // "preparing" the doc. The same function is used by GET for collections 
+                self.prepareBeforeSend( request, 'get', doc, function( err, preparedDoc ){
                   if( err ) return self._sendError( request, next, err );
-                      
-                  // Remote request: set headers, and send the doc back
-                  if( request.remote ){
-          
-                    // Send "prepared" doc
-                    request._res.json( 200, preparedDoc );
-          
-                    // Local request: simply return the doc to the asking function
-                  } else {
-                     next( null, preparedDoc );
-                  }
-          
+            
+                  self.schema.cleanup( doc, 'doNotSave' );
+            
+                  self.afterEverything( request, 'get', { preparedDoc: preparedDoc, doc: doc, fullDoc: fullDoc }, function( err ) {
+                    if( err ) return self._sendError( request, next, err );
+                        
+                    // Remote request: set headers, and send the doc back
+                    if( request.remote ){
+            
+                      // Send "prepared" doc
+                      request._res.json( 200, preparedDoc );
+            
+                      // Local request: simply return the doc to the asking function
+                    } else {
+                       next( null, preparedDoc );
+                    }
+            
+                  });
                 });
               });
             });
@@ -1249,7 +1253,12 @@ var Store = declare( Object,  {
     request.remote = false;
     request.body = {};
     request.params = {};
-    request.options = options;
+
+    // Make up `options`, with `delete` set to whatever the user passed,
+    // OR the store's default `deleteAfterGetQuery`
+    var newOptions = this._co( options );
+    newOptions.delete = newOptions.delete || !!this.deleteAfterGetQuery;
+    request.options = newOptions;
 
     // Actually run the request
     this._makeGetQuery( request, next );
@@ -1410,46 +1419,50 @@ Store.OneFieldStoreMixin = declare( Object,  {
     
         if( ! fullDoc ) return self._sendError( request, next, new self.NotFoundError());
 
-        // Manipulate fullDoc: at this point, it's the WHOLE database record,
-        // whereas I only want returned paramIds AND the piggyField
-        for( var field in fullDoc ){
-          if( ! self.paramIds[ field ] && field != self.piggyField ) delete fullDoc[ field ];
-        }
-
-        self.extrapolateDoc( request, 'get', fullDoc, function( err, doc) {
+        self.afterDbOperation( request, 'get', { fullDoc: fullDoc }, function( err ){
           if( err ) return self._sendError( request, next, err );
-    
-          // Check the permissions 
-          self._checkPermissionsProxy( request, 'get', { doc: doc, fullDoc: fullDoc }, function( err, granted ){
-            if( err ) return self._sendError( request, next, err );
-        
-            if( ! granted ) return self._sendError( request, next, new self.ForbiddenError() ); 
 
-            self.afterCheckPermissions( request, 'get', { doc: doc, fullDoc: fullDoc }, function( err ){
+          // Manipulate fullDoc: at this point, it's the WHOLE database record,
+          // whereas I only want returned paramIds AND the piggyField
+          for( var field in fullDoc ){
+            if( ! self.paramIds[ field ] && field != self.piggyField ) delete fullDoc[ field ];
+          }
+
+          self.extrapolateDoc( request, 'get', fullDoc, function( err, doc) {
+            if( err ) return self._sendError( request, next, err );
+      
+            // Check the permissions 
+            self._checkPermissionsProxy( request, 'get', { doc: doc, fullDoc: fullDoc }, function( err, granted ){
               if( err ) return self._sendError( request, next, err );
-             
-              // "preparing" the doc. The same function is used by GET for collections 
-              self.prepareBeforeSend( request, 'get', doc, function( err, preparedDoc ){
+          
+              if( ! granted ) return self._sendError( request, next, new self.ForbiddenError() ); 
+
+              self.afterCheckPermissions( request, 'get', { doc: doc, fullDoc: fullDoc }, function( err ){
                 if( err ) return self._sendError( request, next, err );
-          
-                self.afterEverything( request, 'get', { preparedDoc: preparedDoc, doc: doc, fullDoc: fullDoc }, function( err ) {
+               
+                // "preparing" the doc. The same function is used by GET for collections 
+                self.prepareBeforeSend( request, 'get', doc, function( err, preparedDoc ){
                   if( err ) return self._sendError( request, next, err );
-                      
-                  // Remote request: set headers, and send the doc back
-                  if( request.remote ){
-          
-                    // Send "prepared" doc
-                    request._res.json( 200, preparedDoc );
-          
-                    // Local request: simply return the doc to the asking function
-                  } else {
-                     next( null, preparedDoc );
-                  }
-          
+            
+                  self.afterEverything( request, 'get', { preparedDoc: preparedDoc, doc: doc, fullDoc: fullDoc }, function( err ) {
+                    if( err ) return self._sendError( request, next, err );
+                        
+                    // Remote request: set headers, and send the doc back
+                    if( request.remote ){
+            
+                      // Send "prepared" doc
+                      request._res.json( 200, preparedDoc );
+            
+                      // Local request: simply return the doc to the asking function
+                    } else {
+                       next( null, preparedDoc );
+                    }
+            
+                  });
                 });
               });
             });
-          });_makePu
+          });
         });
       });
     });
@@ -1551,7 +1564,7 @@ Store.OneFieldStoreMixin = declare( Object,  {
                         if( self.paramIds.indexOf( field ) == -1 && field != self.piggyField ) delete fullDocAfter[ field ];
                       }
 
-                      self.afterDbOperation( request, 'putExisting', { fullDoc: fullDoc }, function( err ){
+                      self.afterDbOperation( request, 'putExisting', { doc: doc, fullDoc: fullDoc, fullDocAfter: fullDocAfter }, function( err ){
                         if( err ) return self._sendError( request, next, err );
 
                         self.extrapolateDoc( request, 'putExisting', fullDocAfter, function( err, docAfter ) {
@@ -1579,8 +1592,6 @@ Store.OneFieldStoreMixin = declare( Object,  {
                               }
                             });
                           });
-
-
                         });
                       });
                     });
