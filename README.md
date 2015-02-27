@@ -1582,16 +1582,20 @@ With JsonRestStores, you are able to redefine specific methods to enrich the fun
 
 * Methods to manipulate data fetched from external sources. They are:
 
+````Javascript
     prepareBody: function( request, method, body, cb ){ cb( null, body ); }
     extrapolateDoc: function( request, method, doc, cb ){ cb( null, doc ); }
     prepareBeforeSend: function( request, method, doc, cb ){ cb( null, doc ); }
+````
 
 * Methods to hook code at specific stages in the request's lifecycle. They are:
 
+````Javascript
     afterValidate: function( request, method, p, cb ){ cb( null ); }
     afterCheckPermissions: function( request, method, p, cb ){ cb( null ); }
     afterDbOperation: function( request, method, p, cb ){ cb( null ); }
     afterEverything: function( request, method, p, cb ) { cb( null ); }
+````
 
 All of these methods have the (very important) `request` object in common. For each request made by the client, a new `request` object is created. At the end of the request, the `request` object is destroyed.
 
@@ -1821,10 +1825,6 @@ Note that if your store is derived from another one, and you want to preserve yo
      },
  
 This will ensure that the inherited `checkPermissionsDelete()` method is called and followed, and _then_ further checks are carried on.
-
-
-
-
 
 # Store APIs
 
