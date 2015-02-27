@@ -124,28 +124,6 @@ exports = module.exports = declare( Object,  {
     visitQueryConditions( self.queryConditions );
   },
 
-
-  // *********************************************************************
-  // *** INDEXING FUNCTIONS (STUBS TO THE LAYER'S INDEXING FUNCTIONS)
-  // *********************************************************************
-
-
-  generateStoreAndSchemaIndexes: function( options, cb ){
-
-    var self = this;
-
-    this.dbLayer.generateSchemaIndexes( options, function( err ){
-      if( err ) return cb( err );
-
-      // TODO: check if we need to add more indexes. I think they are all done by simpleDbLayer. Old comment:
-      // * Add new index with { workspaceId: 1, searchableField: 1 } for each searchable if multiHome
-      // * Add new index for paramIds
-      // * MAYBE for each sortable, create paramIds + field
-      cb( null );
-    });
-  },
-
-
   // *********************************************************************
   // *** FUNCTIONS THAT ACTUALLY ACCESS DATA THROUGH THE DB DRIVER
   // ********************************************************************* 
