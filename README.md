@@ -172,6 +172,7 @@ That's it: this is enough to add, to your Express application, a a full store wh
 * `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error.
 * `managers.setAllRoutes( app )` creates the right Express routes to actually activate your stores. Specifically:
 
+````Javascript
     // Make entries in "app", so that the application
     // will give the right responses
     app.get(      url + idName, this.getRequestHandler( 'Get' ) );
@@ -179,6 +180,7 @@ That's it: this is enough to add, to your Express application, a a full store wh
     app.put(      url + idName, this.getRequestHandler( 'Put') );
     app.post(     url,          this.getRequestHandler( 'Post') );
     app.delete(   url + idName, this.getRequestHandler( 'Delete') );
+````
 
 So, the following routes will be defined:
 
@@ -474,9 +476,9 @@ Implementing these methods is important to tell `JsonRestStores` how to actualy 
 
 So when you write:
 
-    var Managers = declare( JsonRestStores, `JsonRestStores.SimpleDbLayerMixin`, {
+    var Managers = declare( JsonRestStores, JsonRestStores.SimpleDbLayerMixin, {
 
-You are creating a constructor function, `Managers`, mixing in the prototypes of `JsonRestStores` (the generic, unspecialised constructor for Json REST stores) and `JsonRestStores.SimpleDbLayerMixin` (which provides working methods actually implementing `implementFetchOne()`, `implementInsert(), etc.).
+You are creating a constructor function, `Managers`, mixing in the prototypes of `JsonRestStores` (the generic, unspecialised constructor for Json REST stores) and `JsonRestStores.SimpleDbLayerMixin` (which provides working methods actually implementing `implementFetchOne()`, `implementInsert()`, etc.).
 
 `SimpleDbLayerMixin` will use the `DbLayer` attribute of the store as the constructor used to create "table" objects, and will manipulate data with them.
 
@@ -722,7 +724,7 @@ It's important to be consistent in naming conventions while creating stores. In 
 
 ## Naming conventions for nested stores    
 
-var Managers = declare( Store, { 
+    var Managers = declare( Store, { 
 
       schema: new Schema({
         // ...
@@ -1274,6 +1276,23 @@ Note that _if a collection with a matching `collectionName` was already defined,
 This allows you to potentially define SimpleDbLayer's layers beforehand, and then use them in JsonRestStores.
 If you decide to do so, remember to set `fetchChildrenByDefault` to true, and `schemaError` to `e.UnprocessableEntityError` (where `e` comes from the module `allhttperrors`). You will also need to set your own `positionField` and `positionBase` manually if you want positioning to happen. Generally speaking, it's just easier and better to let JsonRestStores create your SimpleDbLayer collections.
 
+## A note on indexes
+
+Using SimpleDbLayerMixin implies that you are using an indexed collection. SimpleDbLayer's layer have a method called `generateSchemaIndexes( options )` which will generate indexed for the collections based on the schema. These indexes are most likely all you will ever need. If not, please refer to the [Indexing section in SimpleDbLayer](https://github.com/mercmobily/simpledblayer#indexing) to know more about indexing, remembering that you can always access the SimpleDbLayer instance for a table through `store.dbLayer`.
+
+While developing, you should also remember to run:
+
+    store.dbLayer.generateSchemaIndexes( options, function( err ){
+    // ...
+    });
+
+Alternatively, you can just run one command that will cover all of your collections:
+
+    DbLayer.generateSchemaIndexesAllLayers( options, function( err ){
+    // ...
+    });
+
+
 # Automatic schema changes done by SimpleDbLayerMixin
 
 The `searchable` attribute in the schema is really important: in SimpleDbLayer, for example, only `searchable` fields are actually searchable, and indexes are created automatically for them.
@@ -1335,6 +1354,7 @@ Note that `searchable` is set both for `id` and for `workspaceId` (which are the
 
 * Any database field mentioned _anywhere_ in `queryConditions` will also be made searchable in the main schema. This means that writing:
 
+````Javascript
     var Managers = declare( Store, {
 
       schema: new Schema({
@@ -1363,9 +1383,11 @@ Note that `searchable` is set both for `id` and for `workspaceId` (which are the
 
     var managers = new Managers(); 
     managers.setAllRoutes( app );
+````
 
 Is the same as writing:
 
+````Javascript
     var Managers = declare( Store, {
 
       schema: new Schema({
@@ -1394,6 +1416,7 @@ Is the same as writing:
 
     var managers = new Managers(); 
     managers.setAllRoutes( app );
+````
 
 This is accomplished by SimpleDbLayerMixin by actually going through the whole `queryConditions` and checking that every database field mentioned in it is made searchable in the main schema.
 
@@ -1464,10 +1487,10 @@ When you inherit a store using SimpleDbLayerMixin, you need to remember that **c
 In this particular case, when you run `stores.workspacesUsersBase = new WorkspacesUsersBase();` you are actually creating a SimpleDbLayer collection called `workspacesUsers`. Since derived constructors `WorkspacesUsers` and `UsersWorkspaces` define `workspacesUsers` as their collection, _the collection will be recycled since it already exists_.
 This means that the following attributes of the store will be reused (and redefining them in the derived store will have no effect):
 
-* idProperty (from the store's `idProperty` attribute)
-* schema (from the store's `schema` attribute)
-* hardLimitOnQueries (from the store's `hardLimitOnQueries` attribute)
-* strictSchemaOnFetch (from the store's `strictSchemaOnFetch` attribute)
+* `idProperty` (from the store's `idProperty` attribute)
+* `schema` (from the store's `schema` attribute)
+* `hardLimitOnQueries` (from the store's `hardLimitOnQueries` attribute)
+* `strictSchemaOnFetch` (from the store's `strictSchemaOnFetch` attribute)
 
 As a consequence, a derived store cannot redefine `idProperty`, `schema`, `hardLimitOnQueries`, `strictSchemaOnFetch` (since they are used to create the store when the base store is created).
 
@@ -1559,16 +1582,16 @@ With JsonRestStores, you are able to redefine specific methods to enrich the fun
 
 * Methods to manipulate data fetched from external sources. They are:
 
-  prepareBody: function( request, method, body, cb ){ cb( null, body ); }
-  extrapolateDoc: function( request, method, doc, cb ){ cb( null, doc ); }
-  prepareBeforeSend: function( request, method, doc, cb ){ cb( null, doc ); }
+    prepareBody: function( request, method, body, cb ){ cb( null, body ); }
+    extrapolateDoc: function( request, method, doc, cb ){ cb( null, doc ); }
+    prepareBeforeSend: function( request, method, doc, cb ){ cb( null, doc ); }
 
 * Methods to hook code at specific stages in the request's lifecycle. They are:
 
-  afterValidate: function( request, method, p, cb ){ cb( null ); }
-  afterCheckPermissions: function( request, method, p, cb ){ cb( null ); }
-  afterDbOperation: function( request, method, p, cb ){ cb( null ); }
-  afterEverything: function( request, method, p, cb ) { cb( null ); }
+    afterValidate: function( request, method, p, cb ){ cb( null ); }
+    afterCheckPermissions: function( request, method, p, cb ){ cb( null ); }
+    afterDbOperation: function( request, method, p, cb ){ cb( null ); }
+    afterEverything: function( request, method, p, cb ) { cb( null ); }
 
 All of these methods have the (very important) `request` object in common. For each request made by the client, a new `request` object is created. At the end of the request, the `request` object is destroyed.
 
@@ -1577,7 +1600,7 @@ The `request` object has the following attributes:
 * `remote`. Set to `true` if the connection actually comes from a remote connection, or `false` if it's made by an API call
 * `_req` and `_res`. Only set if `remote` is true: the values of Express' `req` and `res` variables.
 * `params`. The actual parameters in the query string. For example, a request like this: `PUT /managers/10/cars/20` will have `params` set as `{ managerId: 10, id: 20 }`.
-* `body`. A hash with the values of the `body` parameters in the HTTP request. For example `{ maker: 'Toyota', model: 'Camry' }.
+* `body`. A hash with the values of the `body` parameters in the HTTP request. For example `{ maker: 'Toyota', model: 'Camry' }`.
 * `bodyBeforePrepare`, `bodyBeforeValidation`. For methods with a body (like `PUT` and `POST`), a shallow copy of the `body` object before `prepareBody()` is run, and before schema validation is run.
 * `options`. An object with the request options. The contents of this will depend on the method used:
   * Method `put`:
@@ -1598,7 +1621,7 @@ Internally, JsonRestStores only ever uses `res.setHeader()` (to set the location
 
 ## Data manipulation methods
 
-These hooks share the same signature (the third parameter is always the data to be manipulated), and must call the callback passing an object containing computed data; to minimise side effects, it's best to base the new data on a new object; to facilitate the shallow copying process, JsonRestStores provides the `_co()` method (which stands for _C_opy _O_bject). For example, to implement `prepareBody()` you would write:
+These hooks share the same signature (the third parameter is always the data to be manipulated), and must call the callback passing an object containing computed data; to minimise side effects, it's best to base the new data on a new object; to facilitate the shallow copying process, JsonRestStores provides the `_co()` method (which stands for __C__opy __O__bject). For example, to implement `prepareBody()` you would write:
 
     prepareBody: function( request, method, body, cb ){
 
@@ -1714,7 +1737,7 @@ This method is the very last one called before sending the response out.
 # DOCUMENTATION UPDATED UP TO THIS POINT
 
 # TODO:
- * Document indexing functions
+ * Document permissions
  * Document _exactly_ how the API works
  * Document _exactly_ how to write implement*** fields
  * Document what happens when a request arrives
@@ -1723,26 +1746,13 @@ This method is the very last one called before sending the response out.
 
 The basic `Store` class uses a rather long list of stock methods to complete requests. Some of them are there so that you can override them.
 
-
-## Indexing functions
-
-The only indexing function available is:
-
-* `generateStoreAndSchemaIndexes( options, cb )` -- The name speaks for itself. `options` can have `background: true` if you want the operation to run in the background
-
-This function will run SimpleDbLayer's generateSchemaIndexes(), as well as adding store-specific indexes:
-
-* Will create an index with all `idParams`
-* Will create a new index for each searchable field, in the form `workspaceId + searchableField` since most searches will be run by users within their `workspaceId` domain
-* Will create a compound index with `paramIds + field` for each `sortable` field
-
 ## Permissions
 
 By default, everything is allowed: stores allow pretty much anything and anything; anybody can DELETE, PUT, POST, etc. Furtunately, JsonRestStores allows you to decide exactly what is allowed and what isn't, by overriding specific methods.
 
 Each permission function needs to call the callback: if everything went fine, `cb()` will be called with `cb( null, true )`; to fail, `cb( null, false )`.
 
-Here are the functions:
+Here are the method that you can override to deal with permissions:
 
  * `checkPermissionsPost( request, cb )` 
  * `checkPermissionsPutNew( request, cb )`
