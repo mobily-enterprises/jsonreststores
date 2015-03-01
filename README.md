@@ -1916,8 +1916,6 @@ Basically, new object called `request` is creted; `request` will will carry info
 
 Finally, `request._makePut()` is run, passing it the request object. `_makePut()` is where the real magic actually happens.
 
-# DOCUMENTATION UPDATED UP TO THIS POINT
-
 # Naked, non-database stores
 
 JsonRestStores is powerful thanks to `SimpleDbLayerMixin`, which allows you to create database-backed stores in seconds. However, there are times when you want to write a store from scratch without mixing in `SimpleDbLayerMixin`. You might want to create a store that returns virtual values (like the number of online users), or a store that returns a dataset that is fetched from a different backed (a text file, for example) etc.
@@ -2030,6 +2028,9 @@ Its parameters are:
 * `beforeId`. Only used when `where` is `before`: it's the ID of the element.
 
 The callback only have the `err` parameter.
+
+# DOCUMENTATION UPDATED UP TO THIS POINT
+
 
 # TODO:
  * Go through documentation, check that SimpleDbLayerMixin-related explanations are marked as such 
