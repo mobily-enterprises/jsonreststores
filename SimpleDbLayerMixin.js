@@ -247,6 +247,9 @@ exports = module.exports = declare( Object,  {
 
     self.dbLayer.update( conditions, updateObject, { deleteUnsetFields: deleteUnsetFields, multi: false, skipValidation: true }, function( err, howMany, record ){
       if( err ) return cb( err );
+      
+      // There is no point in checking howMany: `record` will be null if record wasn't found anyway,
+      // and that's what we want
       cb( null, record );
     });
   },
@@ -266,7 +269,14 @@ exports = module.exports = declare( Object,  {
       conditions = { name: 'eq', args: [ self.idProperty, request.params[ self.idProperty ]  ] };
     }
 
-    self.dbLayer.delete( conditions, { multi: false, skipValidation: true }, cb );
+    self.dbLayer.delete( conditions, { multi: false, skipValidation: true }, function( err, howMany, record ){
+      if( err ) return cb( err );
+
+      // There is no point in checking howMany: `record` will be null if record wasn't found anyway,
+      // and that's what we want
+      cb( null, record );
+    });
+
   },
 
   _queryMakeDbLayerFilter: function( remote, conditionsHash, sort, ranges, cb ){
