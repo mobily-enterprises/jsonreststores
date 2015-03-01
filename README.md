@@ -1939,7 +1939,7 @@ Looking it from a different perspective, here are the `implement***` methods you
 
 When developing these methods, it's important to make sure that they as expected.
 
-## `implementFetchOne( request, cb )`.
+## `implementFetchOne( request, cb )`
 
 This method is used to fetch a single record from the data source. The attributes taken into consideration in `request` are:
 
@@ -1948,7 +1948,7 @@ This method is used to fetch a single record from the data source. The attribute
 
 The callback `cb()` must be called with the fetched element as its second parameter, or `null` if a match wasn't found.
 
-## `implementInsert( request, forceId, cb )`.
+## `implementInsert( request, forceId, cb )`
 
 This method is used to add a single record to the data source. No attribute is taken into consideration in `request`.
 
@@ -1968,7 +1968,7 @@ If `deleteUnsetFields` is set to `true`, then all fields that are not set in `re
 
 The callback `cb()` must be called with the updated element as its second parameter, or `null` if a match wasn't found.
 
-## `implementDelete( request, cb )`.
+## `implementDelete( request, cb )`
 
 This method is used to delete a single record from the data source. The attributes taken into consideration in `request` are:
 
@@ -1977,7 +1977,7 @@ This method is used to delete a single record from the data source. The attribut
 
 The callback `cb()` must be called with the fetched element as its second parameter, or `null` if a match wasn't found.
 
-## `implementQuery( request, next )`.
+## `implementQuery( request, next )`
 
 This method is used to fetch a set of records from the data source. The attributes taken into consideration in `request` are:
 
@@ -2014,7 +2014,7 @@ This does have the implication that inheriting from a naked store is possible, b
 
 While there is no practical reason, server side, to make sure that `queryConditions` matches the way queries are carried out by the store, it's also true that other components, are aware of how the store works in terms of searching; a client-store fetching data, for example, might want to be able to emulate the store's behaviour in terms of searching to keep refreshing of data at minimum. 
 
-## `implementReposition( doc, where, beforeId, cb )`.
+## `implementReposition( doc, where, beforeId, cb )`
 
 This method is used to reposition a field in the data source. It's the only call in the API with a sligtly different signature. This function should only do anything if `store.position` is set to `true`.
 
@@ -2035,8 +2035,6 @@ The callback only have the `err` parameter.
 # TODO:
  * Go through documentation, check that SimpleDbLayerMixin-related explanations are marked as such 
  * Document what happens when a request arrives
-
-
 
 # What happens exactly in each request
 
