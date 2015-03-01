@@ -1738,37 +1738,28 @@ This method is the very last one called before sending the response out.
    * For method `getQuery`: `fullDocs` (an array with all of the data as it was fetched from the database), `doc` (`fullDocs` after each item is gone through `extrapolateDoc()`), `preparedDocs`  (`docs` after each item is gone through `prepareBeforeSend()`).
  * `cb( err ) `. The callback
 
-# DOCUMENTATION UPDATED UP TO THIS POINT
 
-# TODO:
- * Document permissions
- * Document _exactly_ how the API works
- * Document _exactly_ how to write implement*** fields
- * Document what happens when a request arrives
-
-# Important methods and attributes you can override
-
-The basic `Store` class uses a rather long list of stock methods to complete requests. Some of them are there so that you can override them.
-
-## Permissions
+# Permissions
 
 By default, everything is allowed: stores allow pretty much anything and anything; anybody can DELETE, PUT, POST, etc. Furtunately, JsonRestStores allows you to decide exactly what is allowed and what isn't, by overriding specific methods.
 
-Each permission function needs to call the callback: if everything went fine, `cb()` will be called with `cb( null, true )`; to fail, `cb( null, false )`.
+Every method runs the method `checkPermissions()` before continuing. If everything went fine, `checkPermissions()` will call the callback with `true`: `cb( null, true )`; otherwise, to fail, `cb( null, false )`.
 
-Here are the method that you can override to deal with permissions:
+The `checkPermissions()` method has the following signature:
 
- * `checkPermissionsPost( request, cb )` 
- * `checkPermissionsPutNew( request, cb )`
- * `checkPermissionsPutExisting( request, doc, fullDoc, cb )`
- * `checkPermissionsGet( request, doc, fullDoc, cb )`
- * `checkPermissionsGetQuery( request, cb )`
- * `checkPermissionsDelete( request, doc, fullDoc, cb )`
+    checkPermissions: function( request, method, p, cb )
+
+Here:
+
+* `request`. It is the request object
+* `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`
+* `p`.  For all methods except `getQuery` and `putNew`, it is an object that has the attributes `fullDoc` (the record fetched from the database) and `doc` (`fullDoc` after `extrapolateDoc()`). For `getQuery` and `putNew`, it's an empty object.
 
 Here is an example of a store only allowing deletion only to specific admin users:
 
+````Javascript
     // The basic schema for the WorkspaceUsers table
-    var WorkspaceUsers = declare( JRS, {
+    var WorkspaceUsers = declare( Store, {
 
       schema: new Schema({
         email     :  { type: 'string', trim: 128, searchable: true, sortable: true  },
@@ -1784,7 +1775,10 @@ Here is an example of a store only allowing deletion only to specific admin user
       handleGetQuery: true,
       handleDelete: true,
       
-      checkPermissionsDelete: function( request, doc, fullDoc, cb ){
+      checkPermissions: function( request, method, p, cb ){
+
+        // This will only affect `delete` methods
+        if( method !== 'delete' ) return cb( null, true );
 
         // User is logged in: all good
         if( this._req.session.user ){
@@ -1794,24 +1788,27 @@ Here is an example of a store only allowing deletion only to specific admin user
         } else {
           cb( null, false );
         }
-
       },
 
     });
 
     WorkspaceUsers.onlineAll( app );
+````
 
 Permission checking can be as simple, or as complex, as you need it to be.
 
 Note that if your store is derived from another one, and you want to preserve your master store's permission model, you can run `this.inheritedAsync(arguments)` like so:
 
-      checkPermissionsDelete: function( request, doc, fullDoc, cb ){
+      checkPermissions: function f( request, method, p, cb ){
 
-        this.inheritedAsync( arguments, function( err, granted ) {
-
-          // In case of error of permission problems from parent, that's it
+        this.inheritedAsync( f, arguments, function( err, granted ) {
           if( err ) return cb( err, false );
+
+          // The parent's checkPermissions() method failed: this will honour that fail
           if( ! granted) return cb( null, false );
+
+          // This will only affect `delete` methods
+          if( method !== 'delete' ) return cb( null, true );
 
           // User is admin (id: 1 )
           if( this._req.session.user === 1){
@@ -1826,40 +1823,33 @@ Note that if your store is derived from another one, and you want to preserve yo
  
 This will ensure that the inherited `checkPermissionsDelete()` method is called and followed, and _then_ further checks are carried on.
 
+Please note that `checkPermissions()` is only run for local requests, with `remote` set to false. All requests coming from APIs will ignore the method.
+
 # Store APIs
 
-JsonRestStores allows you to run methods from within your programs, rather than accessing them via URL. This is very helpful if you need to query a store within your own programs.
-This is achieved with the following class functions:
+JsonRestStores allows you to run store methods from within your programs, rather than accessing them via URL. This is especially useful if you have a store and want to simulate an HTTP request within your own programs. Note that for database-backed methods you should use SimpleDbLaye methods (you can access the SimpleDbLayer table object in your store via `store.dbLayer`).
+
+The API is really simple:
 
 * `Store.Get( id, options, next( err, doc ) {})`
 * `Store.GetQuery( options, next( err, queryDocs ){} )`
-* `Store.Put( id, body, options, next( err, doc ){} )`. __Note: `id` can be set as null if body contains it__
+* `Store.Put(  body, options, next( err, doc ){} )`
 * `Store.Post( body, options, next( err, doc ){} )`
 * `Store.Delete( id, options, next( err, doc ){} )`
 
 The `next()` call is the callback called at the end. 
 
+When using the API, the `options` object is especially important, as it defines how the API will work. When a request comes from a remote operation, the `options` object is populated depending on the requested URL and HTTP headers. When using the API, you need to popuate `options` manually in order to obtain what you desire. `options` is especially important while querying, as that's where you define what you filter and order the results by. (If you are curious, when a remote connection is established the function `_initOptionsFromReq()` is the one responsible of getting headers and URL, and populating `options` before running the appropriate function).
+
+Since there is no HTTP connection to extrapolate options from, the `options` parameter in every API call is assigned directly to `request.options`. For all of the available options, refer to the [data preparation hooks section](#data-preparation-hooks) in this guide.
+
 All normal hooks are called when using these functions. However:
 
-* The `paramIds` array is shortened so that it only has its last element. This means that you are free to query a store without any pre-set automatic filtering imposed by `paramIds`
-* All `request.handleXXX` are set to `true`
+* Any check on `paramIds` is turned off: you are free to query a store without any pre-set automatic filtering imposed by `paramIds`. If your store has a `publicURL` of `/workspaces/:workspaceId/users/:id`, and you request `GET /workspaces/10/user/11`, in remote requests the `user` data source will be looked up based on _both_ `workspaceId` and `id`. In API requests, the lookup will only happen on `id`. 
+* `request.params` is automatically set to a hash object where the `idProperty` attribute matches the passed object's ID property. For example, for `{ id: 10, colour: 'red' }`, the `request.params` object is automatically set to  { `id: 10 }`. (This is true for all methods except `getQuery` and `post`, which don't accept objects with IDs). Note that you can pass `options.apiParams` to force `request.params` to whatever you like.
+* All `store.handleXXX` properties are ignored: all methods will work
 * The `request.remote` variable is set to false
-* Permissions are always granted
-
-When using the API, the `options` object is especially important, as it defines how the API will work.
-
-When a request comes from a remote operation, the `options` object is populated depending on the requested URL and headers. When using the API, you need to popuate `options` manually in order to obtain what you desire. `options` is especially important while querying, as that's where you define what you filter and order the results by.
-
-(If you are curious, when a remote connection is established the function `_initOptionsFromReq()` is the one responsible of getting headers and URL, and populating `options` before running the appropriate function).
-
-* `overwrite` for `Put` requests; (if used as remote store, taken from HTTP headers)
-* `filters` for `GetQuery` requests; (if used as remote store, taken from URL)
-* `ranges` for `GetQuery` requests; (if used as remote store, taken from HTTP headers)
-* `sort` for `GetQuery` requests (if used as remote store, taken from URL)
-* `skipHardLimitOnQueries` for `GetQuery` requests (if used as remote store, _always_ false)
-
-When using API functions, can pass directly pass `overwrite`, `sort`, `ranges`, `filters`, `skipHardLimitOnQueries`.
-
+* Permissions checking methods are not called at all: permission is always granted
 
 # Behind the scenes
 
@@ -1874,28 +1864,27 @@ This is the list of functions that actually do the work behind the scenes:
 
 When you write:
 
-    Workspaces.onlineAll( app )
+    workspaces.setAllRoutes( app )
 
 and the class has a `publicURL` set as `/workspaces/:id`, you are actually running:
 
     // Make entries in "app", so that the application
     // will give the right responses
-    app.get(      url + idName, Store.online.Get( Class ) );
-    app.get(      url,          Store.online.GetQuery( Class ) );
-    app.put(      url + idName, Store.online.Put( Class ) );
-    app.post(     url,          Store.online.Post( Class ) );
-    app.delete(   url + idName, Store.online.Delete( Class ) );
+    app.get(    url + idName, this.getRequestHandler( 'Get' ) );
+    app.get(    url,          this.getRequestHandler( 'GetQuery') );
+    app.put(    url + idName, this.getRequestHandler( 'Put') );
+    app.post(   url,          this.getRequestHandler( 'Post') );
+    app.delete( url + idName, this.getRequestHandler( 'Delete') );
 
 Where `url` is `/workspaces/` and `idName` is `:id`.
 
-Note that "Class" is the constructor class (in this case `Workspaces`).
-Let's take for example the first line: it creates a route for `/workspaces/:id` and adds, as a route handler, `Store.online.Put( Workspaces )`. 
+Let's take for example the third line: it creates a route for `/workspaces/:id` and adds, as a route handler, `this.getRequestHandler( 'Put')`. 
 
-This is what happens in that route handler:
-
+This is what happens in that route handler (this is a simplified version of the actual function):
+  
     return function( req, res, next ){
 
-      var request = new Class();
+      var request = new Object();
 
       // It's definitely remote
       request.remote = true;
@@ -1905,27 +1894,148 @@ This is what happens in that route handler:
       request._res = res;
 
       // Set the params and body options, copying them from `req`
-      var params = {}; for( var k in req.params) params[ k ] = req.params[ k ];
-      var body = {}; for( var k in req.body) body[ k ] = req.body[ k ];
+      request.params = self._co( req.params );
+      request.body = self._co( req.body );
 
       // Since it's an online request, options are set by "req"
       // This will set things like ranges, sort options, etc.
-      var options = request._initOptionsFromReq( mn, req );
+      // based on HTTP headers, query string, etc.
+      request.options = self._initOptionsFromReq( req );
 
       // Actually run the request
-      request._makePut( request, next );
-
+      self._makePut( request, next );
     }
 
-Basically, an object of type `Workspaces` is created. The `request` variable is an object able to perform exactly one operation -- which is exactly what will happen.
+Basically, new object called `request` is creted; `request` will will carry information for that specific request: 
 
-After that, the object variables `remote`, `_req` and `_res` are set. `remote` will be used by the object methods to determine how to return their results. `_req` and `_res` are set as they will be important for `remote` requests.
+* `remote`: set to `true` since the connection is indeed remote
+* `_req` and `_res`: set to Express' `req` and `res`
+* `params`: set to `req.params`
+* `body`: set to `req.body`
+* `options`: to set this attribute, the function `_initOptionsFromReq()` isused. `_initOptionsFromReq()` basically analyses the request and returns the right `options` depending on browser headers and query string. For example, the `overwrite` attribute will depend on the browser headers `if-match` and `if-none-match` (for `Put`) whereas `sort `, `ranges` and `filters` will be set depending on the requested URL (for `GetQuery`).
 
-At that point, `req.params` and `req.body` are cloned into two variables with the same names.
+Finally, `request._makePut()` is run, passing it the request object. `_makePut()` is where the real magic actually happens.
 
-Then, something interesting happens: the function `_initOptionsFromReq()` is run. `_initOptionsFromReq()` basically analyses the request and returns the right `options` depending on browser headers. For example, the `overwrite` attribute will depend on the browser headers `if-match` and `if-none-match` (for `Put`) whereas `sort `, `ranges` and `filters` will be set depending on the requested URL (for `GetQuery`).
+# DOCUMENTATION UPDATED UP TO THIS POINT
 
-Finally, `request._makePut()` is run, passing it `params`, `body`, `options` and `next`. `request._makePut()` is where the real magic actually happens: it will run the correct hooks, eventually performing the requested `PUT`.
+# Naked, non-database stores
+
+JsonRestStores is powerful thanks to `SimpleDbLayerMixin`, which allows you to create database-backed stores in seconds. However, there are times when you want to write a store from scratch without mixing in `SimpleDbLayerMixin`. You might want to create a store that returns virtual values (like the number of online users), or a store that returns a dataset that is fetched from a different backed (a text file, for example) etc.
+
+To do that, you will need to write a store that implements the `implement***` methods, which are:
+
+ * `implementFetchOne( request, cb )`. Required for methods `put`, `get`, `delete`. 
+ * `implementInsert( request, forceId, cb )`. Required for methods `post` and `put` (`putNew`).
+ * `implementUpdate( request, deleteUnsetFields, cb )`. Required for method `put` (`putExisting`).
+ * `implementDelete( request, cb )`. Required for method `delete`.
+ * `implementQuery( request, next )`. Required for methods `getQuery`.
+ * `implementReposition( doc, where, beforeId, cb )`. Required for methods `post` and `put`.
+
+Looking it from a different perspective, here are the `implement***` methods you will need to implement for each method to work properly:
+
+ * `get`: `implementFetchOne()`. 
+ * `getQuery`: `implementQuery()`
+ * `put`: `implementFetchOne()`, `implementInsert()`, `implementUpdate()`, `implementReposition()`
+ * `post`: `implementInsert()`, `implementReposition()`
+ * `delete`: `implementDelete()` 
+
+When developing these methods, it's important to make sure that they as expected.
+
+## `implementFetchOne( request, cb )`.
+
+This method is used to fetch a single record from the data source. The attributes taken into consideration in `request` are:
+
+* `request.remote`.
+* `request.params`. Sets the filter to search for the record to be fetched. For local request, it's acceptable to just match the key in `request.params` matching `self.idProperty`. For remote requests, it's best to filter data so that every key in `request.params` matches the equivalent key in the record.
+
+The callback `cb()` must be called with the fetched element as its second parameter, or `null` if a match wasn't found.
+
+## `implementInsert( request, forceId, cb )`.
+
+This method is used to add a single record to the data source. No attribute is taken into consideration in `request`.
+
+If `forceId` is set, then a shallow copy of the record should be made (with `this._co()`) and the object's `idProperty` key should be forced to be `forceId`.
+
+The callback `cb()` must be called with the record once written on the data source.
+
+## `implementUpdate( request, deleteUnsetFields, cb )`.
+
+This method is used to update a single record in the data source. The attributes taken into consideration in `request` are:
+
+* `request.remote`.
+* `request.params`. Sets the filter to search for the record to be updated. For local request, it's acceptable to just match the key in `request.params` matching `self.idProperty`. For remote requests, it's best to filter data so that every key in `request.params` matches the equivalent key in the record.
+* `request.body`. The fields to be updated in the data source.
+
+If `deleteUnsetFields` is set to `true`, then all fields that are not set in `request.body` must be deleted from the matched record in the data source.
+
+The callback `cb()` must be called with the updated element as its second parameter, or `null` if a match wasn't found.
+
+## `implementDelete( request, cb )`.
+
+This method is used to delete a single record from the data source. The attributes taken into consideration in `request` are:
+
+* `request.remote`.
+* `request.params`. Sets the filter to search for the record to be deleted. For local request, it's acceptable to just match the key in `request.params` matching `self.idProperty`. For remote requests, it's best to filter data so that every key in `request.params` matches the equivalent key in the record.
+
+The callback `cb()` must be called with the fetched element as its second parameter, or `null` if a match wasn't found.
+
+## `implementQuery( request, next )`.
+
+This method is used to fetch a set of records from the data source. The attributes taken into consideration in `request` are:
+
+* `request.remote`.
+* `request.params`. For remote requests, adds filtering restrictions to the query so that only matching records will be fetched. For local request, such extra filtering should be avoided.
+* `request.options`. The options object that will define what data is to be fetched. Specifically:
+  * `request.options.conditions`: an object specifying key/value criteria to be applied for filtering
+  * `request.options.sort`: an object specifying how sorting should happen. For example `{ surname: -1, age: 1  }`.
+  * `request.options.range`: an object with up to attributes: `limit` must make sure that only a limited number of records are fetched; `skip` must make sure that a number of records are skipped.
+  * `request.options.delete`: if set to `true`, each fetched record will be deleted after fetching. The default is the store's own `self.deleteAfterGetQuery` attribute (which is itself `false` by default).
+  * `request.options.skipHardLimitOnQueries`: if set to `true`, the limitation set by the store's own attribute `hardLimitOnQueries` will not be applied.
+
+Note that two store attributes must be taken into consideration:
+
+* `self.hardLimitOnQueries`. This is the maximum number of results that must be returned. Note that `implementQuery()` might have `request.options.skipHardLimitOnQueries` set to `true`: in this case, the limit mustn't be applied.
+* `self.deleteAfterGetQuery`. Acts as a default for the `request.options.delete` attribute: if `request.options.delete` is not set, whatever `self.deleteAfterGetQuery` is set to must be used as a default.
+
+The callback `cb()` must be called with the fetched elements as its second parameter, or an empty array if nothing was found.
+
+While filtering by `request.params` is straightforward, as it must just make sure that every attribute set in `request.params` matches the corresponding attribute in the object, `request.options.conditions` is a little more complex; `conditions` is a hash of key/value following the `onlineSearchSchema`, and their meaning is set by the `queryConditions` attribute in the store (see the [queryConditions section](#custom-queryconditions) in this guide).
+
+So, in a naked, non-database store you should still make sure that `queryConditions` is set properly, and that queries will honour what's specified in it. If your `queryConditions` is:
+
+    queryConditions: { 
+      name: 'startsWith', 
+      args: [ 'surname', '#surname#']
+    },
+
+If `request.options.conditions` has as `surname` key, you should filter your data so that only records where the `surname` attribute starts with `request.options.conditions.surname` are returned.
+
+This is what SimpleDbLayerMixin does automatically (it recursively visits `queryConditions` and creates the appropriate query for the right database). However, in a naked non-database store, writing a function that parses `queryConditions` is definitely an overkill.
+
+This does have the implication that inheriting from a naked store is possible, but if you change `queryConditions` you will also have to re-write `implementQuery` so that filtering matches what `queryConditions` says.
+
+While there is no practical reason, server side, to make sure that `queryConditions` matches the way queries are carried out by the store, it's also true that other components, are aware of how the store works in terms of searching; a client-store fetching data, for example, might want to be able to emulate the store's behaviour in terms of searching to keep refreshing of data at minimum. 
+
+## `implementReposition( doc, where, beforeId, cb )`.
+
+This method is used to reposition a field in the data source. It's the only call in the API with a sligtly different signature. This function should only do anything if `store.position` is set to `true`.
+
+Its parameters are:
+
+* `doc`. The record that needs to be moved. Most implementation will only ever taken into account `doc[ self.idProperty ]`.
+* `where`. Where to place the element. It can be:
+ * `first`. Place the element first.
+ * `last`. Place the element last.
+ * `before`. Place the element before the one with ID `beforeId`.
+* `beforeId`. Only used when `where` is `before`: it's the ID of the element.
+
+The callback only have the `err` parameter.
+
+# TODO:
+ * Go through documentation, check that SimpleDbLayerMixin-related explanations are marked as such 
+ * Document what happens when a request arrives
+
+
 
 # What happens exactly in each request
 
@@ -2041,4 +2151,24 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
   * (HOOK) `self.afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, options.overwrite )` is run
   * Empty result is sent (status: 200)/data is returned. Party!
 
+
+REPRODUCE:
+---------
+✔ Get() API toughness test: getting non-existing data
+✖ Delete() API Working test
+
+AssertionError: 0 == 1
+    at Object.equals (/usr/local/lib/node_modules/nodeunit/lib/types.js:83:39)
+    at /disk/home/merc/Synced/Development/node/dev/node_modules/jsonreststores/test-all.js:2072:22
+    at /disk/home/merc/Synced/Development/node/dev/node_modules/simpledblayer-mongo/MongoMixin.js:660:15
+    at /disk/home/merc/Synced/Development/node/node_modules/async/lib/async.js:254:17
+    at done (/disk/home/merc/Synced/Development/node/node_modules/async/lib/async.js:135:19)
+    at /disk/home/merc/Synced/Development/node/node_modules/async/lib/async.js:32:16
+    at /disk/home/merc/Synced/Development/node/node_modules/async/lib/async.js:251:21
+    at /disk/home/merc/Synced/Development/node/node_modules/async/lib/async.js:575:34
+    at /disk/home/merc/Synced/Development/node/dev/node_modules/simpledblayer-mongo/MongoMixin.js:641:21
+    at declare.cleanRecord (/disk/home/merc/Synced/Development/node/dev/node_modules/simpledblayer-mongo/MongoMixin.js:303:23)
+
+✔ Delete() REST Working test
+✔ Delete() REST handleDelete
 
