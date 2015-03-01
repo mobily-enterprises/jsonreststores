@@ -100,9 +100,8 @@ var Store = declare( Object,  {
   },
 
   // NB: 'where' can be `start`, `end` or `at`. If `at`, `beforeId` must be specified
-  implementReposition: function( doc, where, beforeId, cb ){
-    
-    cb( null );
+  implementReposition: function( doc, where, beforeId, cb ){    
+    throw("implementReposition not implemented, store is not functional");
   },
 
   // ****************************************************
@@ -864,6 +863,9 @@ var Store = declare( Object,  {
                         self.implementUpdate( request, true, function( err, fullDocAfter ){
                           if( err ) return self._sendError( request, next, err );
             
+                          // Update must have worked -- if it hasn't, there was a (bad) problem
+                          if( ! fullDocAfter ) return self._sendError( request, next, new Error("Error re-fetching document after update in putExisting") );
+
                           self._repositionBasedOnHeaders( fullDoc, request.options.putBefore, request.options.putDefaultPosition, true, function( err ){
                             if( err ) return self._sendError( request, next, err );
     
@@ -1098,8 +1100,12 @@ var Store = declare( Object,  {
               if( err ) return self._sendError( request, next, err );
                   
               // Actually delete the document
-              self.implementDelete( request, function( err ){
+              self.implementDelete( request, function( err, deletedRecord ){
                 if( err ) return self._sendError( request, next, err );
+
+                // If nothing was returned, we have a problem: the record wasn't found (it
+                // must have disappeared between implementFetchOne() above and now)
+                if( !deletedRecord ) return self._sendError( request, next, new Error("Error deleting a record in 'delete`: record to be deleted not found") );
 
                 self.afterDbOperation( request, 'delete', { fullDoc: fullDoc }, function( err ){
                   if( err ) return self._sendError( request, next, err );
@@ -1228,22 +1234,15 @@ var Store = declare( Object,  {
     if( len == 2 ) { next = options; options = {}; };
 
     var request = new Object();
-
     request.remote = false;
     request.body = {};
     request.options = options;
-
-    // Make up "params" to be passed to the _makeGet function
-    request.params = {};
-    //request.params[ this._lastParamId() ] = id;
-    request.params[ this.idProperty ] = id;
+    if( request.apiParams ) request.params = request.apiParams;
+    else { request.params = {}; request.params[ this.idProperty ] = id; }
 
     // Actually run the request
     this._makeGet( request, next );
-
   },
-
-
 
   apiGetQuery: function( options, next ){
 
@@ -1252,51 +1251,36 @@ var Store = declare( Object,  {
 
     request.remote = false;
     request.body = {};
-    request.params = {};
-
-    // Make up `options`, with `delete` set to whatever the user passed,
-    // OR the store's default `deleteAfterGetQuery`
-    var newOptions = this._co( options );
-    newOptions.delete = newOptions.delete || !!this.deleteAfterGetQuery;
-    request.options = newOptions;
+    request.params = options.apiParams || {};
+    request.options = this._co( options );
+    request.options.delete = request.options.delete || !!this.deleteAfterGetQuery;
 
     // Actually run the request
     this._makeGetQuery( request, next );
-
   },
 
-  apiPut: function( id, body, options, next ){
+  apiPut: function( body, options, next ){
 
     var Class = this;
 
+    // This will only work if this.idProperty is included in the body object
+    if( typeof( body[ this.idProperty ] ) === 'undefined'){
+      throw( new Error("When calling Store.apiPut with an ID of null, id MUST be in body") );
+    }      
+
     // Make `options` argument optional
     var len =  arguments.length;
-    if( len == 3 ) { next = options; options = {}; };
+    if( len == 2 ) { next = options; options = {}; };
 
     // Make up the request
     var request = new Object();
     request.remote = false;
-    request.body = body;
     request.options = options;
-
-    delete body._children;
-
-    // Sets only idProperty in the params hash. Note that
-    // you might well decide to pass the whole object in body, and
-    // pass `null` as the object ID: in that case, this function
-    // will sort out `params` with the `id` set
-    request.params = {};
-    if( id !== null ){
-      request.params[ this.idProperty ] = id;
-      request.body[ this.idProperty ] = id;
-    } else {
-      var idInBody = body[ this.idProperty ];
-      if( typeof( idInBody ) !== 'undefined'){
-        request.params[ this.idProperty ] = body[ this.idProperty ];
-      } else {
-        throw( new Error("When calling Store.apiPut with an ID of null, id MUST be in body") );
-      }
-    }
+    request.body = this._co( body );
+    if( request.apiParams ) request.params = request.apiParams;
+    else { request.params = {}; request.params[ this.idProperty ] = body[ this.idProperty ]; } 
+    
+    delete request.body._children;
 
     // Actually run the request
     this._makePut( request, next );
@@ -1311,11 +1295,11 @@ var Store = declare( Object,  {
     // Make up the request
     var request = new Object();
     request.remote = false;
-    request.body = body;
     request.options = options;
-    request.params = {};
-
-    delete body._children;
+    request.params = request.apiParams || {};
+    request.body = this._co( body );
+    
+    delete request.body._children;
 
     // Actually run the request
     this._makePost( request, next );
@@ -1332,17 +1316,13 @@ var Store = declare( Object,  {
     var request = new Object();
     request.body = {};
     request.options = options;
-
-    // Make up "params" to be passed to the _makeDelete function
-    request.params = {};
-    //request.params[ this._lastParamId() ] = id;
-    request.params[ this.idProperty ] = id;
-
+    if( request.apiParams ) request.params = request.apiParams;
+    else { request.params = {}; request.params[ this.idProperty ] = id; }
+    
     // Actually run the request
     this._makeDelete( request, next );
   },
 
- 
 });
 
 
@@ -1557,6 +1537,9 @@ Store.OneFieldStoreMixin = declare( Object,  {
                
                     self.implementUpdate( request, false, function( err, fullDocAfter ){
                       if( err ) return self._sendError( request, next, err );
+
+                      // Update must have worked -- if it hasn't, there was a (bad) problem
+                      if( ! fullDocAfter ) return self._sendError( request, next, new Error("Error re-fetching document after update in putExisting") );
 
                       // Manipulate fullDoc: at this point, it's the WHOLE database record,
                       // whereas I only want returned paramIds AND the piggyField
