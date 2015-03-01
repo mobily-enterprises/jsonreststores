@@ -1250,7 +1250,7 @@ If your store has the `hardLimitOnQueries` set, any `getQuery` method (that is, 
 
 # Stores and collections when using SimpleDbLayerMixin
 
-When using SimpleDbLayerMixin (which is the most common case, unless you are [implementing data manipulation functions on your own](TODO)), a SimpleDbLayer collection will be created using the following attributes passed to the store:
+When using SimpleDbLayerMixin (which is the most common case, unless you are [implementing data manipulation functions on your own](#naked-non-database-stores)), a SimpleDbLayer collection will be created using the following attributes passed to the store:
 
   * `idProperty`: the same as `store.idProperty`
   * `schema`: the same as `store.schema`
@@ -2035,9 +2035,9 @@ The callback only have the `err` parameter.
 # TODO:
  * Go through documentation, check that SimpleDbLayerMixin-related explanations are marked as such 
  * Document what happens when a request arrives
- * Fix weird bug at the end of the file
+ * Fix weird bug at the end of the file, delete is somehow out of sync (actual deletion might happen late)
  * Make HTTPMixin which implements methods to send, jsonsend, and adds LOcation header. Make draft of CometMixin
-
+ * PUBLISH
 
 # What happens exactly in each request
 
