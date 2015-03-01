@@ -465,12 +465,12 @@ Mixins are a powerful way to specialise a generic constructor.
 
 For example, the constructor `JsonRestStores` use on its own is hardly useful: it creates Json REST stores with the following data-manipulation methods left unimplemented (they will throw an error if they are run):
 
- * implementFetchOne: function( request, cb ){
- * implementInsert: function( request, forceId, cb ){
- * implementUpdate: function( request, deleteUnsetFields, cb ){
- * implementDelete: function( request, cb ){
- * implementQuery: function( request, next ){
- * implementReposition: function( doc, where, beforeId, cb ){
+ * `implementFetchOne: function( request, cb )`
+ * `implementInsert: function( request, forceId, cb )`
+ * `implementUpdate: function( request, deleteUnsetFields, cb )`
+ * `implementDelete: function( request, cb )`
+ * `implementQuery: function( request, next )`
+ * `implementReposition: function( doc, where, beforeId, cb )`
   
 Implementing these methods is important to tell `JsonRestStores` how to actualy manipulate the store's data. This is exactly what `JsonRestStores.SimpleDbLayerMixin` does: it's a mixin that enriches the basic `JsonRestStore` objects with all of the methods listed above, using a database as data storage.
 
@@ -486,11 +486,11 @@ You are creating a constructor function, `Managers`, mixing in the prototypes of
 
 SimpleDbLayer on its own is useless: it creates a DB layer with the following methods left unimplemented:
 
-* select( filters, options, cb )
-* update( conditions, updateObject, options, cb )
-* insert( record, options, cb )
-* delete( conditions, options, cb )
-* reposition: function( record, where, beforeId, cb )
+* `select( filters, options, cb )`
+* `update( conditions, updateObject, options, cb )`
+* `insert( record, options, cb )`
+* `delete( conditions, options, cb )`
+* `reposition: function( record, where, beforeId, cb )`
 
 The implementation will obviously depend on the database layer. So, when you type:
 
@@ -2035,7 +2035,8 @@ The callback only have the `err` parameter.
 # TODO:
  * Go through documentation, check that SimpleDbLayerMixin-related explanations are marked as such 
  * Document what happens when a request arrives
-
+ * Fix weird bug at the end of the file
+ * Make HTTPMixin which implements methods to send, jsonsend, and adds LOcation header. Make draft of CometMixin
 
 
 # What happens exactly in each request
