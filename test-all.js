@@ -863,7 +863,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         // New
         var p = { id: 1234, name: 'Tony', surname: "Mobily", age: 37 };
-        g.people.apiPut( null, p, function( err, person ){
+        g.people.apiPut( p, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
   
 
@@ -872,8 +872,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             compareItems( test,  data[ 0 ], person );
   
             // Existing
-            var p = { name: 'Tony', surname: "Mobily", age: 38 };
-            g.people.apiPut( person.id, p, function( err, person ){
+            var p = { name: 'Tony', surname: "Mobily", age: 38, id: person.id };
+            g.people.apiPut( p, function( err, person ){
               test.ifError( err ); if( err ) return test.done();
   
               g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
@@ -895,7 +895,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
         // New
         var p = { id: 1234, name: 'Tony', surname: "Mobily", age: 37 };
-        g.people.apiPut( null, p, { overwrite: true }, function( err, person ){
+        g.people.apiPut( p, { overwrite: true }, function( err, person ){
   
           test.equal( err.message, "Precondition Failed" );
           test.equal( err.httpError, 412 );
@@ -903,7 +903,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, function( err ){
   
             var p = { id: 1234, name: 'Tony', surname: "Mobily", age: 37 };
-            g.people.apiPut( null, p, { overwrite: true }, function( err, person ){
+            g.people.apiPut( p, { overwrite: true }, function( err, person ){
               test.ifError( err ); if( err ) return test.done();
   
               g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
@@ -914,8 +914,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
                 zap( function() {
   
                   // Existing
-                  var p = { name: 'Tony', surname: "Mobily", age: 38 };
-                  g.people.apiPut( person.id, p, { overwrite: false }, function( err, person ){
+                  var p = { name: 'Tony', surname: "Mobily", age: 38, id: person.id };
+                  g.people.apiPut( p, { overwrite: false }, function( err, person ){
                     test.ifError( err ); if( err ) return test.done();
   
                     g.dbPeople.select( { conditions: { and: [ { field: 'id', type: 'eq', value: person.id } ]   }  }, function( err, data, total ){
@@ -923,8 +923,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
                       compareItems( test,  data[ 0 ], person );
                       test.equal( data[ 0 ].age, 38 );
   
-                      var p = { name: 'Tony', surname: "Mobily", age: 38 };
-                      g.people.apiPut( person.id, p, { overwrite: false }, function( err, person ){
+                      var p = { name: 'Tony', surname: "Mobily", age: 38, id: person.id };
+                      g.people.apiPut( p, { overwrite: false }, function( err, person ){
   
                         test.equal( err.message, "Precondition Failed" );
                         test.equal( err.httpError, 412 );
@@ -1105,7 +1105,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var people2 = new People2();
 
         var p = { id: 1234, name: 'Tony', surname: "Mobily", age: 37 };
-        people2.apiPut( null, p, function( err, person ){
+        people2.apiPut( p, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
           test.equal( person.name, "TONY" );
           test.equal( person.surname, "Mobily" );
@@ -1118,8 +1118,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
     'Put() APIg validate': function( test ){
       zap( function(){
   
-        var p = { name: 'Tony', surname: "1234567890123456789012", age: 37 };
-        g.people.apiPut( 1234, p, function( err, person ){
+        var p = { name: 'Tony', surname: "1234567890123456789012", age: 37, id: 1234 };
+        g.people.apiPut( p, function( err, person ){
   
           compareItems( test,  err.errors, [ { field: 'surname', message: 'Field is too long: surname' } ] );
           test.equal( err.message, 'Unprocessable Entity' );
@@ -1167,7 +1167,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         var p = { id: 1234, name: "Tony", age: 37, extra: "Won't be saved" }; 
-        g.people.apiPut( null, p, function( err, person ){
+        g.people.apiPut( p, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
           compareItems( test,  person, { name: 'Tony', age: 37, id: person.id } ); 
           test.done();
@@ -1197,7 +1197,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var people2 = new People2();
   
   
-        people2.apiPut( 1234, { name: "Tony", age: 37 }, function( err, person ){
+        people2.apiPut( { name: "Tony", age: 37, id: 1234 }, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
   
           test.equal( person.name, 'Tony_extrapolateDoc' );
@@ -1287,7 +1287,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var people2 = new People2();
    
         // Set the basic stores
-        people2.apiPut( 1234, { name: "Tony" }, function( err, person ){
+        people2.apiPut( { name: "Tony", id: 1234 }, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
           compareItems( test,  person,
   
@@ -1359,7 +1359,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var people2 = new People2();
    
         // Set the basic stores
-        people2.apiPut( 1234, { name: "Tony" }, function( err, person ){
+        people2.apiPut( { name: "Tony", id: 1234 }, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
           test.equal( flag, true );
   
@@ -1482,7 +1482,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
           test.ifError( err ); if( err ) return test.done();
   
-          g.people.apiPut( 1234, { name: 'Tony', age: 38, extra: 'EXTRA' }, function( err, person ){
+          g.people.apiPut( { id: 1234, name: 'Tony', age: 38, extra: 'EXTRA' }, function( err, person ){
             test.ifError( err ); if( err ) return test.done();
             test.equal( typeof( person.extra ), 'undefined' );
   
@@ -1521,7 +1521,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
           test.ifError( err ); if( err ) return test.done();
   
-          people2.apiPut( 1234, { name: 'Tony', age: 37 }, function( err, person ){
+          people2.apiPut( { id: 1234, name: 'Tony', age: 37 }, function( err, person ){
             test.ifError( err ); if( err ) return test.done();
   
             test.equal( person.age, 38 );
@@ -1598,7 +1598,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var people2 = new People2();
    
           // Set the basic stores
-          people2.apiPut( 1234, { name: "Tony" }, function( err, person ){
+          people2.apiPut( { id: 1234, name: "Tony" }, function( err, person ){
             test.ifError( err ); if( err ) return test.done();
             compareItems( test,  person,
   
@@ -1676,7 +1676,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var people2 = new People2();
   
           // Set the basic stores
-          people2.apiPut( 1234, { name: "Tony" }, function( err, person ){
+          people2.apiPut( { id: 1234, name: "Tony" }, function( err, person ){
             test.ifError( err ); if( err ) return test.done();
             test.equal( flag, true );
             test.done();
@@ -1978,7 +1978,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         var people2 = new People2();
   
           // Set the basic stores
-          people2.apiPut( 1234, { name: "Tony" }, function( err, person ){
+          people2.apiPut( { id: 1234, name: "Tony" }, function( err, person ){
             test.ifError( err ); if( err ) return test.done();
             test.equal( flag, true );
   
@@ -2338,10 +2338,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         async.series([
-          function( done ){ g.people.apiPut( 1234, { id: 1234, name: 'Tony', surname: "Mobily", age: 37 },    function( err, r ){ done( err ) }) },
-          function( done ){ g.people.apiPut( 1235, { id: 1235, name: 'Chiara', surname: "Mobily", age: 24 },  function( err, r ){ done( err ) }) },
-          function( done ){ g.people.apiPut( 1236, { id: 1236, name: 'Daniela', surname: "Mobily", age: 64 }, function( err, r ){ done( err ) }) },
-          function( done ){ g.people.apiPut( 1237, { id: 1237, name: 'Sara', surname: "Fabbietti", age: 14 }, function( err, r ){ done( err ) }) },
+          function( done ){ g.people.apiPut( { id: 1234, name: 'Tony', surname: "Mobily", age: 37 },    function( err, r ){ done( err ) }) },
+          function( done ){ g.people.apiPut( { id: 1235, name: 'Chiara', surname: "Mobily", age: 24 },  function( err, r ){ done( err ) }) },
+          function( done ){ g.people.apiPut( { id: 1236, name: 'Daniela', surname: "Mobily", age: 64 }, function( err, r ){ done( err ) }) },
+          function( done ){ g.people.apiPut( { id: 1237, name: 'Sara', surname: "Fabbietti", age: 14 }, function( err, r ){ done( err ) }) },
         ], function( err ){
           test.ifError( err ); if( err ) return test.done();
 
@@ -2367,10 +2367,10 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
       zap( function(){
   
         async.series([
-          function( done ){ g.people.apiPut( 1234, { name: 'Tony', surname: "Mobily", age: 37 },    function( err, r ){ done( err ) }) },
-          function( done ){ g.people.apiPut( 1235, { name: 'Chiara', surname: "Mobily", age: 24 },  function( err, r ){ done( err ) }) },
-          function( done ){ g.people.apiPut( 1236, { name: 'Daniela', surname: "Mobily", age: 64 }, function( err, r ){ done( err ) }) },
-          function( done ){ g.people.apiPut( 1237, { name: 'Sara', surname: "Fabbietti", age: 14 }, function( err, r ){ done( err ) }) },
+          function( done ){ g.people.apiPut( { id: 1234, name: 'Tony', surname: "Mobily", age: 37 },    function( err, r ){ done( err ) }) },
+          function( done ){ g.people.apiPut( { id: 1235, name: 'Chiara', surname: "Mobily", age: 24 },  function( err, r ){ done( err ) }) },
+          function( done ){ g.people.apiPut( { id: 1236, name: 'Daniela', surname: "Mobily", age: 64 }, function( err, r ){ done( err ) }) },
+          function( done ){ g.people.apiPut( { id: 1237, name: 'Sara', surname: "Fabbietti", age: 14 }, function( err, r ){ done( err ) }) },
         ], function( err ){
           test.ifError( err ); if( err ) return test.done();
           
