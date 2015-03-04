@@ -4,7 +4,9 @@ JsonRestStores
 JsonRestStores is the best way to create REST stores that return JSON data.
 Rundown of features:
 
-**WARNING: JsonRestStore Release Candidate 1 is finished, and I am in the process of rewriting its documentation. Please keep un mind that the current documentation does NOT reflect how the module curretly works! Anything after the heading "DOCUMENTATION UPDATED UP TO THIS POINT" is horribly out of date**
+**Apart from the TODO below, which changes slightly the API, this module is in RC1 release. Please use it, test it, and report back any problems by opening an issue. Pull Requests are immensely welcome!**
+
+# TODO: Make HTTPMixin which implements methods to send, jsonsend, and adds Location header. Make draft of CometMixin
 
 * **DRY approach**. Everything works as you'd expect it to, even though you are free to tweak things.
 * **Database-agnostic**. You can either use a generic database connector, or implement the data-manipulation methods yourself.
@@ -168,7 +170,7 @@ That's it: this is enough to add, to your Express application, a a full store wh
 * `DbLayer` is a SimpleDbLayer constructor mixed in with `MongoMixin`, the MongoDB-specific layer for SimpleDbLayer. So, `DbLayer` will be used by `Managers` to manipulate MongoDB collections. 
 * `schema` is an object of type Schema that will define what's acceptable in a REST call.
 * `publicURL` is the URL the store is reachable at. ***The last one ID is the most important one***: the last ID in `publicURL` (in this case it's also the only one: `id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
-* `storeName` (_mandatory_) needs to be a unique name for your store. It is mandatory to have one. 
+* `storeName` (_mandatory_) needs to be a unique name for your store. 
 * `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error.
 * `managers.setAllRoutes( app )` creates the right Express routes to actually activate your stores. Specifically:
 
@@ -564,7 +566,7 @@ This pattern is much more verbose, and it doesn't allow the store to be placed o
 
 In any case, the property `idProperty` is set as last element of `paramIds`; in this example, it is `id`.
 
-In the documentation, I will often refers to `paramIds`, which is an array of element in the schema which match the ones in the route. However, in all examples I will use the "shortened" version without repeating IDs unnecessarily.
+In the documentation, I will often refers to `paramIds`, which is an array of element in the schema which match the ones in the route. However, in all examples I will declare stores using the "shortened" version.
 
 # A nested store
 
@@ -612,7 +614,7 @@ You have two stores: one is the simple `managers` store with a list of names and
 
 The managersCars store will will respond to `GET /managers/2222/cars/3333` (to fetch car 3333 of manager 2222), `GET /workspace/2222/users` (to get all cars of manager 2222), and so on.
 
-Remember that in `managersCars` _remote queries will **always** honour the filter on `managerId`, both in queries (`GET` without an `id` as last parameter) and single-record operations_ (`GET` with a specific `id`).
+Remember that in `managersCars` _remote queries will **always** honour the filter on `managerId`, both in queries (`GET` without an `id` as last parameter) and single-record operations_ (`GET` with a specific `id`). This happens thanks to SimpleDbLayerMixin (more about this later).
 
 ## Fetching children records automatically in nested stores
 
@@ -785,7 +787,7 @@ If you query the store with `http://localhost:3000/managers/?surname=mobily`, it
 
 ## Custom `onlineSearchSchema`
 
-In JsonRestStores you actually define what fields are acceptable as filters with the parameter `onlineSearchSchema`, which is defined exactly as a schema. So, writing this is equivalent:
+In JsonRestStores you actually define what fields are acceptable as filters with the parameter `onlineSearchSchema`, which is defined exactly as a schema. So, writing this is equivalent to the code just above:
 
     var Managers = declare( Store, {
 
@@ -811,7 +813,7 @@ In JsonRestStores you actually define what fields are acceptable as filters with
     var managers = new Managers(); 
     managers.setAllRoutes( app );
 
-If `onlineSearchSchema` is not defined, JsonRestStores will create one based on your main schema by doing a shallow copy, excluding `paramIds` (which means that `id` is not added automatically to `onlineSearchSchema`, which is most likely what you want).
+If `onlineSearchSchema` is not defined, JsonRestStores will create one based on your main schema by doing a shallow copy, excluding `paramIds` (which means that, in this case, `id` is not added automatically to `onlineSearchSchema`, which is most likely what you want).
 
 If you define your own `onlineSearchSchema`, you are able to decide exactly how you want to filter the values. For example you could define a different default, or trim value, etc. However, in common applications you can probably live with the auto-generated `onlineSearchSchema`.
 
@@ -859,7 +861,7 @@ Remember that here:
       args: [ 'surname', '#surname#']
     },
 
-`surname` refers to the database field `surname`, whereas `#surname#` refers to the query string's `surname` element.
+`surname` refers to the database field `surname`, whereas `#surname#` refers to the query string's `surname` element (which is cast thanks to `onlineSearchSchema`.
 
 If you had defined both `name` and `surname` as searchable, `queryConditions` would have been generated as:
 
@@ -995,13 +997,9 @@ For example:
         name: 'and',
         args: [
 
-          {
-            name: 'startsWith', args: [ 'make', '#make#'],            
-          },
+          { name: 'startsWith', args: [ 'make', '#make#'] },
 
-          {
-            name: 'startsWith', args: [ 'model', '#model#'],            
-          },
+          { name: 'startsWith', args: [ 'model', '#model#'] },
 
           {
             name: 'or',
@@ -1055,7 +1053,6 @@ It's totally up to you how you want organise your searches. For example, you mig
     },
 
 In this case, the only allowed field in the query string will be `searchAll` which will look for a match anywhere.
-
 
 # Sorting options and default sort
 
@@ -1135,7 +1132,7 @@ In this case, I didn't define `onlineSearchSchema` nor `queryConditions`: the st
 
 Note how `sortableFields` is an array of fields that will be taken into consideration. Each element of the array will be a field in the schema itself.
 
-It is interesting how one of the sortable fields is `managers.name`: since `managers` is a nested table, its sub-fields can be used as sorting fields (as long as they are searchable).
+It is interesting how one of the sortable fields is `managers.name`: since `managers` is a nested table, its sub-fields can be used as sorting fields (as long as they are declared as searchable in their store's schema).
 
 ## The `defaultSort` option
 
@@ -1235,18 +1232,17 @@ Positioning will keep into account the store's `paramIds` when applying position
 
 Positioning will have to take into account `workspaceId` when repositioning: if an user in workspace `A` repositions an item, it mustn't affect positioning in workspace `B`. Basically, when doing positioning, `paramIds` define the _domain_ of repositioning (in this case, elements with matching `workspaceId`s will belong to the same domain).
 
-SimpleDbLayerMixin leverage on the positioning features of SimpleDbLayer to implement element positioning in JsoNRestStores.
-
-
 # `deleteAfterGetQuery`: automatic deletion of records after retrieval
 
 If your store has the `deleteAfterGetQuery` set to `true`, it will automatically delete any elements fetched with a `getQuery` method (that is, a `GET` run without the final `id`, and therefore fetching elements based on a filter).
 
 This is especially useful when a store has, for example, a set of records that need to be retrieved by a user only once (like message queues).
 
+You can trigger deletion after fetch when using JsonRestStore's API by setting `options.delete` to `true`.
+
 # `hardLimitOnQueries`: limit the number of records
 
-If your store has the `hardLimitOnQueries` set, any `getQuery` method (that is, a `GET` without the final `id`, and therefore fetching elements based on a filter) will never return more than `hardLimitOnQueries` results (unless `options.skipHardLimitOnQueries` is `true`).
+If your store has the `hardLimitOnQueries` set, any `getQuery` method (that is, a `GET` without the final `id`, and therefore fetching elements based on a filter) will never return more than `hardLimitOnQueries` results (unless you are using JsonRestStore's API, and set `options.skipHardLimitOnQueries` to `true`).
 
 # Stores and collections when using SimpleDbLayerMixin
 
@@ -1291,7 +1287,6 @@ Alternatively, you can just run one command that will cover all of your collecti
     DbLayer.generateSchemaIndexesAllLayers( options, function( err ){
     // ...
     });
-
 
 # Automatic schema changes done by SimpleDbLayerMixin
 
@@ -1445,7 +1440,7 @@ This allows you to define a base store, and derive stores off that base store. F
 
       idProperty: 'id',
 
-      // NOTE: no idParams nor publicURL is defined.
+      // NOTE: no paramIds nor publicURL is defined.
     });
     stores.workspacesUsersBase = new WorkspacesUsersBase();
 
@@ -1641,6 +1636,30 @@ These hooks share the same signature (the third parameter is always the data to 
       cb( null, newBody );
     },
 
+In some cases, you will want to run the _original_ `prepareBody()` method, and then do more processing. In this case, you would write:
+
+    prepareBody: function f( request, method, body, cb ){
+
+      this.inheritedAsync( f, arguments, function( err, newBody ){
+
+        // Make a copy of body into newBody
+        var newBodyAgain = this._co( newBody );
+
+        // Some elaboration.
+        newBodyAgain.headerName = newBodyAgain.headerName + "." + newBodyAgain.name;
+
+        // Forces `createdBy` to the value passed to the session
+        if( request.remote ) newBodyAgain.createdBy = request._req.session.userId;
+
+        cb( null, newBodyAgain );
+
+      });
+
+    },
+
+Here, the original `preparebody()` is run through `this.inheritedAsync()`, and processing is done on its resulting `newBody`.
+
+For more information about `inheritedAsync()`, have a look at [SimpleDeclare's documentation on calling asynchronous parent methods](https://github.com/mercmobily/simpleDeclare#calling-the-super-function-with-node-style-callback).
 
 ###  `prepareBody()`
 
@@ -1712,7 +1731,7 @@ This method is called once permission checks have passed.
  * `p`. The method's parameters. Its contents will depend on `method`:
    * For methods `post`, `putNew`: `p` is empty.
    * For methods `putExisting`, `getQuery`, `get`, `delete`: `p` has the following keys: `fullDoc` (the data as it was fetched from the database), `doc` (`fullDoc` after `extrapolateDoc()`).
- * `cb( err ) `. The callback
+ * `cb( err ) `. The callback.
 
 ### `afterDbOperation()`
 
@@ -1724,7 +1743,7 @@ This method is called once data is read from, or written to, the data source for
    * For methods `post`, `putNew`, `delete`, `get`: `p` has the key `fullDoc` (the data as it was fetched from the database).
    * For method `putExisting`: `p` has the following keys: `fullDoc` (the data as it was fetched from the database before overwriting it), `doc` (`fullDoc` after `extrapolateDoc()`), `fullDocAfter` (the data as it was fetched from the database after overwriting it).
    * For methods `getQuery`: `p` has the key `fullDocs`, which is an array with all of the data as it was fetched from the database
- * `cb( err ) `. The callback
+ * `cb( err ) `. The callback.
 
 ### `afterEverything()`
 
@@ -1736,8 +1755,7 @@ This method is the very last one called before sending the response out.
    * For methods `post`, `putNew`, `delete`, `get`: `p` has the following keys: `fullDoc` (the data as it was fetched from the database), `doc` (`fullDoc` after `extrapolateDoc()`), `preparedDoc`  (`doc` after `prepareBeforeSend()`).
    * For method `putExisting`: `p` has the following keys: `fullDoc` (the data as it was fetched from the database before overwriting it), `doc` (`fullDoc` after `extrapolateDoc()`), `fullDocAfter` (the data as it was fetched from the database after overwriting it), `docAfter` (`fullDocAfter` after `extrapolateDoc()`), `preparedDoc`  (`docAfter` after `prepareBeforeSend()`, ).
    * For method `getQuery`: `fullDocs` (an array with all of the data as it was fetched from the database), `doc` (`fullDocs` after each item is gone through `extrapolateDoc()`), `preparedDocs`  (`docs` after each item is gone through `prepareBeforeSend()`).
- * `cb( err ) `. The callback
-
+ * `cb( err ) `. The callback.
 
 # Permissions
 
@@ -1906,13 +1924,13 @@ This is what happens in that route handler (this is a simplified version of the 
       self._makePut( request, next );
     }
 
-Basically, new object called `request` is creted; `request` will will carry information for that specific request: 
+Basically, new object called `request` is created; `request` will will carry information for that specific request: 
 
 * `remote`: set to `true` since the connection is indeed remote
 * `_req` and `_res`: set to Express' `req` and `res`
 * `params`: set to `req.params`
 * `body`: set to `req.body`
-* `options`: to set this attribute, the function `_initOptionsFromReq()` isused. `_initOptionsFromReq()` basically analyses the request and returns the right `options` depending on browser headers and query string. For example, the `overwrite` attribute will depend on the browser headers `if-match` and `if-none-match` (for `Put`) whereas `sort `, `ranges` and `filters` will be set depending on the requested URL (for `GetQuery`).
+* `options`: to set this attribute, the function `_initOptionsFromReq()` issued. `_initOptionsFromReq()` basically analyses the request and returns the right `options` depending on browser headers and query string. For example, the `overwrite` attribute will depend on the browser headers `if-match` and `if-none-match` (for `Put`) whereas `sort `, `ranges` and `filters` will be set depending on the requested URL (for `GetQuery`).
 
 Finally, `request._makePut()` is run, passing it the request object. `_makePut()` is where the real magic actually happens.
 
@@ -1937,7 +1955,7 @@ Looking it from a different perspective, here are the `implement***` methods you
  * `post`: `implementInsert()`, `implementReposition()`
  * `delete`: `implementDelete()` 
 
-When developing these methods, it's important to make sure that they as expected.
+When developing these methods, it's important to make sure that they function exactly as expected.
 
 ## `implementFetchOne( request, cb )`
 
@@ -2029,16 +2047,6 @@ Its parameters are:
 
 The callback only have the `err` parameter.
 
-# DOCUMENTATION UPDATED UP TO THIS POINT
-
-
-# TODO:
- * Go through documentation, check that SimpleDbLayerMixin-related explanations are marked as such 
- * Document what happens when a request arrives
- * Fix weird bug at the end of the file, delete is somehow out of sync (actual deletion might happen late)
- * Make HTTPMixin which implements methods to send, jsonsend, and adds LOcation header. Make draft of CometMixin
- * PUBLISH
-
 # What happens exactly in each request
 
 It's important to understand what happens in each request, so that you know exactly what you know when your hooks are called in the request's life cycle.
@@ -2047,130 +2055,108 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 
 (When you read these, think about all of the boring work JsonRestStores is doing for you for every store you define!)
 
-### `_makeGet()` (for `GET` requests, with ID)
-
-* (ATTR) `self.handleGet` is checked. If false, send `NotImplementedError`
-* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* record is fetched from DB. If fail, send `NotFoundError` -> `fullDoc`
-* (HOOK) `self.extrapolateDoc( fullDoc )` is run against the record just fetched -> `doc`
-* `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.checkPermissionsGet( request, doc, fullDoc )` is run. If fail, send `ForbiddenError`
-* (HOOK) `self.prepareBeforeSend( request, doc )` is run -> `doc`
-* (HOOK) `self.afterGet( request, doc, fullDoc )` is run
-* `doc` is sent (status: 200)/returned. Party!
-
 ### `_makeGetQuery()` (for GET requests, no ID)
 
-* (ATTR) `self.handleGetQuery` is checked. If false, send `NotImplementedError`
-* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* (HOOK) `self.checkPermissionsGetQuery( request )` is run. If fail, send `ForbiddenError`
-* Search terms (from GET data) are cast against the onlineSearchSchema. If fail, send `BadRequestError`
-* docs are fetched from DB.
-* FOR EACH RECORD -> `queryDocs`
- * (HOOK) `self.extrapolateDoc( fulldoc )` is run against each `fullDoc` -> `doc`
- * Each `doc` is cast against the schema. If ONE fails, everything fails: send `UnprocessableEntityError`
- * (HOOK) `self.prepareBeforeSend( request, doc )` is run
-* (HOOK) `self.afterGetQueries( request, queryDocs )` is run
-* `queryDocs` is sent as array (status: 200)/returned as array. Party!
+* (CHECK) check that `self.handleGetQuery` is true for remote requests. If false, send `NotImplementedError`
+* (CHECK) incoming `request.params` (`:ids` from URL) match types of `store.paramIds` array (type is taking from schema). If fail, send `BadRequestError`
+* (HOOK) `self.checkPermissions( request, 'getQuery', { } )` is run. If fail, send `ForbiddenError`
+* (CHECK) Search terms (request.options.conditions) are cast against the onlineSearchSchema. If fail, send `BadRequestError`
+* (HOOK) `self.afterValidate( request, 'getQuery', {} )` is run
+* (INTERFACE) `implementQuery( request )` is run.
+* (HOOK) `self.afterDbOperation( request, 'get', { fullDoc: fullDoc } )` is run
+ * (DATA) `self.extrapolateDoc( fulldocs )` is run against each `fullDocs` -> `docs`
+ * (DATA) `self.prepareBeforeSend( docs )` is run against each `docs` -> `preparedDocs`
+* (HOOK) `self.prepareBeforeSend( request, doc )` is run
+* (HOOK) `self.afterEverything( request, { fullDocs: fullDocs, docs: docs, preparedDocs: preparedDocs } )` is run
+* (DATA) `queryDocs` is sent as array (status: 200)/returned as array. Party!
+
+### `_makeGet()` (for `GET` requests, with ID)
+
+* (CHECK) check that `self.handleGet` is true for remote requests. If false, send `NotImplementedError`
+* (CHECK) incoming `request.params` (`:ids` from URL) match types of `store.paramIds` array (type is taking from schema). If fail, send `BadRequestError`
+* (INTERFACE) `implementFetchOne( request )` is run. If record isn't therem send `NotFoundError` -> `fullDoc`
+* (HOOK) `self.afterDbOperation( request, 'get', { fullDoc: fullDoc } )` is run
+* (DATA) `self.extrapolateDoc( request, 'get', fullDoc )` is run against the record just fetched -> `doc`
+* (HOOK) `self.checkPermissions( request, 'get', { doc: doc, fullDoc: fullDoc } )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.afterCheckPermissions( request, 'get', { doc:doc, fullDoc: fullDoc } )` is run
+* (DATA) `self.prepareBeforeSend( request, 'get', doc )` is run -> `preparedDoc`
+* (HOOK) `self.afterEverything( request, 'get', { preparedDoc: preparedDoc, doc: doc, fullDoc: fullDoc } )` is run
+* (DATA) `doc` is sent (status: 200)/returned. Party!
 
 ### `_makeDelete()` (for DELETE requests)
+* (ATTR) check that `self.handleDelete` is true for remote requests. If false, send `NotImplementedError`
+* (CHECK) incoming `request.params` (`:ids` from URL) match types of `store.paramIds` array (type is taking from schema). If fail, send `BadRequestError`
+* (INTERFACE) `implementFetchOne( request )` is run. If record isn't therem send `NotFoundError` -> `fullDoc`
+* (DATA) `self.extrapolateDoc( request, 'delete', fullDoc )` is run against the record just fetched -> `doc`
+* (HOOK) `self.checkPermissions( request, 'delete', { doc: doc, fullDoc: fullDoc } )` is run. If fail, send `ForbiddenError`
+* (INTERFACE) `implementDelete( request )` is run. If record isn't therem send `Error`
+* (HOOK) `self.afterDbOperation( request, 'delete', { doc: doc, fullDoc: fullDoc } )` is run
+* (DATA) `self.prepareBeforeSend( request, 'delete', doc )` is run -> `preparedDoc`
+* (HOOK) `self.afterEverything( request, 'delete', { preparedDoc: preparedDoc, doc: doc, fullDoc: fullDoc } )` is run
+* (DATA) `preparedDoc` is sent (status: 200, if remote)/returned (for API). Party!
 
-* (ATTR) `self.handleDelete` is checked. If false, send `NotImplementedError`
-* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* `fullDoc` is fetched from DB. If fail, send `NotFoundError`
-* (HOOK) `self.extrapolateDoc( doc )` is run against the record just fetched -> `doc`
-* `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.checkPermissionsDelete( request, doc, fullDoc )` is run. If fail, send `ForbiddenError`
-* Record is deleted!
-* (HOOK) `self.afterDelete( request, doc, fullDoc )` is run
-* Empty result is sent (status: 204)/data is returned. Party!
 
 ### `_makePost()` (for POST requests)
-
-* (ATTR) `self.handlePost` is checked. If false, send `NotImplementedError`
-* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* (HOOK) `self.prepareBody( request, body, 'post' )` is run against the record just fetched
-* Body is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.afterValidate( request, body, 'post' )` is run against the record just fetched
-* (HOOK) `self.checkPermissionsPost( request )` is run. If fail, send `ForbiddenError`
-* Body is cleaned up of fields with `doNotSave: true` in schema
-* record is written to the DB.
-* record is re-fetched from DB -> `fullDoc`
-* (HOOK) `self.extrapolateDoc( fullDoc )` is run against the record just fetched -> `doc`
-* `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
-* Set the `Location:` header
-* IF `self.echoAfterPost`:
-  * (HOOK) `self.prepareBeforeSend( request, doc )` is run 
-  * (HOOK) `self.afterPost( request, doc, fullDoc )` is run
-  * `doc` is sent (status: 200)/returned. Party!
-* ELSE:
-  * (HOOK) `self.afterPost( request, doc, fullDoc )` is run
-  * Empty result is sent (status: 200)/data is returned. Party!
+* (ATTR) check that `self.handlePost` is true for remote requests. If false, send `NotImplementedError`
+* (CHECK) incoming `request.params` (`:ids` from URL) match types of `store.paramIds` array (type is taking from schema). If fail, send `BadRequestError`
+* (HOOK) `self.prepareBody( request, 'post', request.body)` is run => preparedBody
+* (DATA) `request.body` is assigned to `prepareBody`; the original `body` is still available as `request.bodyBeforePrepare
+* (DATA) For remote requests, `body` is enriched with the elements in `request.params`. Existing attributes will be overwritten.
+* (CHECK) Body (`request.body`) is cast against the store's schema (skipping `idProperty`, since it's a post and `idProperty` isn't set). If fail, send `BadRequestError` => validatedBody
+* (CHECK) If fields with `protected` set to `true` in the schema are present in the body, return `UnprocessableEntityError` 
+* (DATA) `request.body` is assigned to `validatedBody`; the original `body` is still available as `request.bodyBeforeValidation
+* (HOOK) `self.afterValidate( request, 'post', {} )` is run
+* (HOOK) `self.checkPermissions( request, 'post', {} )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.afterCheckPermissions( request, 'post', {}` is run
+* (DATA) All fields with `doNotSave` set to `true` in the schema are purged from `request.body`
+* (INTERFACE) `implementInsert( request, forceId )` is run. If record isn't therem send `Error` => `fullDoc`
+* (INTERFACE) `implementReposition( request, ... )` is run. Parameters will depend on `request.options.putBefore` and `request.options.putDefaultPosition`.
+* (HOOK) `self.afterDbOperation( request, 'post', { fullDoc: fullDoc } )` is run
+* (DATA) `self.extrapolateDoc( request, 'post', fullDoc )` is run against the record just added -> `doc`
+* (DATA) `self.prepareBeforeSend( request, 'post', doc )` is run -> `preparedDoc`
+* (HOOK) `self.afterEverything( request, 'post', { preparedDoc: preparedDoc, doc: doc, fullDoc: fullDoc } )` is run
+* (DATA) `preparedDoc` is sent (status: 201, if remote and `echoAfterPost`)/returned (for API). Party!
 
 ### `_makePut()` (for PUT requests)
 
-* (ATTR) `self.handlePut` is checked. If false, send `NotImplementedError`
-* incoming request.paramIds (:ids from URL) are checked against schema. If fail, send `BadRequestError`
-* (HOOK) `self.prepareBody( request, body, 'put' )` is run against the record just fetched
-* Body is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.afterValidate( request, body, 'put' )` is run against the record just fetched
-* record is fetched from DB (ATTEMPT) -> `fullDoc`
-* `options.overwrite` is checked: if true & record not there, or false and record there, send `PreconditionFailedError`
-
-#### ...and then, for NEW records (fetching failed)
-
-* (HOOK) `self.checkPermissionsPutNew( request )` is run. If fail, send `ForbiddenError`
-* `body` is cleaned up of fields with `doNotSave: true` in schema
-* record is written to the DB.
-* record is re-fetched from DB -> `fullDoc`
-* (HOOK) `self.extrapolateDoc( fullDoc )` is run against the record just fetched -> `doc`
-* `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
-* Set the `Location:` header
-* IF `self.echoAfterPut`:
-  * (HOOK) `self.prepareBeforeSend( request, doc )` is run
-  * (HOOK) `self.afterPutNew( request, doc, fullDoc, options.overwrite )` is run
-  * `doc` is sent (status: 200)/returned. Party!
-* ELSE:
-  * (HOOK) `self.afterPutNew( request, doc, fullDoc, options.overwrite )` is run
-  * Empty result is sent (status: 200)/data is returned. Party!
-
-#### ...or then, for EXISTING records (fetching worked)
-
-* (HOOK) `self.extrapolateDoc( fullDoc )` is run against the record just fetched -> `doc`
-* `doc` is cast against the schema. If fail, send `UnprocessableEntityError`
-* (HOOK) `self.checkPermissionsPutExisting( request, doc, fullDoc )` is run. If fail, send `ForbiddenError`
-* `doc` is cleaned up of fields with `doNotSave: true` in schema
-* record is updated to the DB.
-* record is re-fetched from DB. If fail, send `NotFoundError` -> fullDocAfter
-* (HOOK) `self.extrapolateDoc( docAfter )` is run against the record just fetched
-* Doc is cast against the schema. If fail, send `UnprocessableEntityError`
-* Set the `Location:` header
-* IF `self.echoAfterPut`:
-  * (HOOK) `self.prepareBeforeSend( request, docAfter )` is run.
-  * (HOOK) `self.afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, options.overwrite )` is run
-  * `docAfter` is sent (status: 200)/returned. Party!
-* ELSE:
-  * (HOOK) `self.afterPutExisting( request, doc, fullDoc, docAfter, fullDocAfter, options.overwrite )` is run
-  * Empty result is sent (status: 200)/data is returned. Party!
+* (ATTR) check that `self.handlePut` is true for remote requests. If false, send `NotImplementedError`
+* (CHECK) incoming `request.params` (`:ids` from URL) match types of `store.paramIds` array (type is taking from schema). If fail, send `BadRequestError`
+* (HOOK) `self.prepareBody( request, 'put', request.body)` is run => preparedBody
+* (DATA) `request.body` is assigned to `prepareBody`; the original `body` is still available as `request.bodyBeforePrepare
+* (DATA) For remote requests, `body` is enriched with the elements in `request.params`. Existing attributes will be overwritten.
+* (CHECK) Body (`request.body`) is cast against the store's schema. If fail, send `BadRequestError` => validatedBody
+* (CHECK) If fields with `protected` set to `true` in the schema are present in the body, return `UnprocessableEntityError` 
+* (DATA) `request.body` is assigned to `validatedBody`; the original `body` is still available as `request.bodyBeforeValidation
+* (HOOK) `self.afterValidate( request, 'put', {} )` is run
+* (INTERFACE) `implementFetchOne( request )` is run -> `fullDoc`
+* (CHECK) Check if `request.options.overwrite` is set. If it is, then apply restraints: 1) if `overwrite` is `true`, then `fullDoc` _must_ be set (existing record) 2) if `overwrite` is `false`, then `fullDoc` _must_ be null (new record)
 
 
-REPRODUCE:
----------
-✔ Get() API toughness test: getting non-existing data
-✖ Delete() API Working test
+#### ...and then, for NEW records (`implementFetchOne` returned `fullDoc` as `null`)
 
-AssertionError: 0 == 1
-    at Object.equals (/usr/local/lib/node_modules/nodeunit/lib/types.js:83:39)
-    at /disk/home/merc/Synced/Development/node/dev/node_modules/jsonreststores/test-all.js:2072:22
-    at /disk/home/merc/Synced/Development/node/dev/node_modules/simpledblayer-mongo/MongoMixin.js:660:15
-    at /disk/home/merc/Synced/Development/node/node_modules/async/lib/async.js:254:17
-    at done (/disk/home/merc/Synced/Development/node/node_modules/async/lib/async.js:135:19)
-    at /disk/home/merc/Synced/Development/node/node_modules/async/lib/async.js:32:16
-    at /disk/home/merc/Synced/Development/node/node_modules/async/lib/async.js:251:21
-    at /disk/home/merc/Synced/Development/node/node_modules/async/lib/async.js:575:34
-    at /disk/home/merc/Synced/Development/node/dev/node_modules/simpledblayer-mongo/MongoMixin.js:641:21
-    at declare.cleanRecord (/disk/home/merc/Synced/Development/node/dev/node_modules/simpledblayer-mongo/MongoMixin.js:303:23)
+* (HOOK) `self.checkPermissions( request, 'putNew', {} )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.afterCheckPermissions( request, 'post', {}` is run
+* (DATA) All fields with `doNotSave` set to `true` in the schema are purged from `request.body`
+* (INTERFACE) `implementInsert( request, null )` is run. If record isn't therem send `Error` => `fullDoc`
+* (INTERFACE) `implementReposition( request, ... )` is run. Parameters will depend on `request.options.putBefore` and `request.options.putDefaultPosition`.
+* (HOOK) `self.afterDbOperation( request, 'putNew', { fullDoc: fullDoc } )` is run
+* (DATA) `self.extrapolateDoc( request, 'putNew', fullDoc )` is run against the record just added -> `doc`
+* (DATA) `self.prepareBeforeSend( request, 'putNew', doc )` is run -> `preparedDoc`
+* (HOOK) `self.afterEverything( request, 'putNew', { preparedDoc: preparedDoc, doc: doc, fullDoc: fullDoc } )` is run
+* (DATA) `preparedDoc` is sent (status: 201, if remote and `echoAfterPutNew`)/returned (for API). Party!
 
-✔ Delete() REST Working test
-✔ Delete() REST handleDelete
+#### ...or  then, for EXISTING records (`implementFetchOne` returned `fullDoc` not `null`):
+
+* (DATA) `self.extrapolateDoc( request, 'putExisting', fullDoc )` is run against the record just fetched -> `doc`
+* (HOOK) `self.checkPermissions( request, 'putExisting', { doc: doc, fullDoc: fullDoc } )` is run. If fail, send `ForbiddenError`
+* (HOOK) `self.afterCheckPermissions( request, 'post', { doc: doc, fullDoc: fullDoc }` ) is run
+* (DATA) All fields with `doNotSave` set to `true` in the schema are purged from `request.body`
+* (INTERFACE) `implementUpdate( request, true )` is run. If record isn't therem send `Error` => `fullDocAfter`
+* (INTERFACE) `implementReposition( request, ... )` is run. Parameters will depend on `request.options.putBefore` and `request.options.putDefaultPosition`.
+* (HOOK) `self.afterDbOperation( request, 'putExisting', { doc: doc, fullDoc: fullDoc, fullDocAfter: fullDocAfter } )` is run
+* (DATA) `self.extrapolateDoc( request, 'putExisting', fullDocAfter )` is run against the record just added -> `docAfter`
+* (DATA) `self.prepareBeforeSend( request, 'putExisting', docAfter )` is run -> `preparedDoc`
+* (HOOK) `self.afterEverything( request, 'putExisting', { preparedDoc: preparedDoc, doc: doc, fullDoc: fullDoc, docAfter: docAfter, fullDocAfter: fullDocAfter, overwrite: request.options.overwrite } )` is run
+* (DATA) `preparedDoc` is sent (status: 200, if remote and `echoAfterPutExisting`)/returned (for API). Party!
+
 
