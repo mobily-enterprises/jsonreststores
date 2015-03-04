@@ -623,7 +623,6 @@ var Store = declare( Object,  {
         self._enrichBodyWithParamIdsIfRemote( request );
 
         // Delete _children which mustn't be here regardless
-
         delete request.body._children;
 
         self.schema.validate( request.body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, validatedBody, errors ){
@@ -793,11 +792,6 @@ var Store = declare( Object,  {
                       // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
                       self.schema.cleanup( request.body, 'doNotSave' );
               
-                      // Paranoid check
-                      // Make sure that the id property in the body does match
-                      // the one passed as last parameter in the list of IDs
-                      request.body[ self.idProperty ] = request.params[ self.idProperty ];
-
                       self.implementInsert( request, null, function( err, fullDoc ){
                         if( err ) return self._sendError( request, next, err );
               
@@ -1015,7 +1009,6 @@ var Store = declare( Object,  {
 
       // Fetch the doc.
       self.implementFetchOne( request, function( err, fullDoc ){
-
         if( err ) return self._sendError( request, next, err );
     
         if( ! fullDoc ) return self._sendError( request, next, new self.NotFoundError());
@@ -1039,7 +1032,9 @@ var Store = declare( Object,  {
                 self.prepareBeforeSend( request, 'get', doc, function( err, preparedDoc ){
                   if( err ) return self._sendError( request, next, err );
             
-                  self.schema.cleanup( doc, 'doNotSave' );
+                  // Just in case: clean up any field that returned from the schema, and shouldn't have been
+                  // there in the first place
+                  self.schema.cleanup( preparedDoc, 'doNotSave' );
             
                   self.afterEverything( request, 'get', { preparedDoc: preparedDoc, doc: doc, fullDoc: fullDoc }, function( err ) {
                     if( err ) return self._sendError( request, next, err );
@@ -1107,7 +1102,7 @@ var Store = declare( Object,  {
                 // must have disappeared between implementFetchOne() above and now)
                 if( !deletedRecord ) return self._sendError( request, next, new Error("Error deleting a record in 'delete`: record to be deleted not found") );
 
-                self.afterDbOperation( request, 'delete', { fullDoc: fullDoc }, function( err ){
+                self.afterDbOperation( request, 'delete', { doc: doc, fullDoc: fullDoc }, function( err ){
                   if( err ) return self._sendError( request, next, err );
 
                   self.prepareBeforeSend( request, 'delete', doc, function( err, preparedDoc ){
