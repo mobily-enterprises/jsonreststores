@@ -1951,7 +1951,7 @@ Basically, new object called `request` is created; `request` will will carry inf
 * `_req` and `_res`: set to Express' `req` and `res`
 * `params`: set to `req.params`
 * `body`: set to `req.body`
-* `options`: HTTPMixin's `_initOptionsFromReq()` basically analyses the request and returns the right `options` depending on browser headers and query string. For example, the `overwrite` attribute will depend on the browser headers `if-match` and `if-none-match` (for `Put`) whereas `sort `, `ranges` and `filters` will be set depending on the requested URL (for `GetQuery`). For more detailed information, see [HTTPMixin in detail](#HTTPMixin-in-detail).
+* `options`: HTTPMixin's `_initOptionsFromReq()` basically analyses the request and returns the right `options` depending on browser headers and query string. For example, the `overwrite` attribute will depend on the browser headers `if-match` and `if-none-match` (for `Put`) whereas `sort `, `ranges` and `filters` will be set depending on the requested URL (for `GetQuery`). For more detailed information, see [HTTPMixin in detail](#httpmixin-in-detail).
 
 Finally, `request._makePut()` is run, passing it the request object. `_makePut()` is where the real magic actually happens.
 
