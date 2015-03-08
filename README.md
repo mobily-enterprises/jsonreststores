@@ -1,8 +1,10 @@
 JsonRestStores
 ==============
 
-JsonRestStores is the best way to create REST stores that return JSON data.
-JsonRestStores is now finished, and the API is locked. Please file bugs and requests as issues.
+JsonRestStores is the best way to create REST stores that return JSON data. JsonRestStores is in RC1 status, and the API is locked. Please (find and) file bugs and requests as issues against this repo.
+
+TODO:
+* Make delete asynchronous
 
 Rundown of features:
 
@@ -452,7 +454,7 @@ For example, the constructor `JsonRestStores` on its own is hardly useful as it 
 
 The good news is that the mixin `JsonRestStores.HTTPMixin` implements `protocolListenHTTP()` (as well as the corresponding `protocolSendHTTP()`), which makes `protocolListen( 'HTTP', { app: app } );` work.
 
-You can mix a store with as many protocol mixins as you like (although at this stage only HTTP is actually implemented).
+You can mix a store with as many protocol mixins as you like (although at this stage only HTTP is currently implemented).
 
 `HTTPMixin` is only one piece of the puzzle: on its own, it's not enough. JsonRestStores mixed with `HTTPMixin` 
  creates JSON REST stores with the following data-manipulation methods left unimplemented (they will throw an error if they are run):
