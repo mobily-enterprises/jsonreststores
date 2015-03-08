@@ -116,8 +116,9 @@ var HTTPMixin = declare( Object,  {
       request.params = self._co( req.params ); // NOTE: this is a copy
       request.body = self._co( req.body ); // NOTE: this is a copy
       request.session = req.session;
-      try { request.options = self._initOptionsFromReq( action, req ); } catch( e ){ return next( e ); }
-      if( action === 'GetQuery' ){ request.options.delete = !!self.deleteAfterGetQuery; }
+      try {
+        request.options = self._initOptionsFromReq( action, req );
+      } catch( e ){ return next( e ); }
       
       // Sets the request's _req and _res variables, extra fields hooks might want to use
       // request._res will be used as a sending medium by protocolSendHTTP
@@ -150,6 +151,11 @@ var HTTPMixin = declare( Object,  {
         options.overwrite = true;
       if( req.headers[ 'if-none-match' ] === '*' )
         options.overwrite = false;      
+    }
+
+    // deleteAfterGetQuery will depend on the store's setting
+    if( mn === 'GetQuery' ){
+      request.options.delete = !!self.deleteAfterGetQuery;
     }
 
     // Put and Post can come with extra headers which will set
