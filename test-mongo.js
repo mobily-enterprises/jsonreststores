@@ -5,6 +5,7 @@ var
 
 , J = require('./JsonRestStores.js')
 , SM = require( './SimpleDbLayerMixin.js' )
+, HM = require( './HTTPMixin.js' )
 , SimpleDbLayer = require('simpledblayer')
 , MongoMixin = require('simpledblayer-mongo')
 , mongo = require('mongodb')
@@ -26,7 +27,7 @@ var tests = allTests.get(
         throw new Error("MongoDB connect: could not connect to database");
       } else {
         var DbLayer = declare( [ SimpleDbLayer, MongoMixin ], { db: db } );
-        var JRS = declare( [J, SM ], { DbLayer: DbLayer } );
+        var JRS = declare( [J, SM, HM ], { DbLayer: DbLayer } );
         done( null, db, DbLayer, JRS );
       }
     });
