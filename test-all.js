@@ -2401,7 +2401,6 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         ], function( err ){
           test.ifError( err ); if( err ) return test.done();
         
-          // var req = makeReq( { url: "http://www.example.org/people?ageGt=90", headers: { range: 'items=1-12' } } );
           var req = makeReq( { url: "http://www.example.org/people/", headers: { range: 'items=1-2' } } );
 
           (g.people._getRequestHandler('GetQuery'))(req, new RES( function( err, type, headers, status, data ){
