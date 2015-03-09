@@ -116,6 +116,7 @@ var HTTPMixin = declare( Object,  {
       request.params = self._co( req.params ); // NOTE: this is a copy
       request.body = self._co( req.body ); // NOTE: this is a copy
       request.session = req.session;
+      request.options = {};
       try {
         request.options = self._initOptionsFromReq( action, req );
       } catch( e ){ return next( e ); }
@@ -144,6 +145,7 @@ var HTTPMixin = declare( Object,  {
 
     var options = {};
 
+
     // Set the 'overwrite' option if the right header
     // is there
     if( mn == 'Put' ){
@@ -155,7 +157,7 @@ var HTTPMixin = declare( Object,  {
 
     // deleteAfterGetQuery will depend on the store's setting
     if( mn === 'GetQuery' ){
-      request.options.delete = !!self.deleteAfterGetQuery;
+      if( self.deleteAfterGetQuery ) options.delete = !!self.deleteAfterGetQuery;
     }
 
     // Put and Post can come with extra headers which will set
@@ -209,6 +211,8 @@ var HTTPMixin = declare( Object,  {
     var sortObject = {};
     var sortBy, tokens, token, tokenClean;
     var sortDirection, sortField;
+
+    var self = this;
 
     result = querystring.decode( q );
     sortBy = result.sortBy;
