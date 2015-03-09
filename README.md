@@ -3,9 +3,6 @@ JsonRestStores
 
 JsonRestStores is the best way to create REST stores that return JSON data. JsonRestStores is in RC1 status, and the API is locked. Please (find and) file bugs and requests as issues against this repo.
 
-TODO:
-* Make delete asynchronous
-
 Rundown of features:
 
 * **DRY approach**. Everything works as you'd expect it to, even though you are free to tweak things.
