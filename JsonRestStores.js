@@ -1056,6 +1056,7 @@ var Store = declare( Object,  {
     });
   },
 
+
   apiGetQuery: function( options, next ){
 
     // Make up the request
@@ -1071,9 +1072,26 @@ var Store = declare( Object,  {
     this._makeGetQuery( request, next );
   },
 
-  apiPut: function( body, options, next ){
+  apiGet: function( id, options, next){
 
-    var Class = this;
+    // Make `options` argument optional
+    var len =  arguments.length;
+
+    if( len == 2 ) { next = options; options = {}; };
+
+    var request = new Object();
+    request.remote = false;
+    request.options = options;
+    request.body = {};
+    if( request.apiParams ) request.params = request.apiParams;
+    else { request.params = {}; request.params[ this.idProperty ] = id; }
+
+    // Actually run the request
+    this._makeGet( request, next );
+  },
+ 
+
+  apiPut: function( body, options, next ){
 
     // This will only work if this.idProperty is included in the body object
     if( typeof( body[ this.idProperty ] ) === 'undefined'){
