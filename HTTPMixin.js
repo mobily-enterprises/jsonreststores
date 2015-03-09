@@ -47,10 +47,29 @@ var HTTPMixin = declare( Object,  {
 
       case 'getQuery':
         if( request.options.ranges ){
-          var from, to, of;
-          from = request.options.ranges.skip ? request.options.ranges.skip : 0;
-          to = request.data.total + ( request.options.ranges.skip ? request.options.ranges.skip : 0 );
-          of = request.data.grandTotal;
+
+          // Working out from-to/of
+          // Note that if no records were returned, the format should be 0-0/X
+
+          // Nice shorter variables
+          var skip = request.options.ranges.skip || 0;
+          var total = request.data.total;
+          
+          // Work out 'of': it will depend on the grandTotal, and that's it. It's an easy one.
+          var of = request.data.grandTotal;
+
+          // If nothing was returned, then the format 0-0/grandTotal is honoured
+          if( ! total ) {
+            from = 0;
+            to = 0;
+
+          // If something was returned, then `from` is the same as `skip`, and `to`
+          // will depends on how many records were returned
+          } else {
+            from = skip;
+            to = from + total - 1;
+          }
+
           request._res.setHeader('Content-Range', 'items ' + from + '-' + to + '/' + of );
         }
       break;
