@@ -669,7 +669,7 @@ Specifically:
 
 ### `_makeGetQuery`:
   * `conditions`. Worked out from the query string.
-  * `ranges`. Worked out from the `range` header; if the header is `3-10`, then `ranges` will be assigned `skip: 3, count: 8 }` (it will skip to the third element, and will fetch 8 elements).
+  * `ranges`. Worked out from the `range` header; if the header is `3-10`, then `ranges` will be assigned `skip: 3, limit: 8 }` (it will skip to the third element, and will fetch 8 elements at the most).
   * `sort`. Worked out from the `sortBy` element in the query string; if it is for example `?sortBy=-model,+maker`, `options.sort` will be `{ model: -1, maker: 1 }`.
 
 Please note that you can easily overload the specific methods in HTTPMixin if you want store parameters to be taken from the store differently.
