@@ -4,7 +4,10 @@ var
 , declare = require('simpledeclare')
 
 , J = require('./JsonRestStores.js')
+, SM = require( './SimpleDbLayerMixin.js' )
+, HM = require( './HTTPMixin.js' )
 , SimpleDbLayer = require('simpledblayer')
+
 , Db = require('tingodb')().Db
 , TingoMixin = require('simpledblayer-tingo')
 ;
@@ -23,10 +26,10 @@ var tests = allTests.get(
    } catch( e ){
    }
 
-    var db = new Db('/tmp/tests', {});
+    var db = new Db('/tmp/jsontests', {});
 
     var DbLayer = declare( [ SimpleDbLayer, TingoMixin ], { db: db } );
-    var JRS = declare( J, { DbLayer: DbLayer } );
+    var JRS = declare( [ J, SM, HM ], { DbLayer: DbLayer } );
     done( null, db, DbLayer, JRS );
   },
 
@@ -38,6 +41,3 @@ var tests = allTests.get(
 for(var test in tests) {
     exports[ test ] = tests[ test ];
 }
-
-
-
