@@ -80,14 +80,14 @@ var HTTPMixin = declare( Object,  {
     } else {
       request._res.send( status, '' );
     }
-
+    
     cb( null );
 
   },
 
   protocolListenHTTP: function( params ){
 
-    var url = params.url || this.publicURL;
+    var url = this.getFullPublicURL();
     var app = params.app;
     var idName;
 
@@ -243,15 +243,16 @@ var HTTPMixin = declare( Object,  {
     for( i = 0; i < tokens.length; i++ ){
 
       token = tokens[ i ];
-      tokenClean = token.replace( '+', '' ).replace( '-', '' );
+
+      tokenClean = token.replace( '+', '' ).replace( '-', '' ).replace( ' ', '');
 
       if( self.sortableFields.indexOf( tokenClean ) === -1 ){
         throw( new Error("Field selected for sorting invalid: " + tokenClean) );
       }
 
-      if( tokens[ i ][ 0 ] === '+' || tokens[ i ][ 0 ] === '-' ){
+      if( tokens[ i ][ 0 ] === ' ' || tokens[ i ][ 0 ] === '+' || tokens[ i ][ 0 ] === '-' ){
         sortDirection = tokens[ i ][ 0 ] == '-' ? -1 : 1;
-        sortField = tokens[ i ].replace( '+', '' ).replace( '-', '' );
+        sortField = tokenClean;
         sortObject[ sortField ] = sortDirection;
       }
     }

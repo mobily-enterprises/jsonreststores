@@ -43,6 +43,7 @@ var Store = declare( Object,  {
   onlineSearchSchema: null, // If not set in prototype, worked out from `schema` by constructor
   queryConditions: null, // If not set in prototype, worked out from `schema` by constructor 
   sortableFields: [],
+  publicURLprefix: null,
   publicURL: null, // Not mandatory (if you want your store to be API-only for some reason)
   idProperty: null, // If not set in prototype, taken as last item of paramIds)
   paramIds: [], // Only allowed if publicURL is not set
@@ -167,7 +168,11 @@ var Store = declare( Object,  {
 
     // If paramId is not specified, takes it from publicURL
     if( self.paramIds.length === 0 && typeof( self.publicURL ) === 'string' ){
-      self.paramIds =  ( self.publicURL + '/').match(/:.*?\/+/g).map( function( i ){ return i.substr(1, i.length - 2 )  } );
+      self.paramIds =  ( self.publicURL + '/').match(/:.*?\/+/g).map(
+        function( i ){ 
+          return i.substr(1, i.length - 2 ); 
+        }
+      );
     }
    
     // If idProperty is not set, derive it from self._lastParamId()
@@ -213,7 +218,6 @@ var Store = declare( Object,  {
 
       // TODO: take AND out if Object.keys( self.onlineSearchSchema.structure ).length is only 1
     }
-
 
     Store.registry[ self.storeName ] = self;
   },
@@ -263,6 +267,15 @@ var Store = declare( Object,  {
 
   // TODO: Check what happens when sorting for a nested field with a 1:n relationship with table (?!)
 
+
+  getFullPublicURL: function(){
+    var path = require('path');
+
+    // No prefix: return the publicURL straight
+    if( ! this.publicURLPrefix ) return this.publicURL;
+
+    return path.join( this.publicURLPrefix, this.publicURL );
+  },
 
   // ****************************************************
   // *** INTERNAL FUNCTIONS, DO NOT TOUCH
@@ -583,7 +596,7 @@ var Store = declare( Object,  {
 
                             self.afterEverything( request, 'post', function( err ){
                               if( err ) return self._sendError( request, 'post', next, err );
-               
+
                               if( request.remote ){
                                 if( self.echoAfterPost ){
                                   self.sendData( request, 'post', request.data.preparedDoc );
