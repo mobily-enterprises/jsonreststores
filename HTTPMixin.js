@@ -146,11 +146,11 @@ var HTTPMixin = declare( Object,  {
       request._res = res;
 
       // Process the request, honouring the artificialDelay     
-      if(this.artificialDelay ) {
+      if( self.artificialDelay ) {
         setTimeout( function(){
           // Actually run the request
           self['_make' + action ]( request, next );
-        }, this.artificialDelay );
+        }, Math.floor( Math.random() * self.artificialDelay ) );
       } else {
         self['_make' + action ]( request, next );
       }
