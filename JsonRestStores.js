@@ -147,10 +147,10 @@ var Store = declare( Object,  {
     var self = this;
 
     // StoreName cannot be repeated amongst stores, ONE storeName per store!
-    Store.registry = Store.registry || {};
+    //Store.registry = Store.registry || {};
 
     // Set artificialDelay from the constructor's default
-    this.artificialDelay = Store.artificialDelay;
+    this.artificialDelay = this.constructor.artificialDelay;
 
     if( typeof( Store.registry[ self.storeName ] ) !== 'undefined' ){
       throw new Error("Cannot instantiate two stores with the same name: " + self.storeName );
@@ -1414,12 +1414,12 @@ Store.OneFieldStoreMixin = declare( Object,  {
                         self.extrapolateDoc( request, 'putExisting', request.data.fullDocAfter, function( err, docAfter ) {
                           if( err ) return self._sendError( request, 'putExisting', next, err );
 
-                          request.doc.docAfter = docAfter;
+                          request.data.docAfter = docAfter;
                           
                           self.prepareBeforeSend( request, 'putExisting', docAfter, function( err, preparedDoc ){
                             if( err ) return self._sendError( request, 'putExisting', next, err );
 
-                            request.doc.preparedDoc = preparedDoc;
+                            request.data.preparedDoc = preparedDoc;
              
                             self.afterEverything( request, 'putExisting', function( err ) {
                               if( err ) return self._sendError( request, 'putExisting', next, err );
