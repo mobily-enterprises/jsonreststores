@@ -76,9 +76,9 @@ var HTTPMixin = declare( Object,  {
     };
 
     if( responseBody !== '' ){
-      request._res.json( status, responseBody );
+      request._res.status( status ).json( responseBody );
     } else {
-      request._res.send( status, '' );
+      request._res.status( status ).send( '' );
     }
     
     cb( null );
