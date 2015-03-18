@@ -952,7 +952,7 @@ You can decide how the elements in `onlineSearchSchema` will be turned into a se
       }),
 
       queryConditions: { 
-        name: 'eq', 
+        type: 'eq', 
         args: [ 'surname', '#surname#']
       },
 
@@ -974,7 +974,7 @@ Basically, `queryConditions` is automatically generated with the `name` field in
 Remember that here:
 
     queryConditions: { 
-      name: 'eq', 
+      type: 'eq', 
       args: [ 'surname', '#surname#']
     },
 
@@ -983,10 +983,10 @@ Remember that here:
 If you had defined both `name` and `surname` as searchable, `queryConditions` would have been generated as:
 
     queryConditions: {
-        name: 'and',
+        type: 'and',
         args: [
-          { name: 'eq', args: [ 'name', '#name#' ] },
-          { name: 'eq', args: [ 'surname', '#surname#' ]
+          { type: 'eq', args: [ 'name', '#name#' ] },
+          { type: 'eq', args: [ 'surname', '#surname#' ]
         ]
       },
      
@@ -1000,18 +1000,18 @@ Keep in mind that the syntax of JsonRestStore's `queryConditions` is identical t
 For example, you could define `queryConditions` as:
 
     queryConditions: {
-      name: 'and',
+      type: 'and',
       args: [
 
         {
-          name: 'and', ifDefined: 'surname', args: [
-            { name: 'startsWith', args: [ 'surname', '#surname#' ] },
-            { name: 'eq', args: [ 'active', true ] },              
+          type: 'and', ifDefined: 'surname', args: [
+            { type: 'startsWith', args: [ 'surname', '#surname#' ] },
+            { type: 'eq', args: [ 'active', true ] },              
           ]
         },
 
         { 
-          name: 'startsWith', args: [ 'name', '#name#']
+          type: 'startsWith', args: [ 'name', '#name#']
         }
       ]
     },
@@ -1025,12 +1025,12 @@ You can clearly see that thanks to `queryConditions` you can effectively create 
     }),
 
     queryConditions: {
-      name: 'or',
+      type: 'or',
       ifDefined: 'searchAll',
       args: [
-        { name: 'startsWith', args: [ 'number', '#searchAll#' ] },
-        { name: 'startsWith', args: [ 'firstName', '#searchAll#' ] },
-        { name: 'startsWith', args: [ 'lastName', '#searchAll#' ] },
+        { type: 'startsWith', args: [ 'number', '#searchAll#' ] },
+        { type: 'startsWith', args: [ 'firstName', '#searchAll#' ] },
+        { type: 'startsWith', args: [ 'lastName', '#searchAll#' ] },
       ]
     },
 
@@ -1067,19 +1067,19 @@ For example:
       }),
 
       queryConditions: {
-        name: 'and',
+        type: 'and',
         args: [
 
           {
-            name: 'startsWith', args: [ 'surname', '#surname#']
+            type: 'startsWith', args: [ 'surname', '#surname#']
           },
 
           {
-            name: 'or',
+            type: 'or',
             ifDefined: 'carInfo',
             args: [
-              { name: 'startsWith', args: [ 'managersCars.make', '#carInfo#' ] },
-              { name: 'startsWith', args: [ 'managersCars.model','#carInfo#' ] },
+              { type: 'startsWith', args: [ 'managersCars.make', '#carInfo#' ] },
+              { type: 'startsWith', args: [ 'managersCars.model','#carInfo#' ] },
             ]
           }
         ]
@@ -1111,19 +1111,19 @@ For example:
       }),
 
       queryConditions: {
-        name: 'and',
+        type: 'and',
         args: [
 
-          { name: 'startsWith', args: [ 'make', '#make#'] },
+          { type: 'startsWith', args: [ 'make', '#make#'] },
 
-          { name: 'startsWith', args: [ 'model', '#model#'] },
+          { type: 'startsWith', args: [ 'model', '#model#'] },
 
           {
-            name: 'or',
+            type: 'or',
             ifDefined: 'managerInfo',
             args: [
-              { name: 'startsWith', args: [ 'managers.name', '#managerInfo#' ] },
-              { name: 'startsWith', args: [ 'managers.surname','managerInfo#' ] },
+              { type: 'startsWith', args: [ 'managers.name', '#managerInfo#' ] },
+              { type: 'startsWith', args: [ 'managers.surname','managerInfo#' ] },
             ]
           }
         ]
@@ -1159,13 +1159,13 @@ It's totally up to you how you want organise your searches. For example, you mig
     }),
 
     queryConditions: {
-      name: 'or',
+      type: 'or',
       ifDefined: 'searchAll',
       args: [
-        { name: 'startsWith', args: [ 'name', '#searchAll#'] }
-        { name: 'startsWith', args: [ 'surname', '#searchAll#'] }
-        { name: 'startsWith', args: [ 'managersCars.make', '#searchAll#' ] },
-        { name: 'startsWith', args: [ 'managersCars.model','#searchAhh#' ] },
+        { type: 'startsWith', args: [ 'name', '#searchAll#'] }
+        { type: 'startsWith', args: [ 'surname', '#searchAll#'] }
+        { type: 'startsWith', args: [ 'managersCars.make', '#searchAll#' ] },
+        { type: 'startsWith', args: [ 'managersCars.model','#searchAhh#' ] },
       ]
     },
 
@@ -1470,7 +1470,7 @@ Note that `searchable` is set both for `id` and for `workspaceId` (which are the
       }),
 
       queryConditions: { 
-        name: 'startsWith', 
+        type: 'startsWith', 
         args: [ 'surname', '#surnameSearch#']
       },
 
@@ -1503,7 +1503,7 @@ Is the same as writing:
       }),
 
       queryConditions: { 
-        name: 'startsWith', 
+        type: 'startsWith', 
         args: [ 'surname', '#surnameSearch#']
       },
 
@@ -1712,7 +1712,7 @@ These hooks share the same signature (the third parameter is always the data to 
       newBody.headerName = newBody.headerName + "." + newBody.name;
 
       // Forces `createdBy` to the value passed to the session
-      if( request.remote ) newBody.createdBy = request._req.session.userId;
+      if( request.remote ) newBody.createdBy = request.session.userId;
 
       cb( null, newBody );
     },
@@ -1730,7 +1730,7 @@ In some cases, you will want to run the _original_ `prepareBody()` method, and t
         newBodyAgain.headerName = newBodyAgain.headerName + "." + newBodyAgain.name;
 
         // Forces `createdBy` to the value passed to the session
-        if( request.remote ) newBodyAgain.createdBy = request._req.session.userId;
+        if( request.remote ) newBodyAgain.createdBy = request.session.userId;
 
         cb( null, newBodyAgain );
 
@@ -1871,7 +1871,7 @@ Here is an example of a store only allowing deletion only to specific admin user
         if( method !== 'delete' ) return cb( null, true );
 
         // User is logged in: all good
-        if( this._req.session.user ){
+        if( this.session.user ){
           cb( null, true );
 
         // User is not logged in: fail!
@@ -1901,7 +1901,7 @@ Note that if your store is derived from another one, and you want to preserve yo
           if( method !== 'delete' ) return cb( null, true );
 
           // User is admin (id: 1 )
-          if( this._req.session.user === 1){
+          if( this.session.user === 1){
             cb( null, true );
 
           // User is not logged in: fail!
@@ -2028,7 +2028,7 @@ While filtering by `request.params` is straightforward, as it must just make sur
 So, in a naked, non-database store you should still make sure that `queryConditions` is set properly, and that queries will honour what's specified in it. If your `queryConditions` is:
 
     queryConditions: { 
-      name: 'startsWith', 
+      type: 'startsWith', 
       args: [ 'surname', '#surname#']
     },
 

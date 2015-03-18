@@ -96,11 +96,13 @@ exports = module.exports = declare( Object,  {
     // layer._makeTablesHashes()
     function visitQueryConditions( o ){
 
-      if( ! o.name ) throw new Error("Filter's 'name' attribute missing");
+      //console.log( require('util').inspect(o, { depth: 10 } ) );
+
+      if( ! o.type ) throw new Error("Filter's 'type' attribute missing");
       if( ! Array.isArray( o.args) ) throw new Error("Filter's 'args' attribute must be an array");
 
       //console.log("Visiting: ", require('util').inspect( o, { depth: 10 } ) );
-      if( o.name === 'and' || o.name === 'or'){
+      if( o.type === 'and' || o.type === 'or'){
         //console.log("WILL ENTER: ", require('util').inspect( o.args ));
         o.args.forEach( function( condition ){
           //console.log("Entering:", condition );
@@ -146,23 +148,23 @@ exports = module.exports = declare( Object,  {
     // If nothing needs to be added, leave filter as it is
     if( ! list.length ) return returnedConditions;  
 
-    if( conditions.name === 'and' ){
+    if( conditions.type === 'and' ){
       whereToPush = conditions.args;
     } else {
 
       // Turn first condition into an 'and' condition
-      returnedConditions = { name: 'and', args: [] };
+      returnedConditions = { type: 'and', args: [] };
       whereToPush = returnedConditions.args;
-      if( conditions.name ) whereToPush.push( conditions );
+      if( conditions.type ) whereToPush.push( conditions );
     }
 
     // Add a condition for each paramId, so that it will get satisfied
     list.forEach( function( paramId ){
-      whereToPush.push( { name: 'eq', args: [ paramId, params[ paramId ] ] } );
+      whereToPush.push( { type: 'eq', args: [ paramId, params[ paramId ] ] } );
     });
 
     // If there is only one "and" condition, normalise it to the condition itself
-    if( returnedConditions.name === 'and' && returnedConditions.args.length === 1 ){
+    if( returnedConditions.type === 'and' && returnedConditions.args.length === 1 ){
       returnedConditions = returnedConditions.args[ 0 ];
     }
 
@@ -195,7 +197,7 @@ exports = module.exports = declare( Object,  {
     if( request.remote ){
        conditions = self._enrichConditionsWithParams( conditions, request.params );
     } else {
-      conditions = { name: 'eq', args: [ self.idProperty, request.params[ self.idProperty ]  ] };
+      conditions = { type: 'eq', args: [ self.idProperty, request.params[ self.idProperty ]  ] };
     }
 
     // Make the database call 
@@ -238,7 +240,7 @@ exports = module.exports = declare( Object,  {
     if( request.remote ){
        conditions = self._enrichConditionsWithParams( conditions, request.params );
     } else {
-      conditions = { name: 'eq', args: [ self.idProperty, request.params[ self.idProperty ]  ] };
+      conditions = { type: 'eq', args: [ self.idProperty, request.params[ self.idProperty ]  ] };
     }
 
     // Make up the `updateObject` variable, based on the passed `body`
@@ -266,7 +268,7 @@ exports = module.exports = declare( Object,  {
     if( request.remote ){
        conditions = self._enrichConditionsWithParams( conditions, request.params );
     } else {
-      conditions = { name: 'eq', args: [ self.idProperty, request.params[ self.idProperty ]  ] };
+      conditions = { type: 'eq', args: [ self.idProperty, request.params[ self.idProperty ]  ] };
     }
 
     self.dbLayer.delete( conditions, { multi: false, skipValidation: true }, function( err, howMany, record ){
@@ -286,7 +288,7 @@ exports = module.exports = declare( Object,  {
 
     var self = this;
     var errors = [];
-    var field, name, condition, value;
+    var field, condition, value;
 
     // Straight fields that do not need any conversions as they are the same
     // between JsonRestStores and SimpleDbLayer
@@ -305,14 +307,14 @@ exports = module.exports = declare( Object,  {
           if( ! conditionsHash[ o.ifDefined ] ){ return false; }
         }
 
-        if( o.name === 'and' || o.name === 'or'){
-          fc.name = o.name;
+        if( o.type === 'and' || o.type === 'or'){
+          fc.type = o.type;
           fc.args = [];
 
           o.args.forEach( function( condition ){
 
             // If it's 'and' or 'or', check the length of what gets returned
-            if( condition.name === 'and' || condition.name === 'or' ){
+            if( condition.type === 'and' || condition.type === 'or' ){
 
               // Make up the new condition, visit that one
               var newCondition = {};
@@ -323,11 +325,12 @@ exports = module.exports = declare( Object,  {
 
               // newCondition is empty: do not add anything to fc
               if(  newCondition.args.length === 0 ){
-                return;
+
+                return ;
               // Only one condition returned: get rid of logical operator, add the straight condition
               } else if( newCondition.args.length === 1 ){
                 var actualCondition = newCondition.args[ 0 ];
-                fc.args.push( { name: actualCondition.name, args: actualCondition.args } );
+                fc.args.push( { type: actualCondition.type, args: actualCondition.args } );
               // Multiple conditions returned: the logical operator makes sense
               } else {
                 fc.args.push( newCondition );
@@ -348,7 +351,7 @@ exports = module.exports = declare( Object,  {
 
           // No arg1: most likely a unary operator, let it live.
           if( typeof( arg1 ) === 'undefined'){
-            fc.name = o.name;
+            fc.type = o.type;
             fc.args = [];
             fc.args[ 0 ] = arg0;
           }
@@ -364,7 +367,7 @@ exports = module.exports = declare( Object,  {
             if( ! self.onlineSearchSchema.structure[ osf ] ) throw new Error("Searched for " + arg1 + ", but didn't find corresponding entry in onlineSearchSchema");
 
             if( conditionsHash[ osf ] ){
-              fc.name = o.name;
+              fc.type = o.type;
               fc.args = [];
               fc.args[ 0 ] = arg0;
               fc.args[ 1 ] = conditionsHash[ osf ];
@@ -375,7 +378,7 @@ exports = module.exports = declare( Object,  {
 
           // The second argument is not in form #something#: it means it's a STRAIGHT value
           } else {
-            fc.name = o.name;
+            fc.type = o.type;
             fc.args = [];
             fc.args[ 0 ] = arg0;
             fc.args[ 1 ] = arg1;
@@ -383,23 +386,26 @@ exports = module.exports = declare( Object,  {
         }
       }
 
-
-
       // This will be returned
       var res = {};
       visitQueryConditions( self.queryConditions, res );
 
+
       // visitQueryConditions does a great job avoiding duplication, but
       // top-level duplication needs to be checked here
-      if( ( res.name === 'and' || res.name === 'or' )){
+      if( ( res.type === 'and' || res.type === 'or' )){
         if( res.args.length === 0 ) return {};
         if( res.args.length === 1 ) return res.args[ 0 ];
+
+      // More than 1 condition: 'and' or 'or' will need to stay
+      } else {
         return res;
       }
+
     }
 
     filter.conditions = getQueryFromQueryConditions();
-
+      
     //console.log( self.collectionName );
     //console.log("QUERYCONDITIONS", require('util').inspect( self.queryConditions, { depth: 10 } ));
     //console.log("CONDITIONS HASH:", require('util').inspect( conditionsHash, { depth: 10 } ));
@@ -423,7 +429,7 @@ exports = module.exports = declare( Object,  {
     }
 
     // Pass on skipHardLimitOnQueries to the dbLayer
-    dbLayerOptions.skipHardLimitOnQueries = request.options.skipHardLimitOnQueries;
+    dbLayerOptions.skipHardLimitOnQueries = !!request.options.skipHardLimitOnQueries;
 
     // Children is always true
     dbLayerOptions.children = true;
@@ -436,8 +442,6 @@ exports = module.exports = declare( Object,  {
       if( err ){
         next( err );
       } else {
-
-        //console.log("FILTER:", filter );
 
         if( request.remote) filter.conditions = self._enrichConditionsWithParams( filter.conditions, request.params );
 

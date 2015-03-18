@@ -258,13 +258,13 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         }),
 
         queryConditions: {
-          name: 'and',
+          type: 'and',
           args: [
-            { name: 'eq', args: [ 'name', "#name#" ] },
-            { name: 'eq', args: [ 'surname', "#surname#" ] },
-            { name: 'eq', args: [ 'age', "#age#" ] },
-            { name: 'gt', args: [ 'age', "#ageGt#" ] },
-            { name: 'startsWith', args: [ 'surname', "#nameSt#" ] },
+            { type: 'eq', args: [ 'name', "#name#" ] },
+            { type: 'eq', args: [ 'surname', "#surname#" ] },
+            { type: 'eq', args: [ 'age', "#age#" ] },
+            { type: 'gt', args: [ 'age', "#ageGt#" ] },
+            { type: 'startsWith', args: [ 'surname', "#nameSt#" ] },
           ]
         },
 
@@ -305,13 +305,13 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         }),
 
         queryConditions: {
-          name: 'and',
+          type: 'and',
           args: [
-            { name: 'eq', args: [ 'name', "#name#" ] },
-            { name: 'eq', args: [ 'surname', "#surname#" ] },
-            { name: 'eq', args: [ 'age', "#age#" ] },
-            { name: 'gt', args: [ 'age', "#ageGt#" ] },
-            { name: 'startsWith', args: [ 'surname', "#nameSt#" ] },
+            { type: 'eq', args: [ 'name', "#name#" ] },
+            { type: 'eq', args: [ 'surname', "#surname#" ] },
+            { type: 'eq', args: [ 'age', "#age#" ] },
+            { type: 'gt', args: [ 'age', "#ageGt#" ] },
+            { type: 'startsWith', args: [ 'surname', "#nameSt#" ] },
           ]
         },
         
@@ -329,9 +329,6 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
      
 
       // Clear people table
-      //g.dbPeople = new g.DbLayer( 'people', {  name: true, surname: true, age: false, id: true }  ); 
-      //console.log( "IT IS: ", require('util').inspect( g.people, { depth: 10 } ) );
-      //debugger;
       g.dbPeople = g.people.dbLayer;
       g.dbPeople.delete( { }, { multi: true }, function( err ){
         if( err ){
@@ -340,7 +337,6 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         } else {
    
           // Clear people table
-          //g.dbPeople = new g.DbLayer( 'people', {  name: true, surname: true, age: false, id: true }  ); 
           g.dbWsPeople = g.wsPeople.dbLayer;
           g.dbWsPeople.delete( { }, { multi: true }, function( err ){
             if( err ){
