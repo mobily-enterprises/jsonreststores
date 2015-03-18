@@ -212,11 +212,19 @@ var Store = declare( Object,  {
     // If queryConditions is not defined, create one
     // based on the onlineSearchSchema (each field is searchable)
     if( self.queryConditions == null ){
-      self.queryConditions = { name: 'and', args: [ ] };
-      for( var k in self.onlineSearchSchema.structure )
-        self.queryConditions.args.push( { name: 'eq', args: [ k, '#' + k + '#' ] } );
 
-      // TODO: take AND out if Object.keys( self.onlineSearchSchema.structure ).length is only 1
+      // If onlineSearchSchema only has 1 element, there is no point in having an 'and'
+      var keys = Object.keys( self.onlineSearchSchema.structure ); 
+      if( keys.length === 1 ){
+        var k = keys[ 0 ];
+        self.queryConditions = { type: 'eq', args: [ k, '#' + k + '#' ] };
+
+      } else {
+        self.queryConditions = { type: 'and', args: [ ] };
+        for( var k in self.onlineSearchSchema.structure )
+          self.queryConditions.args.push( { type: 'eq', args: [ k, '#' + k + '#' ] } );  
+      }
+      
     }
 
     Store.registry[ self.storeName ] = self;
