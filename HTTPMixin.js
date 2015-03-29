@@ -183,23 +183,23 @@ var HTTPMixin = declare( Object,  {
     // options.putBefore and options.putDefaultPosition
     if( mn === 'Put' || mn === "Post" ){
 
-      // The header `x-put-default-position` always wins
-      if( typeof( req.headers[ 'x-put-default-position' ]) !== 'undefined'){
+      // The header `put-default-position` always wins
+      if( typeof( req.headers[ 'put-default-position' ]) !== 'undefined'){
 
         // Set options.putDefaultPosition depending on passed header. Default is `false`
-        if( req.headers[ 'x-put-default-position' ] === 'start' ){
+        if( req.headers[ 'put-default-position' ] === 'start' ){
           options.putDefaultPosition = 'start';
         } else {
           options.putDefaultPosition = 'end';
         }
 
-      // There is no `x-put-default-position`: see if x-put-before is set
+      // There is no `put-default-position`: see if put-before is set
       // and if it is, set options.putBefore
       // NOTE: in the server context, putBefore ALWAYS needs to be an id, and NEVER null
       } else {
 
-        if( typeof( req.headers[ 'x-put-before' ] ) !== 'undefined' )
-          options.putBefore = req.headers[ 'x-put-before' ];
+        if( typeof( req.headers[ 'put-before' ] ) !== 'undefined' )
+          options.putBefore = req.headers[ 'put-before' ];
       }
     }
 
