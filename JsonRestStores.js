@@ -69,6 +69,8 @@ var Store = declare( Object,  {
 
   strictSchemaOnFetch: true,
 
+  //failWithProtectedFields: false,
+
   position: false,    // If set, will make fields re-positionable
   defaultSort: null,  // If set, it will be applied to all getQuery calls
 
@@ -553,7 +555,12 @@ var Store = declare( Object,  {
             // Protected field are not allowed here
             for( var field in request.body ){
               if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
-                errors.push( { field: field, message: 'Field not allowed because protected: ' + field + ' in ' + self.storeName } );
+
+                //if( self.failWithProtectedFields ){
+                //  errors.push( { field: field, message: 'Field not allowed because protected: ' + field + ' in ' + self.storeName } );
+                //} else {
+                  delete validatedBody[ field ];
+                //}
               }
             } 
           }
@@ -668,7 +675,12 @@ var Store = declare( Object,  {
             // Protected field are not allowed here
             for( var field in request.body ){
               if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
-                errors.push( { field: field, message: 'Field not allowed because protected: ' + field + ' in ' + self.storeName } );
+
+                //if( self.failWithProtectedFields ){
+                //  errors.push( { field: field, message: 'Field not allowed because protected: ' + field + ' in ' + self.storeName } );
+                //} else {
+                  delete validatedBody[ field ];
+                //}
               }
             } 
           }
