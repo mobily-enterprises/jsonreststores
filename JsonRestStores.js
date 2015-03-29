@@ -298,7 +298,7 @@ var Store = declare( Object,  {
     var changeFunctions = [];
     var docs = [], preparedDocs = [];
 
-    async.each(
+    async.eachSeries(
       fullDocs,
       function( fullDoc, callback ){
         self.extrapolateDoc( request, method, fullDoc, function( err, doc ){
