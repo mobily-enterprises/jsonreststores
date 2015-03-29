@@ -2042,14 +2042,14 @@ While there is no practical reason, server side, to make sure that `queryConditi
 
 ## `implementReposition( doc, where, beforeId, cb )`
 
-This method is used to reposition a field in the data source. It's the only call in the API with a sligtly different signature. This function should only do anything if `store.position` is set to `true`.
+This method is used to reposition a field in the data source. It's the only call to the API with a slightly different signature. This function should only do anything if `store.position` is set to `true`.
 
 Its parameters are:
 
 * `doc`. The record that needs to be moved. Most implementation will only ever taken into account `doc[ self.idProperty ]`.
 * `where`. Where to place the element. It can be:
- * `first`. Place the element first.
- * `last`. Place the element last.
+ * `start`. Place the element first.
+ * `end`. Place the element last.
  * `before`. Place the element before the one with ID `beforeId`.
 * `beforeId`. Only used when `where` is `before`: it's the ID of the element.
 
