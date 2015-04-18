@@ -396,12 +396,8 @@ exports = module.exports = declare( Object,  {
       if( ( res.type === 'and' || res.type === 'or' )){
         if( res.args.length === 0 ) return {};
         if( res.args.length === 1 ) return res.args[ 0 ];
-
-      // More than 1 condition: 'and' or 'or' will need to stay
-      } else {
-        return res;
       }
-
+      return res;
     }
 
     filter.conditions = getQueryFromQueryConditions();
