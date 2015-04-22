@@ -255,7 +255,7 @@ var Store = declare( Object,  {
      var self = this;
 
     self[ funcName ].call( self, request, method, doc, function( err, processedDoc ){
-      if( err ) return cb( err );  
+      if( err ) return done( err );  
 
       // No nested table: go home!
       if( self.nested.length === 0 ) return done( null, processedDoc );
