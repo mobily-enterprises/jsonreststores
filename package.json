@@ -8,7 +8,7 @@
     "mongodb"
   ],
   "main": "JsonRestStores.js",
-  "version": "0.3.40",
+  "version": "0.3.41",
   "private": false,
   "repository": {
     "type": "git",
