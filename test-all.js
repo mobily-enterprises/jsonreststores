@@ -129,7 +129,11 @@ var compareCollections = function( test, a, b ){
     test.fail( a, b, "Comparison failed", "recordset comparison" );
   }
 
+  //console.log(" COMPARING: a3", a3 );
+  //console.log(" COMPARING: b3", b3 );
+
   equal = ( a3 == b3 );
+  //console.log("EQUAL:", equal );
 
   if( ! equal ){
     test.fail( a, b, "Record sets do not match", "recordset comparison" );
@@ -2699,9 +2703,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
          compareItems( test,  selector,
   
   { conditions: 
-   { name: 'and', args: [ 
-        { name: 'eq', args: [ 'name', 'Tony' ] } , 
-        { name: 'eq', args: [ 'surname', 'Mobily' ] } ] },
+   { type: 'and', args: [ 
+        { type: 'eq', args: [ 'name', 'Tony' ] } , 
+        { type: 'eq', args: [ 'surname', 'Mobily' ] } ] },
   ranges: {},
   sort: {}  }
          );
@@ -2712,9 +2716,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
            test.deepEqual( selector,
   
   { conditions: 
-   { name: 'and', args: [ 
-        { name: 'gt', args: [ 'age', 20 ] } ,
-        { name: 'startsWith', args: [ 'surname', 'Mob' ] },
+   { type: 'and', args: [ 
+        { type: 'gt', args: [ 'age', 20 ] } ,
+        { type: 'startsWith', args: [ 'surname', 'Mob' ] },
     ] },
   ranges: {},
   sort: {}  }
@@ -2726,7 +2730,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
              test.ifError( err ); if( err ) return test.done();
              compareItems( test,  selector, 
   
-  { conditions: { name: 'eq', args: [ 'name', 'Tony' ] },
+  { conditions: { type: 'eq', args: [ 'name', 'Tony' ] },
   ranges: {},
   sort: { name: -1, surname: 1 } }
   
@@ -2737,7 +2741,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
                test.ifError( err ); if( err ) return test.done();
                compareItems( test,  selector, 
   
-  { conditions: { name: 'eq', args: [ 'name', 'Tony' ] },
+  { conditions: { type: 'eq', args: [ 'name', 'Tony' ] },
   ranges: { from: 0, to: 10, limit: 5 },
   sort: { name: -1, surname: 1 } }
   
