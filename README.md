@@ -122,6 +122,8 @@ Creating a store with JsonRestStores is very simple. Here is how you make a full
       });
 
       var managers = new Managers(); 
+
+      JsonRestStores.init();
       managers.protocolListen( 'HTTP', { app: app } );;
 ````
 
@@ -161,6 +163,8 @@ Note that since you will be mixing in `JsonRestStores` with `JsonRestStores.HTTP
     });
 
     var managers = new Managers();
+
+    JsonRestStores.init();
     protocolListen( 'HTTP', { app: app } );
 ````
 
@@ -173,6 +177,8 @@ That's it: this is enough to add, to your Express application, a a full store wh
 * `storeName` (_mandatory_) needs to be a unique name for your store. 
 * `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error.
 * `protocolListen( 'HTTP', { app: app } )` creates the right Express routes to receive HTTP connections for the `GET`, `PUT`, `POST` and `DELETE` methods.
+* `JsonRestStores.init()` should _always_ be run once you have declared all of your stores. This function will run the initialisation code necessary to make nested stores work properly.
+
 
 ## The store live in action in your express application
 
@@ -254,6 +260,8 @@ This is how the stock express code would change to implement the store above (pl
         handleDelete: true,
       });
       var managers = new Managers(); 
+
+      JsonRestStores.init();
       managers.protocolListen( 'HTTP', { app: app } );;
 
       // ******************************************************
@@ -544,6 +552,7 @@ So, you could reach the same goal without `publicURL`:
     });
 
     var managers = new Managers();
+    JsonRestStores.init();
     managers.protocolListen( 'HTTP', { app: app } );; // This will throw()
 
 Note that:
@@ -584,6 +593,7 @@ When you define a store like this:
       hardLimitOnQueries: 50,
     });
 
+    JsonRestStores.init();
     managers.protocolListen( 'HTTP', { app: app } );;
 
 ## Request listening
@@ -706,7 +716,6 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
       handleDelete: true,
     });
     var managers = new Managers(); 
-    managers.protocolListen( 'HTTP', { app: app } );;
 
     var ManagersCars = declare( Store, {
 
@@ -725,6 +734,9 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
       handleDelete: true,
     });
     var managersCars = new ManagersCars();
+
+    JsonRestStores.init();
+    managers.protocolListen( 'HTTP', { app: app } );;
     managersCars.protocolListen( 'HTTP', { app: app } );;
  
 You have two stores: one is the simple `managers` store with a list of names and surname; the other one is the `managersCars` store: note how the URL for `managersCars` includes `managerId`.
@@ -758,15 +770,14 @@ For example:
       nested: [
         {
           type: 'multiple',
-          layer: 'managersCars',
+          store: 'managersCars',
           join: { managerId: 'id' },
         }
       ],
 
     });
     var managers = new Managers(); 
-    managers.protocolListen( 'HTTP', { app: app } );;
-
+  
     var ManagersCars = declare( Store, {
 
       schema: new Schema({
@@ -787,17 +798,21 @@ For example:
         {
           type: 'lookup',
           localField: 'managerId',
-          layer: 'managers',
-          layerField: 'id'
+          store: 'managers',
         }
       ],
     });
     var managersCars = new ManagersCars();
+
+    JsonRestStores.init();
+    managers.protocolListen( 'HTTP', { app: app } );;
     managersCars.protocolListen( 'HTTP', { app: app } );;
 
-This is an example where using JsonRestStores really shines: when you use `GET` to fetch a manager, the object's attribute `manager._children.managersCars` will be an array of all cars joined to that manager. Also, when you use `GET` to fetch a car, the object's attribute `car._children.managerId` will be an object representing the correct manager. This is immensely useful in web applications, as it saves tons of HTTP calls for lookups.
+This is an example where using JsonRestStores really shines: when you use `GET` to fetch a manager, the object's attribute `manager._children.managersCars` will be an array of all cars joined to that manager. Also, when you use `GET` to fetch a car, the object's attribute `car._children.managerId` will be an object representing the correct manager. This is immensely useful in web applications, as it saves tons of HTTP calls for lookups. **NOTE**: The child's store's `extrapolateDoc()` and `prepareBeforeSend()` methods _will_ be called on the child's data (as you would expect). Keep in mind that when those methods are being called on bested data, `request.nested` will be set to true.
 
-Fetching of nested data is achieved by SimpleDbLayerMixin by using [SimpleDbLayer's nesting abilities](https://github.com/mercmobily/simpledblayer#automatic-loading-of-children-joins), which you should check out. 
+Note that in `nested` objects the store names are passed as _strings_, rather than objects; this is important: in this very example, you can see `store: 'managersCars',` as a nested store, but at that point `managersCars` hasn't been declared yet. The store names in `nested` will be resolved later, by the `JsonRestStores.init()` function, using JsonRestStores' registry for the lookup. This is why it's crucial to run `JsonRestStores.init()` only when _all_ of your stores have been created (and are therefore in the registry).
+
+Fetching of nested data is achieved by SimpleDbLayerMixin by using [SimpleDbLayer's nesting abilities](https://github.com/mercmobily/simpledblayer#automatic-loading-of-children-joins), which you should check out. If you do check it out, you will see strong similarities between JsonRestStores' `nested` parameter and `SimpleDbLayer`. If you have used nested parameters in SimpleDbLayer, then you easily see that  JsonRestStores will simply make sure that the required attribute for `nested` entries are there; for each `nested` entry it will add a `layer` property (based on the store's own `collectionName`) and a `layerField` property (based on the store's own `idProperty`).
 
 # Naming conventions for stores
 
@@ -817,7 +832,6 @@ It's important to be consistent in naming conventions while creating stores. In 
       // ...
     }
     var managers = new Managers();
-    managers.protocolListen( 'HTTP', { app: app } );;
 
     var People = declare( Store, { 
 
@@ -831,6 +845,9 @@ It's important to be consistent in naming conventions while creating stores. In 
       // ...
     }
     var people = new People();
+
+    JsonRestStores.init();
+    managers.protocolListen( 'HTTP', { app: app } );;
     people.protocolListen( 'HTTP', { app: app } );;
 
 * Store names anywhere lowercase and are plural (they are collections representing multiple entries)
@@ -854,7 +871,6 @@ It's important to be consistent in naming conventions while creating stores. In 
       // ...
     }
     var managers = new Managers();
-    managers.protocolListen( 'HTTP', { app: app } );;
 
     var ManagersCars = declare( Store, { 
 
@@ -869,6 +885,9 @@ It's important to be consistent in naming conventions while creating stores. In 
       // ...
     }
     var managerCars = new ManagersCars();
+
+    JsonRestStores.init();
+    managers.protocolListen( 'HTTP', { app: app } );;    
     managerCars.protocolListen( 'HTTP', { app: app } );;
 
 
@@ -897,6 +916,8 @@ In the previous examples, I explained how marking a field as `searchable` in the
     });
 
     var managers = new Managers(); 
+
+    JsonRestStores.init();
     managers.protocolListen( 'HTTP', { app: app } );;
 
 
@@ -928,6 +949,8 @@ In JsonRestStores you actually define what fields are acceptable as filters with
     });
 
     var managers = new Managers(); 
+
+    JsonRestStores.init();
     managers.protocolListen( 'HTTP', { app: app } );;
 
 If `onlineSearchSchema` is not defined, JsonRestStores will create one based on your main schema by doing a shallow copy, excluding `paramIds` (which means that, in this case, `id` is not added automatically to `onlineSearchSchema`, which is most likely what you want).
@@ -967,6 +990,8 @@ You can decide how the elements in `onlineSearchSchema` will be turned into a se
     });
 
     var managers = new Managers(); 
+
+    JsonRestStores.init();
     managers.protocolListen( 'HTTP', { app: app } );;
 
 Basically, `queryConditions` is automatically generated with the `name` field in the database that matches the `name` entry in the query string (that's what `#name#` stands for).
@@ -1088,14 +1113,13 @@ For example:
       nested: [
         {
           type: 'multiple',
-          layer: 'managersCars',
+          store: 'managersCars',
           join: { managerId: 'id' },
         }
       ],
 
     });
     var managers = new Managers(); 
-    managers.protocolListen( 'HTTP', { app: app } );;
 
     var ManagersCars = declare( Store, {
 
@@ -1142,12 +1166,14 @@ For example:
         {
           type: 'lookup',
           localField: 'managerId',
-          layer: 'managers',
-          layerField: 'id'
+          store: 'managers',
         }
       ],
     });
     var managersCars = new ManagersCars();
+
+    JsonRestStores.init();
+    managers.protocolListen( 'HTTP', { app: app } );;
     managersCars.protocolListen( 'HTTP', { app: app } );;
 
 You can see how for example in `Managers`, `onlineSearchSchema` has a mixture of fields that match the ones in the schema (`name`, `surname`) that look for a match in the correponding fields, as well as search-specific fields (like `carInfo`) that end up looking into the nested children.
@@ -1206,14 +1232,13 @@ For example:
       nested: [
         {
           type: 'multiple',
-          layer: 'managersCars',
+          store: 'managersCars',
           join: { managerId: 'id' },
         }
       ],
 
     });
     var managers = new Managers(); 
-    managers.protocolListen( 'HTTP', { app: app } );;
 
     var ManagersCars = declare( Store, {
 
@@ -1237,12 +1262,14 @@ For example:
         {
           type: 'lookup',
           localField: 'managerId',
-          layer: 'managers',
-          layerField: 'id'
+          store: 'managers',
         }
       ],
     });
     var managersCars = new ManagersCars();
+
+    JsonRestStores.init();
+    managers.protocolListen( 'HTTP', { app: app } );;
     managersCars.protocolListen( 'HTTP', { app: app } );;
 
 In this case, I didn't define `onlineSearchSchema` nor `queryConditions`: the store will get the default ones provided by JsonRestStores.
@@ -1280,6 +1307,8 @@ For example:
 
     });
     var comments = new Comments(); 
+
+    JsonRestStores.init();
     comments.protocolListen( 'HTTP', { app: app } );;
 
 This will ensure that comments are always retrieved in reversed order, newest first. Since `sortableFields` is not defined, the default order (by `posted`) is the only possible one for this store.
@@ -1308,6 +1337,8 @@ When creating a store, you can set the `position` parameter as `true`. For examp
       handleDelete: true,
     });
     var managers = new Managers();
+
+    JsonRestStores.init();
     managers.protocolListen( 'HTTP', { app: app } );;
 ````
 
@@ -1485,6 +1516,8 @@ Note that `searchable` is set both for `id` and for `workspaceId` (which are the
     });
 
     var managers = new Managers(); 
+
+    JsonRestStores.init();
     managers.protocolListen( 'HTTP', { app: app } );;
 ````
 
@@ -1518,6 +1551,8 @@ Is the same as writing:
     });
 
     var managers = new Managers(); 
+
+    JsonRestStores.init();
     managers.protocolListen( 'HTTP', { app: app } );;
 ````
 
@@ -1775,6 +1810,8 @@ The parameters are:
  * `doc`. The record after fetching
  * `cb( err, doc ) `. The callback, which will need to be passed a `doc` object as its second parameter.
 
+Note that if the method is being called on nested data, `request.nested` will be set to `true`.
+
 ### `prepareBeforeSend( request, method, doc, cb )`
 
 You can use this method to manipulate your data just before it's sent over to the client requesting it.
@@ -1789,6 +1826,8 @@ The parameters are:
  * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`
  * `doc`. The entry after fetching
  * `cb( err, doc ) `. The callback, which will need to be passed a `doc` object as its second parameter.
+
+Note that if the method is being called on nested data, `request.nested` will be set to `true`.
 
 ## Stage methods
 

@@ -35,6 +35,7 @@ var Store = declare( Object,  {
 
   storeName: null,
   schema: null,
+  nested: [],
 
   // ****************************************************
   // *** ATTRIBUTES THAT CAN TO BE DEFINED IN PROTOTYPE
@@ -128,6 +129,10 @@ var Store = declare( Object,  {
     } else {
       return { message: error.message }
     }
+  },
+
+  // Run when JsonRestStores.init() is run
+  init: function(){
   },
 
   // **************************************************************************
@@ -233,12 +238,97 @@ var Store = declare( Object,  {
   },
 
   // Simple function that shallow-copies an object. This should be used
-  // every time  prepareBody, extrapolateDoc or prepareBeforeSend are
+  // every time  prepareBody, extrapolateDocProxy or prepareBeforeSendProxy are
   // overridden (in order to pass a copy of the object)
   _co: function( o ){
     var newO = {};
     for( var k in o ) if( o.hasOwnProperty( k ) ) newO[ k ] = o[ k ];
     return newO;
+  },
+
+
+  // This will call either `extrapolateDoc` or `prepareBeforeSend` (depending on
+  // the `funcName` parameter) on the document itself, _and_ on any nested documents
+  // in the record itself.
+  // Note that `extrapolateDoc` and `prepareBeforeSend` have identical signatures 
+  _genericProcessProxy: function( funcName, request, method, doc, done ){
+     var self = this;
+
+    self[ funcName ].call( self, request, method, doc, function( err, processedDoc ){
+      if( err ) return cb( err );  
+
+      // No nested table: go home!
+      if( self.nested.length === 0 ) return done( null, processedDoc );
+
+      // For each nested table...
+      async.each(
+        self.nested,
+        function( n, cb ){
+
+          var store = n.store;
+
+          switch( n.type ){
+
+            case 'multiple':
+
+              // Not an array: not interested!
+              var a = processedDoc._children[ store.storeName ];
+              if( ! Array.isArray( a ) || ! a.length ) return cb( null );
+
+              // For each element in the array...
+              async.map(
+                a,
+                function( item, cb ){
+
+                  var requestCopy = self._co( request );
+                  requestCopy.nested = true;
+                  store[ funcName ].call( store, requestCopy, method, item, function( err, item ){
+                    if( err ) return cb( err );
+
+                    cb( null, item );
+                  });
+                },
+                function( err ){
+
+                  cb( null );    
+                }
+              );
+  
+            break;
+
+            case 'lookup':
+              
+              // Not an object: not interested!
+              var o = processedDoc._children[ store.localField ];
+              if( typeof o === 'undefined' ) return cb( null );
+              
+              var requestCopy = self._co( request );
+              requestCopy.nested = true;    
+
+              store[ funcName ] .call( store, requestCopy, method, o, function( err, o ){
+                if( err ) return cb( err );
+
+                processedDoc._children[ store.localField ] = o;
+                cb( null );
+              });
+            break;
+          }// End of switch
+
+        },
+        function( err ){
+          done( null, processedDoc );
+        }
+      ); // async.each for nested table
+
+    });
+  },
+
+  extrapolateDocProxy: function( request, method, fullDoc, done ){
+    this._genericProcessProxy( 'extrapolateDoc', request, method, fullDoc, done );
+  },
+  
+  prepareBeforeSendProxy: function( request, method, doc, done ){
+    this._genericProcessProxy( 'prepareBeforeSend', request, method, doc, done );
   },
 
   // Will call implementReposition based on options.
@@ -275,9 +365,6 @@ var Store = declare( Object,  {
     }
   },
 
-  // TODO: Check what happens when sorting for a nested field with a 1:n relationship with table (?!)
-
-
   getFullPublicURL: function(){
     var path = require('path');
 
@@ -291,7 +378,7 @@ var Store = declare( Object,  {
   // *** INTERNAL FUNCTIONS, DO NOT TOUCH
   // ****************************************************
 
-  _extrapolateDocAndprepareBeforeSendAll: function( request, method, fullDocs, cb ){
+  _extrapolateDocProxyAndprepareBeforeSendProxyAll: function( request, method, fullDocs, cb ){
 
     var self = this;
 
@@ -301,12 +388,12 @@ var Store = declare( Object,  {
     async.eachSeries(
       fullDocs,
       function( fullDoc, callback ){
-        self.extrapolateDoc( request, method, fullDoc, function( err, doc ){
+        self.extrapolateDocProxy( request, method, fullDoc, function( err, doc ){
           if( err ) return callback( err );
 
           docs.push( doc );
 
-          self.prepareBeforeSend( request, method, doc, function( err, preparedDoc ){
+          self.prepareBeforeSendProxy( request, method, doc, function( err, preparedDoc ){
             if( err ) return callback( err );
 
             preparedDocs.push( preparedDoc );
@@ -599,12 +686,12 @@ var Store = declare( Object,  {
                       self.afterDbOperation( request, 'post', function( err ){
                       if( err ) return self._sendError( request, 'post', next, err );
 
-                        self.extrapolateDoc( request, 'post', request.data.fullDoc, function( err, doc ) {
+                        self.extrapolateDocProxy( request, 'post', request.data.fullDoc, function( err, doc ) {
                           if( err ) return self._sendError( request, 'post', next, err );
 
                           request.data.doc = doc;
 
-                          self.prepareBeforeSend( request, 'post', request.data.doc, function( err, preparedDoc ){
+                          self.prepareBeforeSendProxy( request, 'post', request.data.doc, function( err, preparedDoc ){
                             if( err ) return self._sendError( request, 'post', next, err );
 
                             request.data.preparedDoc = preparedDoc;
@@ -740,12 +827,12 @@ var Store = declare( Object,  {
                           self.afterDbOperation( request, 'putNew', function( err ){
                             if( err ) return self._sendError( request, 'putNew', next, err );
 
-                            self.extrapolateDoc( request, 'putNew', request.data.fullDoc, function( err, doc ) {
+                            self.extrapolateDocProxy( request, 'putNew', request.data.fullDoc, function( err, doc ) {
                               if( err ) return self._sendError( request, 'putNew', next, err );
                   
                               request.data.doc = doc;
 
-                              self.prepareBeforeSend( request, 'putNew', request.data.doc, function( err, preparedDoc ){
+                              self.prepareBeforeSendProxy( request, 'putNew', request.data.doc, function( err, preparedDoc ){
                                 if( err ) return self._sendError( request, 'putNew', next, err );
                         
                                 request.data.preparedDoc = preparedDoc;
@@ -777,7 +864,7 @@ var Store = declare( Object,  {
 
                   request.data.fullDoc = fullDoc;
                       
-                  self.extrapolateDoc( request, 'putExisting', request.data.fullDoc, function( err, doc ) {
+                  self.extrapolateDocProxy( request, 'putExisting', request.data.fullDoc, function( err, doc ) {
                     if( err ) return self._sendError( request, 'putExisting', next, err );
             
                     request.data.doc = doc;
@@ -809,12 +896,12 @@ var Store = declare( Object,  {
                             self.afterDbOperation( request, 'putExisting', function( err ){
                               if( err ) return self._sendError( request, 'putExisting', next, err );
 
-                              self.extrapolateDoc( request, 'putExisting', request.data.fullDocAfter, function( err, docAfter ) {
+                              self.extrapolateDocProxy( request, 'putExisting', request.data.fullDocAfter, function( err, docAfter ) {
                                 if( err ) return self._sendError( request, 'putExisting', next, err );
          
                                 request.data.docAfter = docAfter;
                          
-                                self.prepareBeforeSend( request, 'putExisting', request.data.docAfter, function( err, preparedDoc ){
+                                self.prepareBeforeSendProxy( request, 'putExisting', request.data.docAfter, function( err, preparedDoc ){
                                   if( err ) return self._sendError( request, 'putExisting', next, err );
 
                                   request.data.preparedDoc = preparedDoc;
@@ -902,7 +989,7 @@ var Store = declare( Object,  {
                 self.afterDbOperation( request, 'getQuery', function( err ){
                   if( err ) return self._sendError( request, 'getQuery', next, err );
 
-                  self._extrapolateDocAndprepareBeforeSendAll( request, 'getQuery', request.data.fullDocs, function( err, docs, preparedDocs ){
+                  self._extrapolateDocProxyAndprepareBeforeSendProxyAll( request, 'getQuery', request.data.fullDocs, function( err, docs, preparedDocs ){
                     if( err ) return self._sendError( request, 'getQuery', next, err );
 
                     request.data.docs = docs;              
@@ -961,7 +1048,7 @@ var Store = declare( Object,  {
         self.afterDbOperation( request, 'get', function( err ){
           if( err ) return self._sendError( request, 'get', next, err );
 
-          self.extrapolateDoc( request, 'get', fullDoc, function( err, doc) {
+          self.extrapolateDocProxy( request, 'get', fullDoc, function( err, doc) {
             if( err ) return self._sendError( request, 'get', next, err );
 
             request.data.doc = doc;
@@ -976,7 +1063,7 @@ var Store = declare( Object,  {
                 if( err ) return self._sendError( request, 'get', next, err );
             
                 // "preparing" the doc. The same function is used by GET for collections 
-                self.prepareBeforeSend( request, 'get', doc, function( err, preparedDoc ){
+                self.prepareBeforeSendProxy( request, 'get', doc, function( err, preparedDoc ){
                   if( err ) return self._sendError( request, 'get', next, err );
             
                   request.data.preparedDoc = preparedDoc;
@@ -1036,7 +1123,7 @@ var Store = declare( Object,  {
 
         request.data.fullDoc = fullDoc;
     
-        self.extrapolateDoc( request, 'delete', fullDoc, function( err, doc) {
+        self.extrapolateDocProxy( request, 'delete', fullDoc, function( err, doc) {
           if( err ) return self._sendError( request, 'delete', next, err );
 
           request.data.fullDoc = doc;
@@ -1061,7 +1148,7 @@ var Store = declare( Object,  {
                 self.afterDbOperation( request, 'delete', function( err ){
                   if( err ) return self._sendError( request, 'delete', next, err );
 
-                  self.prepareBeforeSend( request, 'delete', doc, function( err, preparedDoc ){
+                  self.prepareBeforeSendProxy( request, 'delete', doc, function( err, preparedDoc ){
                     if( err ) return self._sendError( request, 'delete', next, err );
         
                     request.data.preparedDoc = preparedDoc;
@@ -1226,7 +1313,7 @@ Store.OneFieldStoreMixin = declare( Object,  {
   // make sense in a OneFieldStore context
   prepareBody: function( request, method, body, cb ){ cb( null, body ); },
   extrapolateDoc: function( request, method, doc, cb ){ cb( null, doc ); },
-  prepareBeforeSend: function( request, method, doc, cb ){ cb( null, doc ); },
+  prepareBeforeSendProxy: function( request, method, doc, cb ){ cb( null, doc ); },
   
   // Making sure unwanted methods  are not even implemented
   _makePost: function( request, next ){
@@ -1276,7 +1363,7 @@ Store.OneFieldStoreMixin = declare( Object,  {
             if( ! self.paramIds[ field ] && field != self.piggyField ) delete fullDoc[ field ];
           }
 
-          self.extrapolateDoc( request, 'get', request.data.fullDoc, function( err, doc) {
+          self.extrapolateDocProxy( request, 'get', request.data.fullDoc, function( err, doc) {
             if( err ) return self._sendError( request, 'get', next, err );
       
             request.data.doc = doc;
@@ -1291,7 +1378,7 @@ Store.OneFieldStoreMixin = declare( Object,  {
                 if( err ) return self._sendError( request, 'get', next, err );
                
                 // "preparing" the doc. The same function is used by GET for collections 
-                self.prepareBeforeSend( request, 'get', doc, function( err, preparedDoc ){
+                self.prepareBeforeSendProxy( request, 'get', doc, function( err, preparedDoc ){
                   if( err ) return self._sendError( request, 'get', next, err );
             
                   request.data.preparedDoc = preparedDoc;
@@ -1400,7 +1487,7 @@ Store.OneFieldStoreMixin = declare( Object,  {
                 if( self.paramIds.indexOf( field ) == -1 && field != self.piggyField ) delete fullDoc[ field ];
               }
                 
-              self.extrapolateDoc( request, 'putExisting', request.data.fullDoc, function( err, doc) {
+              self.extrapolateDocProxy( request, 'putExisting', request.data.fullDoc, function( err, doc) {
                 if( err ) return self._sendError( request, 'put', next, err );
           
                 request.data.doc = doc;
@@ -1431,12 +1518,12 @@ Store.OneFieldStoreMixin = declare( Object,  {
                       self.afterDbOperation( request, 'putExisting', function( err ){
                         if( err ) return self._sendError( request, 'putExisting', next, err );
 
-                        self.extrapolateDoc( request, 'putExisting', request.data.fullDocAfter, function( err, docAfter ) {
+                        self.extrapolateDocProxy( request, 'putExisting', request.data.fullDocAfter, function( err, docAfter ) {
                           if( err ) return self._sendError( request, 'putExisting', next, err );
 
                           request.data.docAfter = docAfter;
                           
-                          self.prepareBeforeSend( request, 'putExisting', docAfter, function( err, preparedDoc ){
+                          self.prepareBeforeSendProxy( request, 'putExisting', docAfter, function( err, preparedDoc ){
                             if( err ) return self._sendError( request, 'putExisting', next, err );
 
                             request.data.preparedDoc = preparedDoc;
@@ -1489,6 +1576,16 @@ Store.OneFieldStoreMixin = declare( Object,  {
   }
 
 });
+
+// Initialise all layers, creating relationship hashes
+Store.init = function(){
+  Object.keys( Store.registry ).forEach( function( key ){
+    var store = Store.registry[ key ];
+    store.init();
+  });
+
+};
+
 
 exports = module.exports = Store;
 Store.artificialDelay = 0;

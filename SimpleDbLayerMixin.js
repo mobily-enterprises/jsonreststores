@@ -25,7 +25,6 @@ exports = module.exports = declare( Object,  {
   // The object representing the table in the DB layer
   dbLayer: null,
 
-  nested: [],
   hardLimitOnQueries: 50,
 
   collectionName: null,
@@ -43,6 +42,28 @@ exports = module.exports = declare( Object,  {
 
     // If collectionName is not specified, it will deduct it from storeName
     self.collectionName = this.collectionName ? this.collectionName : this.storeName;
+  },
+
+  init: function f (){
+
+    this.inherited( f, arguments);
+
+    var self = this;
+
+    // Resolve all "store" fields in "nested" to the store itself (at this point they are
+    //  ALL in the registry)
+    self.nested.forEach( function( n ){
+
+      // if 'store' in nested in a string, then resolve to the store itself
+      if( typeof( n.store ) === 'string' ) {
+        n.store = self.constructor.registry[ n.store ];
+        n.layerField = n.store.idProperty;
+      }
+
+      // Sets the 'layer' attribute as the store's collectionName. 'layer' is required
+      // by SimpleDbLayer
+      n.layer = n.store.collectionName;
+    });
 
     // The db layer already has a table called 'collectionName' in the registry!
     // This store will reuse it. In this case, the class' self.schema, self.nested and
@@ -52,7 +73,7 @@ exports = module.exports = declare( Object,  {
       
       // idProperty must match
       if( self.idProperty != existingDbLayer.idProperty ){
-        throw( new Error("When reusing a db layer, idProperties must match.", self.storeName, 'is reusing', existingDbLayer.table ) );
+        throw( new Error("When reusing a db layer, idProperty fields must match.", self.storeName, 'is reusing', existingDbLayer.table ) );
       }
 
       self.schema = existingDbLayer.schema;
@@ -448,3 +469,5 @@ exports = module.exports = declare( Object,  {
   },
 
 });
+
+
