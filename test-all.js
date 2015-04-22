@@ -50,18 +50,25 @@ function makeReq( params ){
 var RES = function( func ){
 
   this._headers = {};
+  this._status = 200;
 
-  this.send = function( status, data ){
-    func.call( this, null, 'bytes', this._headers, status, data );
+  this.send = function( data ){
+    func.call( this, null, 'bytes', this._headers, this._status, data );
+    return this;
   };
 
-  this.json = function( status, data ){
-    func.call( this, null, 'json', this._headers, status, data );
+  this.json = function( data ){
+    func.call( this, null, 'json', this._headers, this._status, data );
   };
 
   this.setHeader = function( header, value ){
     this._headers[ header ] = value;
   };
+
+  this.status = function( s ){
+    this._status = s;
+    return this;
+  }
 }
 
 var peopleData = exports.peopleData = [
@@ -281,7 +288,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         paramIds: [ 'id' ],
       });
       g.people = new g.People();
-     
+      g.people.init();
 
 
       // Set the basic stores
@@ -326,7 +333,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         paramIds: [ 'workspaceId', 'id' ],
       });
       g.wsPeople = new g.WsPeople();
-     
+      g.wsPeople.init();
 
       // Clear people table
       g.dbPeople = g.people.dbLayer;
@@ -460,7 +467,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-   
+        people2.init();
+
         var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
         (people2._getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
           test.ifError( err ); if( err ) return test.done();
@@ -517,7 +525,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-  
+        people2.init();
+
         // Set the basic stores
         people2.apiPost( { name: "Tony" }, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
@@ -563,7 +572,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-   
+        people2.init();
+
         var req = makeReq( { body: { name: 'TONY', surname: 'Mobily' } } );
         (people2._getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
           test.ifError( err ); if( err ) return test.done();
@@ -611,7 +621,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-  
+        people2.init();
+
    
         // Set the basic stores
         people2.apiPost( { name: "Tony" }, function( err, person ){
@@ -668,6 +679,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
+        people2.init();
    
         var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
         (people2._getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
@@ -702,7 +714,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-        
+        people2.init();
+
   
         var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
         (people2._getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
@@ -743,7 +756,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-   
+        people2.init();
+
         // Set the basic stores
         people2.apiPost( { name: "Tony" }, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
@@ -777,7 +791,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-  
+        people2.init();
+
         var req = makeReq( { body: { name: 'TONy', surname: 'Mobily' } } );
         (people2._getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
           test.ifError( err ); if( err ) return test.done();
@@ -812,7 +827,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-  
+        people2.init();
    
         // Set the basic stores
         people2.apiPost( { name: "Tony" }, function( err, person ){
@@ -1045,7 +1060,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-   
+        people2.init();
+
         var req = makeReq( {  url: 'http://www.example.com/1234', params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
         (people2._getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
           test.ifError( err ); if( err ) return test.done();
@@ -1100,6 +1116,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
+        people2.init();
 
         var p = { id: 1234, name: 'Tony', surname: "Mobily", age: 37 };
         people2.apiPut( p, function( err, person ){
@@ -1145,7 +1162,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-   
+        people2.init();
+
         var req = makeReq( { params: { id: 1234 }, body: { name: 'TONY', surname: 'Mobily' } } );
         (people2._getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
           test.ifError( err ); if( err ) return test.done();
@@ -1192,7 +1210,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-  
+        people2.init();
+
   
         people2.apiPut( { name: "Tony", age: 37, id: 1234 }, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
@@ -1246,7 +1265,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-   
+        people2.init();
+
         var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
         (people2._getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
           test.ifError( err ); if( err ) return test.done();
@@ -1282,7 +1302,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-   
+        people2.init();
+
         // Set the basic stores
         people2.apiPut( { name: "Tony", id: 1234 }, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
@@ -1317,7 +1338,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-  
+        people2.init();
+
         var req = makeReq( {  url: 'http://www.example.com/1234', params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
         (people2._getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
           test.ifError( err ); if( err ) return test.done();
@@ -1354,7 +1376,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-   
+        people2.init();
+
         // Set the basic stores
         people2.apiPut( { name: "Tony", id: 1234 }, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
@@ -1380,7 +1403,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-  
+        people2.init();
+
         var req = makeReq( { params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
         (people2._getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
           test.ifError( err ); if( err ) return test.done();
@@ -1456,8 +1480,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             },  
           });
           People2.deleteStore( 'people2' );
-        var people2 = new People2();
-   
+          var people2 = new People2();
+          people2.init();
+
           var req = makeReq( { params: { id: 1234 }, body: { name: 'TONY' } } );
           (people2._getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
             test.ifError( err ); if( err ) return test.done();
@@ -1514,7 +1539,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-  
+        people2.init();
+
         g.dbPeople.insert( { id: 1234, name: 'Tony', age: 37 }, { multi: true }, function( err ){
           test.ifError( err ); if( err ) return test.done();
   
@@ -1553,8 +1579,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             echoAfterPost: false
           });
           People2.deleteStore( 'people2' );
-        var people2 = new People2();
-  
+          var people2 = new People2();
+          people2.init();
+
           var req = makeReq( { body: { name: 'Tony', surname: 'Mobily' } } );
           (people2._getRequestHandler('Post'))(req, new RES( function( err, type, headers, status, data ){
             test.ifError( err ); if( err ) return test.done();
@@ -1592,8 +1619,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
   
           });
           People2.deleteStore( 'people2' );
-        var people2 = new People2();
-   
+          var people2 = new People2();
+          people2.init(); 
+
           // Set the basic stores
           people2.apiPut( { id: 1234, name: "Tony" }, function( err, person ){
             test.ifError( err ); if( err ) return test.done();
@@ -1631,8 +1659,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             }
           });
           People2.deleteStore( 'people2' );
-        var people2 = new People2();
-  
+          var people2 = new People2();
+          people2.init();
+
           var req = makeReq( {  url: 'http://www.example.com/1234', params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
           (people2._getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
             test.ifError( err ); if( err ) return test.done();
@@ -1670,8 +1699,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             },
           });
           People2.deleteStore( 'people2' );
-        var people2 = new People2();
-  
+          var people2 = new People2();
+          people2.init();
+
           // Set the basic stores
           people2.apiPut( { id: 1234, name: "Tony" }, function( err, person ){
             test.ifError( err ); if( err ) return test.done();
@@ -1700,8 +1730,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             },
           });
           People2.deleteStore( 'people2' );
-        var people2 = new People2();
-  
+          var people2 = new People2();
+          people2.init();
+
           var req = makeReq( { params: { id: 1234 }, body: { name: 'Tony', surname: 'Mobily' } } );
           (people2._getRequestHandler('Put'))(req, new RES( function( err, type, headers, status, data ){
             test.ifError( err ); if( err ) return test.done();
@@ -1792,6 +1823,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
+        people2.init();
   
         var req = makeReq( { params: { id: 1234 } } );
         (people2._getRequestHandler('Get'))(req, new RES( function( err, type, headers, status, data ){
@@ -1850,6 +1882,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
+        people2.init();
   
         var p = { id: 1234, name: 'Tony', age: 37 };
         g.dbPeople.insert( p, function( err ){
@@ -1896,6 +1929,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           });
           People2.deleteStore( 'people2' );
         var people2 = new People2();
+        people2.init();
    
           var req = makeReq( { params: { id: 1234 } } );
           (people2._getRequestHandler('Get'))(req, new RES( function( err, type, headers, status, data ){
@@ -1935,6 +1969,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           });
           People2.deleteStore( 'people2' );
           var people2 = new People2();
+          people2.init();
 
           // Set the basic stores
           people2.apiGet( 1234, function( err, person ){
@@ -1973,6 +2008,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           });
           People2.deleteStore( 'people2' );
         var people2 = new People2();
+        people2.init();
   
           // Set the basic stores
           people2.apiPut( { id: 1234, name: "Tony" }, function( err, person ){
@@ -2116,7 +2152,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-  
+        people2.init();
+
         var req = makeReq( { params: { id: 1234 } } );
         (people2._getRequestHandler('Delete'))(req, new RES( function( err, type, headers, status, data ){
           test.ifError( err ); if( err ) return test.done();
@@ -2182,8 +2219,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             }
           });
           People2.deleteStore( 'people2' );
-        var people2 = new People2();
-  
+          var people2 = new People2();
+          people2.init();
+
           people2.apiDelete( 1234, function( err, person ){
             test.ifError( err ); if( err ) return test.done();
             test.equal( extrapolatedSurname, 'Mobily_extrapolated' );
@@ -2225,8 +2263,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             },  
           });
           People2.deleteStore( 'people2' );
-        var people2 = new People2();
-   
+          var people2 = new People2();
+          people2.init();
+
           var req = makeReq( { params: { id: 1234 } } );
           (people2._getRequestHandler('Delete'))(req, new RES( function( err, type, headers, status, data ){
             test.ifError( err ); if( err ) return test.done();
@@ -2262,8 +2301,9 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             },
           });
           People2.deleteStore( 'people2' );
-        var people2 = new People2();
-  
+          var people2 = new People2();
+          people2.init();
+
           // Set the basic stores
           people2.apiDelete( 1234, { name: "Tony" }, function( err, person ){
             test.ifError( err ); if( err ) return test.done();
@@ -2451,7 +2491,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-  
+        people2.init();
+
         var req = makeReq( { params: { id: 1234 } } );
         (people2._getRequestHandler('GetQuery'))(req, new RES( function( err, type, headers, status, data ){
           test.ifError( err ); if( err ) return test.done();
@@ -2508,7 +2549,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-   
+        people2.init();
+
         var req = makeReq( { url: "http://www.example.org/people/?name=Tony&surname=Mobily" } );
         (people2._getRequestHandler('GetQuery'))(req, new RES( function( err, type, headers, status, data ){
           test.ifError( err ); if( err ) return test.done();
@@ -2569,7 +2611,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-  
+        people2.init();
+
         // NOTE! The age is '37', and then `r` is corrected to 37 for comparison.
         async.series([
           function( done ){ g.dbPeople.insert( { id: 1234, name: 'Tony', surname: "Mobily", age: 37 }, function( err, r ){ if( err ) return done( err ); r.surname += "_extrapolated"; l.push( r ); done() }) },
@@ -2623,7 +2666,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
-   
+        people2.init();
+
         async.series([
           function( done ){ g.dbPeople.insert( { id: 1234, name: 'Tony', surname: "Mobily", age: 37 }, function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
           function( done ){ g.dbPeople.insert( { id: 1235, name: 'Chiara', surname: "Mobily", age: 24 }, function( err, r ){ if( err ) return done( err ); r.prepared = 10; l.push( r ); done() }) },
@@ -2829,7 +2873,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
 
           WsPeople2.deleteStore( 'wssPeople2' );
           var wsPeople2 = new WsPeople2();
-
+          wsPeople2.init();
   
           var WsPeople3 = declare( g.People, {
             storeName: 'wsPeople3',
@@ -2845,7 +2889,8 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
 
           WsPeople3.deleteStore( 'wsPeople3' );
           var wsPeople3 = new WsPeople3();
-  
+          wsPeople3.init();
+
           // This chains all of them
           var req = makeReq( { params: { id: 1234 } } );
           (wsPeople2._getRequestHandler('Get'))(req,
@@ -2906,6 +2951,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
+        people2.init();
   
         var req = makeReq( { params: { id: 1234 } } );
         (people2._getRequestHandler('Delete'))(req, new RES( function( err, type, headers, status, data ){
@@ -2946,6 +2992,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         });
         People2.deleteStore( 'people2' );
         var people2 = new People2();
+        people2.init();
   
         var req = makeReq( { params: { id: 1234 } } );
         (people2._getRequestHandler('Delete'))(req, new RES( function( err, type, headers, status, data ){
