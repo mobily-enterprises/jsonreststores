@@ -272,7 +272,7 @@ var Store = declare( Object,  {
             case 'multiple':
 
               // Not an array: not interested!
-              var a = processedDoc._children[ store.storeName ];
+              var a = processedDoc._children && processedDoc._children[ store.storeName ];
               if( ! Array.isArray( a ) || ! a.length ) return cb( null );
 
               // For each element in the array...
@@ -299,7 +299,7 @@ var Store = declare( Object,  {
             case 'lookup':
               
               // Not an object: not interested!
-              var o = processedDoc._children[ store.localField ];
+              var o =processedDoc._children && processedDoc._children[ store.localField ];
               if( typeof o === 'undefined' ) return cb( null );
               
               var requestCopy = self._co( request );
@@ -1320,7 +1320,7 @@ Store.OneFieldStoreMixin = declare( Object,  {
     next( new Error( "Method not implemented" ));
   },
   _makeDelete: function( request, next ){
-      next( new Error(" Method not implemented" ));
+    next( new Error(" Method not implemented" ));
   },
   _makeGetQuery: function( request, next ){
     next( new Error( "Method not implemented" ));
@@ -1570,10 +1570,6 @@ Store.OneFieldStoreMixin = declare( Object,  {
       
     });
   },    
-
-  constructor: function(){
-    // * TODO: Check that paramIds match?
-  }
 
 });
 
