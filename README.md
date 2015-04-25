@@ -5,16 +5,17 @@ JsonRestStores is the best way to create REST stores that return JSON data. Json
 
 Rundown of features:
 
-* **DRY approach**. Everything works as you'd expect it to, even though you are free to tweak things.
+* **DRY approach**. Create complex applications keeping your code short and tight, without repeating yourself.
 * **Down-to-earth**. It does what developers _actually_ need, using existing technologies.
 * **Database-agnostic**. You can either use a generic database connector, or implement the data-manipulation methods yourself.
 * **Protocol-agnostic**. For now, only HTTP is implemented. However, with JsonRestStores the protocol used to make REST calls doesn't actually matter.
 * **Schema based**. Anything coming from the client will be validated and cast to the right type.
 * **API-ready**. Every store function can be called via API, which bypass permissions constraints
 * **Tons of hooks**. You can hook yourself to every step of the store processing process: `afterValidate()`,   `afterCheckPermissions()`, `afterDbOperation()`, `afterEverything()`
-* **Authentication hooks**. Only implement things once, and keep authentication tight.
+* **Authentication hooks**. Only implement things once, and keep authentication tight and right.
 * **Mixin-based**. You can add functionality easily.
 * **Inheriting stores**. You can easily derive a store from another one.
+* **Nested data**. Automatically load all child records and lookup records from other stores.
 * **Simple error management**. Errors can be chained up, or they can make the store return them to the client.
 * **Great documentation**. Every aspect of JsonRestStores is carefully explained and documented. Note that every day usage doesn't require knowlege of every single aspect of JsonRestStores.
 
