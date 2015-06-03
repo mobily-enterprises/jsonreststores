@@ -50,7 +50,7 @@ It sounds simple enough (although it's only two tables and it already looks rath
 * When implementing `GET /bookings/`, you need to return the right `Content-Range` HTTP headers in your results so that the clients know what range they are getting.
 * When implementing `GET /bookings/`, you also need to make sure you take into account any `Range` header set by the client, which might only want to receive a subset of the data
 * With `POST` and `PUT`, you need to make sure that data is validated against some kind of schema, and return the appropriate errors if it's not.
-* With `PUT`, you need to consider the HTTP headers `If-match` and `If-none-match` to see if you can//should//must overwrite existing records 
+* With `PUT`, you need to consider the HTTP headers `If-match` and `If-none-match` to see if you can//should//must overwrite existing records
 * All unimplemented methods should return a `501 Unimplemented Method` server response
 
 This is only a short list of obvious things: there are many more to consider. The point is, when you make a store you should be focusing on the important parts (the data you gather and manipulate, and permission checking) rather than repetitive, boilerplate code.
@@ -122,7 +122,7 @@ Creating a store with JsonRestStores is very simple. Here is how you make a full
         handleDelete: true,
       });
 
-      var managers = new Managers(); 
+      var managers = new Managers();
 
       JsonRestStores.init();
       managers.protocolListen( 'HTTP', { app: app } );;
@@ -172,10 +172,10 @@ Note that since you will be mixing in `JsonRestStores` with `JsonRestStores.HTTP
 That's it: this is enough to add, to your Express application, a a full store which will handly properly all of the HTTP calls.
 
 * `Managers` is a new constructor function that inherits from `JsonRestStores` (the main constructor for JSON REST stores) mixed in with `JsonRestStores.HTTPMixin` (which ensures that `protocolListen()` works with the `HTTP` parameter, allowing clients to connect using HTTP) and `JsonRestStores.SimpleDbLayerMixin` (which gives `JsonRestStores` the ability to manipulate data on a database automatically).
-* `DbLayer` is a SimpleDbLayer constructor mixed in with `MongoMixin`, the MongoDB-specific layer for SimpleDbLayer. So, `DbLayer` will be used by `Managers` to manipulate MongoDB collections. 
+* `DbLayer` is a SimpleDbLayer constructor mixed in with `MongoMixin`, the MongoDB-specific layer for SimpleDbLayer. So, `DbLayer` will be used by `Managers` to manipulate MongoDB collections.
 * `schema` is an object of type Schema that will define what's acceptable in a REST call.
 * `publicURL` is the URL the store is reachable at. ***The last one ID is the most important one***: the last ID in `publicURL` (in this case it's also the only one: `id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
-* `storeName` (_mandatory_) needs to be a unique name for your store. 
+* `storeName` (_mandatory_) needs to be a unique name for your store.
 * `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error.
 * `protocolListen( 'HTTP', { app: app } )` creates the right Express routes to receive HTTP connections for the `GET`, `PUT`, `POST` and `DELETE` methods.
 * `JsonRestStores.init()` should _always_ be run once you have declared all of your stores. This function will run the initialisation code necessary to make nested stores work properly.
@@ -260,7 +260,7 @@ This is how the stock express code would change to implement the store above (pl
         handleGetQuery: true,
         handleDelete: true,
       });
-      var managers = new Managers(); 
+      var managers = new Managers();
 
       JsonRestStores.init();
       managers.protocolListen( 'HTTP', { app: app } );;
@@ -268,7 +268,7 @@ This is how the stock express code would change to implement the store above (pl
       // ******************************************************
       // ********** END OF CUSTOM CODE      *******************
       // ******************************************************
-  
+
       // catch 404 and forward to error handler
       app.use(function(req, res, next) {
           var err = new Error('Not Found');
@@ -314,9 +314,9 @@ The `dbConnect.js` file is simply something that will connect to the database an
         if( err ){
           console.error( "Error connecting to the database: ", err );
           process.exit( 1 );
-        }   
+        }
         return done( db );
-      }); 
+      });
     }
 
 This store is _actually_ fully live and working! It will manipulate your database and will respond to any HTTP requests appropriately.
@@ -462,7 +462,7 @@ The good news is that the mixin `JsonRestStores.HTTPMixin` implements `protocolL
 
 You can mix a store with as many protocol mixins as you like (although at this stage only HTTP is currently implemented).
 
-`HTTPMixin` is only one piece of the puzzle: on its own, it's not enough. JsonRestStores mixed with `HTTPMixin` 
+`HTTPMixin` is only one piece of the puzzle: on its own, it's not enough. JsonRestStores mixed with `HTTPMixin`
  creates JSON REST stores with the following data-manipulation methods left unimplemented (they will throw an error if they are run):
 
  * `implementFetchOne: function( request, cb )`
@@ -599,7 +599,7 @@ When you define a store like this:
 
 ## Request listening
 
-The last line is the one that makes the store "active": managers.protocolListen()` will actually run `managers.`protocolListenHTTP()`, which is defined thanks to HTTPMixin.
+The last line is the one that makes the store "active": `managers.protocolListen()` will actually run `managers.protocolListenHTTP()`, which is defined thanks to HTTPMixin.
 `protocolListenHTTP()` will define the appropriate routes using Express' `app` (passed to it as a parameter).
 The code in HTTPMixin looks like this:
 
@@ -694,7 +694,7 @@ The `_make???()` request handlers will use the `self.sendData(  request, method,
 * `post` and `putNew` and `putExisting` methods will set the `Location` header
 * `post` and `putNew` will set the status to 201. `delete` will set the status to `204`.
 * `getQuery` will set the `Content-Range` headers, like `items 3-10/100` (which will tell the client what was actually fetched in terms of range, and what the total count is).
-* 
+*
 
 # A nested store
 
@@ -716,7 +716,7 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
       handleGetQuery: true,
       handleDelete: true,
     });
-    var managers = new Managers(); 
+    var managers = new Managers();
 
     var ManagersCars = declare( Store, {
 
@@ -739,7 +739,7 @@ Stores are never "flat" as such: you have workspaces, and then you have users wh
     JsonRestStores.init();
     managers.protocolListen( 'HTTP', { app: app } );;
     managersCars.protocolListen( 'HTTP', { app: app } );;
- 
+
 You have two stores: one is the simple `managers` store with a list of names and surname; the other one is the `managersCars` store: note how the URL for `managersCars` includes `managerId`.
 
 The managersCars store will will respond to `GET /managers/2222/cars/3333` (to fetch car 3333 of manager 2222), `GET /workspace/2222/users` (to get all cars of manager 2222), and so on.
@@ -777,8 +777,8 @@ For example:
       ],
 
     });
-    var managers = new Managers(); 
-  
+    var managers = new Managers();
+
     var ManagersCars = declare( Store, {
 
       schema: new Schema({
@@ -821,7 +821,7 @@ It's important to be consistent in naming conventions while creating stores. In 
 
 ## Naming convertions for simple stores
 
-    var Managers = declare( Store, { 
+    var Managers = declare( Store, {
 
       schema: new Schema({
         // ...
@@ -834,7 +834,7 @@ It's important to be consistent in naming conventions while creating stores. In 
     }
     var managers = new Managers();
 
-    var People = declare( Store, { 
+    var People = declare( Store, {
 
       schema: new Schema({
         // ...
@@ -858,9 +858,9 @@ It's important to be consistent in naming conventions while creating stores. In 
 * `storeName` attributes are in small letters (to follow the lead of variables)
 * URL are in small letters (following the stores' names, since everybody knows that `/Capital/Urls/Are/Silly`)
 
-## Naming conventions for nested stores    
+## Naming conventions for nested stores
 
-    var Managers = declare( Store, { 
+    var Managers = declare( Store, {
 
       schema: new Schema({
         // ...
@@ -873,7 +873,7 @@ It's important to be consistent in naming conventions while creating stores. In 
     }
     var managers = new Managers();
 
-    var ManagersCars = declare( Store, { 
+    var ManagersCars = declare( Store, {
 
       schema: new Schema({
         // ...
@@ -888,7 +888,7 @@ It's important to be consistent in naming conventions while creating stores. In 
     var managerCars = new ManagersCars();
 
     JsonRestStores.init();
-    managers.protocolListen( 'HTTP', { app: app } );;    
+    managers.protocolListen( 'HTTP', { app: app } );;
     managerCars.protocolListen( 'HTTP', { app: app } );;
 
 
@@ -916,7 +916,7 @@ In the previous examples, I explained how marking a field as `searchable` in the
       handleDelete: true,
     });
 
-    var managers = new Managers(); 
+    var managers = new Managers();
 
     JsonRestStores.init();
     managers.protocolListen( 'HTTP', { app: app } );;
@@ -949,7 +949,7 @@ In JsonRestStores you actually define what fields are acceptable as filters with
       handleDelete: true,
     });
 
-    var managers = new Managers(); 
+    var managers = new Managers();
 
     JsonRestStores.init();
     managers.protocolListen( 'HTTP', { app: app } );;
@@ -975,8 +975,8 @@ You can decide how the elements in `onlineSearchSchema` will be turned into a se
         surname: { type: 'string', trim: 60 },
       }),
 
-      queryConditions: { 
-        type: 'eq', 
+      queryConditions: {
+        type: 'eq',
         args: [ 'surname', '#surname#']
       },
 
@@ -990,7 +990,7 @@ You can decide how the elements in `onlineSearchSchema` will be turned into a se
       handleDelete: true,
     });
 
-    var managers = new Managers(); 
+    var managers = new Managers();
 
     JsonRestStores.init();
     managers.protocolListen( 'HTTP', { app: app } );;
@@ -999,8 +999,8 @@ Basically, `queryConditions` is automatically generated with the `name` field in
 
 Remember that here:
 
-    queryConditions: { 
-      type: 'eq', 
+    queryConditions: {
+      type: 'eq',
       args: [ 'surname', '#surname#']
     },
 
@@ -1015,12 +1015,12 @@ If you had defined both `name` and `surname` as searchable, `queryConditions` wo
           { type: 'eq', args: [ 'surname', '#surname#' ]
         ]
       },
-     
+
 Basically, _both_ `name` and `surname` need to match their respective values in the query string. To know more about the syntax of `queryConditions`, please have a look at [the conditions object in SimpleDbLayer](https://github.com/mercmobily/simpledblayer#the-conditions-object).
 
 Keep in mind that the syntax of JsonRestStore's `queryConditions` is identical to the syntax of the `conditions` object in SimpleDbLayer, with the following extras:
 
-* In JsonRestStores, when a value is in the format `#something#`, that `something` will be replaced by the value in the corresponding value in the query string when making queries. _If `something` is not passed in the query string, that section of the query is ignored._ 
+* In JsonRestStores, when a value is in the format `#something#`, that `something` will be replaced by the value in the corresponding value in the query string when making queries. _If `something` is not passed in the query string, that section of the query is ignored._
 * You can have the attribute `ifDefined` set as a value in `queryConditions`: in this case, that section of the query will only be evaluated if the corresponding value in the query string is defined.
 
 For example, you could define `queryConditions` as:
@@ -1032,11 +1032,11 @@ For example, you could define `queryConditions` as:
         {
           type: 'and', ifDefined: 'surname', args: [
             { type: 'startsWith', args: [ 'surname', '#surname#' ] },
-            { type: 'eq', args: [ 'active', true ] },              
+            { type: 'eq', args: [ 'active', true ] },
           ]
         },
 
-        { 
+        {
           type: 'startsWith', args: [ 'name', '#name#']
         }
       ]
@@ -1120,7 +1120,7 @@ For example:
       ],
 
     });
-    var managers = new Managers(); 
+    var managers = new Managers();
 
     var ManagersCars = declare( Store, {
 
@@ -1239,7 +1239,7 @@ For example:
       ],
 
     });
-    var managers = new Managers(); 
+    var managers = new Managers();
 
     var ManagersCars = declare( Store, {
 
@@ -1307,7 +1307,7 @@ For example:
       },
 
     });
-    var comments = new Comments(); 
+    var comments = new Comments();
 
     JsonRestStores.init();
     comments.protocolListen( 'HTTP', { app: app } );;
@@ -1501,8 +1501,8 @@ Note that `searchable` is set both for `id` and for `workspaceId` (which are the
         surnameSearch: { type: 'string', trim: 60 },
       }),
 
-      queryConditions: { 
-        type: 'startsWith', 
+      queryConditions: {
+        type: 'startsWith',
         args: [ 'surname', '#surnameSearch#']
       },
 
@@ -1516,7 +1516,7 @@ Note that `searchable` is set both for `id` and for `workspaceId` (which are the
       handleDelete: true,
     });
 
-    var managers = new Managers(); 
+    var managers = new Managers();
 
     JsonRestStores.init();
     managers.protocolListen( 'HTTP', { app: app } );;
@@ -1536,8 +1536,8 @@ Is the same as writing:
         surnameSearch: { type: 'string', trim: 60 },
       }),
 
-      queryConditions: { 
-        type: 'startsWith', 
+      queryConditions: {
+        type: 'startsWith',
         args: [ 'surname', '#surnameSearch#']
       },
 
@@ -1551,7 +1551,7 @@ Is the same as writing:
       handleDelete: true,
     });
 
-    var managers = new Managers(); 
+    var managers = new Managers();
 
     JsonRestStores.init();
     managers.protocolListen( 'HTTP', { app: app } );;
@@ -1612,7 +1612,7 @@ This allows you to define a base store, and derive stores off that base store. F
       collectionName: 'workspacesUsers',
 
       publicURL: '/users/:userId/workspaces/:id',
-      
+
       handleGetQuery: true,
 
     });
@@ -1778,7 +1778,7 @@ Here, the original `preparebody()` is run through `this.inheritedAsync()`, and p
 
 For more information about `inheritedAsync()`, have a look at [SimpleDeclare's documentation on calling asynchronous parent methods](https://github.com/mercmobily/simpleDeclare#calling-the-super-function-with-node-style-callback).
 
-Throughout the request's life cycle, `request.data` will be enriched by each data preparation hook. This will allow any hook to access the processed data 
+Throughout the request's life cycle, `request.data` will be enriched by each data preparation hook. This will allow any hook to access the processed data
 
 ###  `prepareBody( request, method, body, cb )`
 
@@ -1843,7 +1843,7 @@ To really use the stage hooks (and to extend JsonRestStores in general), it's im
 This method is called once validation is completed.
 
  * `request`. The `request` object for this REST call.
- * `method`. It can be `post`, `put` or `getQuery`. 
+ * `method`. It can be `post`, `put` or `getQuery`.
  * `cb( err ) `. The callback
 
 ### `afterCheckPermissions()`
@@ -1851,7 +1851,7 @@ This method is called once validation is completed.
 This method is called once permission checks have passed.
 
  * `request`. The `request` object for this REST call.
- * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`. 
+ * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`.
  * `cb( err ) `. The callback.
 
 ### `afterDbOperation()`
@@ -1859,7 +1859,7 @@ This method is called once permission checks have passed.
 This method is called once data is read from, or written to, the data source for that request.
 
  * `request`. The `request` object for this REST call.
- * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`. 
+ * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`.
  * `cb( err ) `. The callback.
 
 ### `afterEverything()`
@@ -1867,7 +1867,7 @@ This method is called once data is read from, or written to, the data source for
 This method is the very last one called before sending the response out.
 
  * `request`. The `request` object for this REST call.
- * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`. 
+ * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`.
  * `cb( err ) `. The callback.
 
 # Permissions
@@ -1904,7 +1904,7 @@ Here is an example of a store only allowing deletion only to specific admin user
       handleGet: true,
       handleGetQuery: true,
       handleDelete: true,
-      
+
       checkPermissions: function( request, method, cb ){
 
         // This will only affect `delete` methods
@@ -1950,7 +1950,7 @@ Note that if your store is derived from another one, and you want to preserve yo
           }
        }
      },
- 
+
 This will ensure that the inherited `checkPermissionsDelete()` method is called and followed, and _then_ further checks are carried on.
 
 Please note that `checkPermissions()` is only run for local requests, with `remote` set to false. All requests coming from APIs will ignore the method.
@@ -1967,7 +1967,7 @@ The API is really simple:
 * `Store.Post( body, options, next( err, doc ){} )`
 * `Store.Delete( id, options, next( err, doc ){} )`
 
-The `next()` call is the callback called at the end. 
+The `next()` call is the callback called at the end.
 
 When using the API, the `options` object is especially important, as it defines how the API will work. When a request comes from a remote operation, the `options` object is populated depending on the requested URL and HTTP headers. When using the API, you need to popuate `options` manually in order to obtain what you desire. `options` is especially important while querying, as that's where you define what you filter and order the results by. (If you are curious, when a remote connection is established the function `_initOptionsFromReq()` is the one responsible of getting headers and URL, and populating `options` before running the appropriate function).
 
@@ -1975,7 +1975,7 @@ Since there is no HTTP connection to extrapolate options from, the `options` par
 
 All normal hooks are called when using these functions. However:
 
-* Any check on `paramIds` is turned off: you are free to query a store without any pre-set automatic filtering imposed by `paramIds`. If your store has a `publicURL` of `/workspaces/:workspaceId/users/:id`, and you request `GET /workspaces/10/user/11`, in remote requests the `user` data source will be looked up based on _both_ `workspaceId` and `id`. In API (non-remote) requests, the lookup will only happen on `id`. 
+* Any check on `paramIds` is turned off: you are free to query a store without any pre-set automatic filtering imposed by `paramIds`. If your store has a `publicURL` of `/workspaces/:workspaceId/users/:id`, and you request `GET /workspaces/10/user/11`, in remote requests the `user` data source will be looked up based on _both_ `workspaceId` and `id`. In API (non-remote) requests, the lookup will only happen on `id`.
 * `request.params` is automatically set to a hash object where the `idProperty` attribute matches the passed object's ID property. For example, for `{ id: 10, colour: 'red' }`, the `request.params` object is automatically set to  { `id: 10 }`. (This is true for all methods except `getQuery` and `post`, which don't accept objects with IDs). Note that you can pass `options.apiParams` to force `request.params` to whatever you like.
 * All `store.handleXXX` properties are ignored: all methods will work
 * The `request.remote` variable is set to false
@@ -1988,7 +1988,7 @@ JsonRestStores is powerful thanks to `SimpleDbLayerMixin`, which allows you to c
 
 To do that, you will need to write a store that implements the `implement***` methods, which are:
 
- * `implementFetchOne( request, cb )`. Required for methods `put`, `get`, `delete`. 
+ * `implementFetchOne( request, cb )`. Required for methods `put`, `get`, `delete`.
  * `implementInsert( request, forceId, cb )`. Required for methods `post` and `put` (`putNew`).
  * `implementUpdate( request, deleteUnsetFields, cb )`. Required for method `put` (`putExisting`).
  * `implementDelete( request, cb )`. Required for method `delete`.
@@ -1997,11 +1997,11 @@ To do that, you will need to write a store that implements the `implement***` me
 
 Looking it from a different perspective, here are the `implement***` methods you will need to implement for each method to work properly:
 
- * `get`: `implementFetchOne()`. 
+ * `get`: `implementFetchOne()`.
  * `getQuery`: `implementQuery()`
  * `put`: `implementFetchOne()`, `implementInsert()`, `implementUpdate()`, `implementReposition()`
  * `post`: `implementInsert()`, `implementReposition()`
- * `delete`: `implementDelete()` 
+ * `delete`: `implementDelete()`
 
 When developing these methods, it's important to make sure that they function exactly as expected.
 
@@ -2067,8 +2067,8 @@ While filtering by `request.params` is straightforward, as it must just make sur
 
 So, in a naked, non-database store you should still make sure that `queryConditions` is set properly, and that queries will honour what's specified in it. If your `queryConditions` is:
 
-    queryConditions: { 
-      type: 'startsWith', 
+    queryConditions: {
+      type: 'startsWith',
       args: [ 'surname', '#surname#']
     },
 
@@ -2078,7 +2078,7 @@ This is what SimpleDbLayerMixin does automatically (it recursively visits `query
 
 This does have the implication that inheriting from a naked store is possible, but if you change `queryConditions` you will also have to re-write `implementQuery` so that filtering matches what `queryConditions` says.
 
-While there is no practical reason, server side, to make sure that `queryConditions` matches the way queries are carried out by the store, it's also true that other components, are aware of how the store works in terms of searching; a client-store fetching data, for example, might want to be able to emulate the store's behaviour in terms of searching to keep refreshing of data at minimum. 
+While there is no practical reason, server side, to make sure that `queryConditions` matches the way queries are carried out by the store, it's also true that other components, are aware of how the store works in terms of searching; a client-store fetching data, for example, might want to be able to emulate the store's behaviour in terms of searching to keep refreshing of data at minimum.
 
 ## `implementReposition( doc, where, beforeId, cb )`
 
@@ -2149,7 +2149,7 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * (DATA) `request.body` is assigned to `prepareBody`; the original `body` is still available as `request.bodyBeforePrepare
 * (DATA) For remote requests, `body` is enriched with the elements in `request.params`. Existing attributes will be overwritten.
 * (CHECK) Body (`request.body`) is cast against the store's schema (skipping `idProperty`, since it's a post and `idProperty` isn't set). If fail, send `BadRequestError` => validatedBody
-* (CHECK) If fields with `protected` set to `true` in the schema are present in the body, return `UnprocessableEntityError` 
+* (CHECK) If fields with `protected` set to `true` in the schema are present in the body, return `UnprocessableEntityError`
 * (DATA) `request.body` is assigned to `validatedBody`; the original `body` is still available as `request.bodyBeforeValidation
 * (HOOK) `self.afterValidate( request, 'post' )` is run
 * (HOOK) `self.checkPermissions( request, 'post' )` is run. If fail, send `ForbiddenError`
@@ -2171,7 +2171,7 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * (DATA) `request.body` is assigned to `prepareBody`; the original `body` is still available as `request.bodyBeforePrepare
 * (DATA) For remote requests, `body` is enriched with the elements in `request.params`. Existing attributes will be overwritten.
 * (CHECK) Body (`request.body`) is cast against the store's schema. If fail, send `BadRequestError` => validatedBody
-* (CHECK) If fields with `protected` set to `true` in the schema are present in the body, return `UnprocessableEntityError` 
+* (CHECK) If fields with `protected` set to `true` in the schema are present in the body, return `UnprocessableEntityError`
 * (DATA) `request.body` is assigned to `validatedBody`; the original `body` is still available as `request.bodyBeforeValidation
 * (HOOK) `self.afterValidate( request, 'put' )` is run
 * (INTERFACE) `implementFetchOne( request )` is run => `request.data.fullDoc`
@@ -2213,7 +2213,7 @@ In order to work, a protocol mixin needs to implement the following methods:
 
 ## protocolListenNAME( params )
 
-Here, `NAME` is the name of the protocol. For example, when you write `protocolListen( 'HTTP', { app: app } );`, you are actually running `protocolListenHTTP( { app: app } )`. 
+Here, `NAME` is the name of the protocol. For example, when you write `protocolListen( 'HTTP', { app: app } );`, you are actually running `protocolListenHTTP( { app: app } )`.
 
 In `params`, you need to pass the parameters specific for that protocol. For example, in case of `HTTP`, the function is expecting an `app` parameter (so that it can add the Express routes exported by the store).
 
@@ -2228,7 +2228,7 @@ For each REST request, this method is expected to create a `request` object (wit
 
 At that point, the function will need to call the right request handler (`makeGet()`, `makeGetQuery()`, etc.) depending on the request received, honouring the store's `this.artificialDelay` attribute.
 
-Specific protocols can set extra attributes. For example HTTP sets `_req` and _res` as the Express' `req` and `res` objects. Doing so is important, because `request._res.json()` and `request._res.send()` will be used by the the protocol's sending function to send data to the client. 
+Specific protocols can set extra attributes. For example HTTP sets `_req` and _res` as the Express' `req` and `res` objects. Doing so is important, because `request._res.json()` and `request._res.send()` will be used by the the protocol's sending function to send data to the client.
 
 ## protocolSendNAME ( request, method, data, cb )
 
