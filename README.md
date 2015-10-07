@@ -1177,7 +1177,7 @@ For example:
     managers.protocolListen( 'HTTP', { app: app } );;
     managersCars.protocolListen( 'HTTP', { app: app } );;
 
-You can see how for example in `Managers`, `onlineSearchSchema` has a mixture of fields that match the ones in the schema (`name`, `surname`) that look for a match in the correponding fields, as well as search-specific fields (like `carInfo`) that end up looking into the nested children.
+You can see how for example in `Managers`, `onlineSearchSchema` has a mixture of fields that match the ones in the schema (`name`, `surname`) that look for a match in the corresponding fields, as well as search-specific fields (like `carInfo`) that end up looking into the nested children.
 
 It's totally up to you how you want organise your searches. For example, you might decide to make a `searchAll` field instead for `Managers`:
 
