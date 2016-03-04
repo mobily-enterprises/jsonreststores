@@ -1,4 +1,4 @@
-var 
+var
   dummy
 , e = require('allhttperrors')
 , declare = require('simpledeclare')
@@ -21,7 +21,7 @@ exports = module.exports = declare( Object,  {
 
   // Must be defined for this module to be functional
   DbLayer: null,
-  
+
   // The object representing the table in the DB layer
   dbLayer: null,
 
@@ -56,7 +56,11 @@ exports = module.exports = declare( Object,  {
 
       // if 'store' in nested in a string, then resolve to the store itself
       if( typeof( n.store ) === 'string' ) {
+        var name = n.store;
         n.store = self.constructor.registry[ n.store ];
+        if( ! n.store ){
+          throw( new Error("Nested store " + name + " doesn't exist, referenced in " + self.storeName ) );
+        }
         n.layerField = n.store.idProperty;
       }
 
@@ -70,7 +74,7 @@ exports = module.exports = declare( Object,  {
     // self.hardLimitOnQueries will be ignored and the dbLayer's will be used instead
     var existingDbLayer = self.DbLayer.getLayer( self.collectionName );
     if( existingDbLayer ){
-      
+
       // idProperty must match
       if( self.idProperty != existingDbLayer.idProperty ){
         throw( new Error("When reusing a db layer, idProperty fields must match.", self.storeName, 'is reusing', existingDbLayer.table ) );
@@ -82,22 +86,22 @@ exports = module.exports = declare( Object,  {
       self.strictSchemaOnFetch = existingDbLayer.strictSchemaOnFetch;
 
       self.dbLayer = existingDbLayer;
-  
+
     } else {
-      
+
       var layerOptions = {
         idProperty: self.idProperty,
         schema: self.schema,
         nested: self.nested,
         hardLimitOnQueries: self.hardLimitOnQueries,
-        strictSchemaOnFetch: self.strictSchemaOnFetch,        
+        strictSchemaOnFetch: self.strictSchemaOnFetch,
 
         schemaError: self.UnprocessableEntityError,
         fetchChildrenByDefault: true,
       };
       if( self.position ){
         layerOptions.positionField = '__position';
-        layerOptions.positionBase = self.paramIds.slice( 0, -1 );      
+        layerOptions.positionBase = self.paramIds.slice( 0, -1 );
       }
 
       layerOptions.table = self.collectionName;
@@ -106,7 +110,7 @@ exports = module.exports = declare( Object,  {
     }
 
     var schema = self.schema;
- 
+
     // By default, added paramIds will be set as `searchable` in DB `schema`
     for( var i = 0, l = self.paramIds.length; i < l; i ++ ){
       self.dbLayer._makeFieldSearchable( self.paramIds[ i ] );
@@ -132,8 +136,8 @@ exports = module.exports = declare( Object,  {
       } else {
 
         //console.log( require('util').inspect( o, { depth: 10 } ) );
-        var field = o.args[ 0 ]; 
-        // It's a local field: mark it as searchable 
+        var field = o.args[ 0 ];
+        // It's a local field: mark it as searchable
         if( field.indexOf( '.' ) === -1 ){
 
           // It's a local field: it MUST be in the schema
@@ -149,10 +153,10 @@ exports = module.exports = declare( Object,  {
 
   // *********************************************************************
   // *** FUNCTIONS THAT ACTUALLY ACCESS DATA THROUGH THE DB DRIVER
-  // ********************************************************************* 
+  // *********************************************************************
 
   _enrichConditionsWithParams: function( conditions, params ){
-    
+
     var self = this;
 
     // This will have the list of items that will actually get filtered
@@ -167,7 +171,7 @@ exports = module.exports = declare( Object,  {
     });
 
     // If nothing needs to be added, leave filter as it is
-    if( ! list.length ) return returnedConditions;  
+    if( ! list.length ) return returnedConditions;
 
     if( conditions.type === 'and' ){
       whereToPush = conditions.args;
@@ -199,8 +203,8 @@ exports = module.exports = declare( Object,  {
     if( ! this.dbLayer.positionField ){
        return cb( null );
     }
-  
-    // Doesn't do much: just tell the layer to repositon  
+
+    // Doesn't do much: just tell the layer to repositon
     this.dbLayer.reposition( doc, where, beforeId, cb );
 
   },
@@ -221,7 +225,7 @@ exports = module.exports = declare( Object,  {
       conditions = { type: 'eq', args: [ self.idProperty, request.params[ self.idProperty ]  ] };
     }
 
-    // Make the database call 
+    // Make the database call
     self.dbLayer.select( { conditions: conditions, ranges: { limit: 1 } }, { children: true }, function( err, docs ){
       if( err ) return cb( err );
 
@@ -229,10 +233,10 @@ exports = module.exports = declare( Object,  {
       cb( null, docs[ 0 ] );
     });
 
-  }, 
+  },
 
   implementInsert: function( request, forceId, cb ){
-   
+
     var self = this;
 
     var record = self._co( request.body );
@@ -270,7 +274,7 @@ exports = module.exports = declare( Object,  {
 
     self.dbLayer.update( conditions, updateObject, { deleteUnsetFields: deleteUnsetFields, multi: false, skipValidation: true }, function( err, howMany, record ){
       if( err ) return cb( err );
-      
+
       // There is no point in checking howMany: `record` will be null if record wasn't found anyway,
       // and that's what we want
       cb( null, record );
@@ -303,7 +307,7 @@ exports = module.exports = declare( Object,  {
   },
 
   _queryMakeDbLayerFilter: function( remote, conditionsHash, sort, ranges, cb ){
- 
+
     // The simleDbLayer filter that will get returned
     var filter = {};
 
@@ -357,12 +361,12 @@ exports = module.exports = declare( Object,  {
                 fc.args.push( newCondition );
               }
 
-            // If it's a leaf  
+            // If it's a leaf
             } else {
               var newCondition = {};
               var f = visitQueryConditions( condition, newCondition );
               if( f !== false ) fc.args.push( newCondition );
-            } 
+            }
           });
 
         // It's a terminal point
@@ -377,7 +381,7 @@ exports = module.exports = declare( Object,  {
             fc.args[ 0 ] = arg0;
           }
 
-          // The second argument has a "but!". 
+          // The second argument has a "but!".
           // If it is in form #something#, it means that it's
           // actually a field in onlineSearchSchema
           var m = ( arg1.match && arg1.match( /^#(.*?)#$/) );
@@ -422,7 +426,7 @@ exports = module.exports = declare( Object,  {
     }
 
     filter.conditions = getQueryFromQueryConditions();
-      
+
     //console.log( self.collectionName );
     //console.log("QUERYCONDITIONS", require('util').inspect( self.queryConditions, { depth: 10 } ));
     //console.log("CONDITIONS HASH:", require('util').inspect( conditionsHash, { depth: 10 } ));
@@ -452,8 +456,8 @@ exports = module.exports = declare( Object,  {
     dbLayerOptions.children = true;
 
     // Paranoid checks
-    if( typeof( request.options.sort ) === 'undefined' || request.options.sort === null ) request.options.sort = {}; 
-    if( typeof( request.options.ranges ) === 'undefined' || request.options.ranges === null ) request.options.ranges = {}; 
+    if( typeof( request.options.sort ) === 'undefined' || request.options.sort === null ) request.options.sort = {};
+    if( typeof( request.options.ranges ) === 'undefined' || request.options.ranges === null ) request.options.ranges = {};
 
     self._queryMakeDbLayerFilter( request.remote, request.options.conditions, request.options.sort, request.options.ranges, function( err, filter ){
       if( err ){
@@ -469,5 +473,3 @@ exports = module.exports = declare( Object,  {
   },
 
 });
-
-
