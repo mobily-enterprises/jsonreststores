@@ -96,7 +96,7 @@ exports = module.exports = declare( Object,  {
         hardLimitOnQueries: self.hardLimitOnQueries,
         strictSchemaOnFetch: self.strictSchemaOnFetch,
 
-        schemaError: self.UnprocessableEntityError,
+        SchemaError: self.UnprocessableEntityError,
         fetchChildrenByDefault: true,
       };
       if( self.position ){
