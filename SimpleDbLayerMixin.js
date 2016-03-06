@@ -127,7 +127,7 @@ exports = module.exports = declare( Object,  {
       if( ! Array.isArray( o.args) ) throw new Error("Filter's 'args' attribute must be an array");
 
       //console.log("Visiting: ", require('util').inspect( o, { depth: 10 } ) );
-      if( o.type === 'and' || o.type === 'or'){
+      if( o.type === 'and' || o.type === 'or' || o.type === 'each' ){
         //console.log("WILL ENTER: ", require('util').inspect( o.args ));
         o.args.forEach( function( condition ){
           //console.log("Entering:", condition );
@@ -306,136 +306,6 @@ exports = module.exports = declare( Object,  {
 
   },
 
-  _queryMakeDbLayerFilter: function( remote, conditionsHash, sort, ranges, cb ){
-
-    // The simleDbLayer filter that will get returned
-    var filter = {};
-
-    var self = this;
-    var errors = [];
-    var field, condition, value;
-
-    // Straight fields that do not need any conversions as they are the same
-    // between JsonRestStores and SimpleDbLayer
-    filter.ranges = ranges;
-    filter.sort = sort;
-    filter.conditions = {};
-
-    function getQueryFromQueryConditions( ){
-
-      // Make up filter.conditions
-      function visitQueryConditions( o, fc ){
-
-        // Check o.ifDefined. If the corresponding element in onlineSearchSchema is not
-        // defined, won't go there
-        if( o.ifDefined ){
-          if( ! conditionsHash[ o.ifDefined ] ){ return false; }
-        }
-
-        if( o.type === 'and' || o.type === 'or'){
-          fc.type = o.type;
-          fc.args = [];
-
-          o.args.forEach( function( condition ){
-
-            // If it's 'and' or 'or', check the length of what gets returned
-            if( condition.type === 'and' || condition.type === 'or' ){
-
-              // Make up the new condition, visit that one
-              var newCondition = {};
-              var f = visitQueryConditions( condition, newCondition );
-
-              // Falsy return means "don't continue"
-              if( f === false ) return;
-
-              // newCondition is empty: do not add anything to fc
-              if(  newCondition.args.length === 0 ){
-
-                return ;
-              // Only one condition returned: get rid of logical operator, add the straight condition
-              } else if( newCondition.args.length === 1 ){
-                var actualCondition = newCondition.args[ 0 ];
-                fc.args.push( { type: actualCondition.type, args: actualCondition.args } );
-              // Multiple conditions returned: the logical operator makes sense
-              } else {
-                fc.args.push( newCondition );
-              }
-
-            // If it's a leaf
-            } else {
-              var newCondition = {};
-              var f = visitQueryConditions( condition, newCondition );
-              if( f !== false ) fc.args.push( newCondition );
-            }
-          });
-
-        // It's a terminal point
-        } else {
-          var arg0 = o.args[ 0 ];
-          var arg1 = o.args[ 1 ];
-
-          // No arg1: most likely a unary operator, let it live.
-          if( typeof( arg1 ) === 'undefined'){
-            fc.type = o.type;
-            fc.args = [];
-            fc.args[ 0 ] = arg0;
-          }
-
-          // The second argument has a "but!".
-          // If it is in form #something#, it means that it's
-          // actually a field in onlineSearchSchema
-          var m = ( arg1.match && arg1.match( /^#(.*?)#$/) );
-          if( m ) {
-            var osf = m[ 1 ];
-
-            // If it's in form #something#, then entry MUST be in onlineSearchSchema
-            if( ! self.onlineSearchSchema.structure[ osf ] ) throw new Error("Searched for " + arg1 + ", but didn't find corresponding entry in onlineSearchSchema");
-
-            if( conditionsHash[ osf ] ){
-              fc.type = o.type;
-              fc.args = [];
-              fc.args[ 0 ] = arg0;
-              fc.args[ 1 ] = conditionsHash[ osf ];
-            } else {
-              // For leaves, this will tell the callee NOT to add this.
-              return false;
-            };
-
-          // The second argument is not in form #something#: it means it's a STRAIGHT value
-          } else {
-            fc.type = o.type;
-            fc.args = [];
-            fc.args[ 0 ] = arg0;
-            fc.args[ 1 ] = arg1;
-          }
-        }
-      }
-
-      // This will be returned
-      var res = {};
-      visitQueryConditions( self.queryConditions, res );
-
-
-      // visitQueryConditions does a great job avoiding duplication, but
-      // top-level duplication needs to be checked here
-      if( ( res.type === 'and' || res.type === 'or' )){
-        if( res.args.length === 0 ) return {};
-        if( res.args.length === 1 ) return res.args[ 0 ];
-      }
-      return res;
-    }
-
-    filter.conditions = getQueryFromQueryConditions();
-
-    //console.log( self.collectionName );
-    //console.log("QUERYCONDITIONS", require('util').inspect( self.queryConditions, { depth: 10 } ));
-    //console.log("CONDITIONS HASH:", require('util').inspect( conditionsHash, { depth: 10 } ));
-    //console.log("ORIG: ", require('util').inspect( self.queryConditions, { depth: 10 } ));
-    //console.log("COPY: ", require('util').inspect( getQueryFromQueryConditions(), { depth: 10 } ));
-
-    cb( null, filter );
-
-  },
 
   implementQuery: function( request, next ){
 
@@ -455,21 +325,18 @@ exports = module.exports = declare( Object,  {
     // Children is always true
     dbLayerOptions.children = true;
 
-    // Paranoid checks
-    if( typeof( request.options.sort ) === 'undefined' || request.options.sort === null ) request.options.sort = {};
-    if( typeof( request.options.ranges ) === 'undefined' || request.options.ranges === null ) request.options.ranges = {};
+    // Make up the filter
+    var filter = {
+      sort: request.options.sort || {},
+      ranges: request.options.ranges || {},
+      conditions: request.options.resolvedQueryConditions
+    }
 
-    self._queryMakeDbLayerFilter( request.remote, request.options.conditions, request.options.sort, request.options.ranges, function( err, filter ){
-      if( err ){
-        next( err );
-      } else {
+    // Add extra  constraints for remote requests
+    if( request.remote) filter.conditions = self._enrichConditionsWithParams( filter.conditions, request.params );
 
-        if( request.remote) filter.conditions = self._enrichConditionsWithParams( filter.conditions, request.params );
-
-        // Run the select based on the passed parameters
-        self.dbLayer.select( filter, dbLayerOptions, next );
-      }
-    });
+    // Run the select based on the passed parameters
+    self.dbLayer.select( filter, dbLayerOptions, next );
   },
 
 });
