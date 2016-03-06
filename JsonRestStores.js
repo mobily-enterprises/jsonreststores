@@ -110,6 +110,7 @@ var Store = declare( Object,  {
   prepareBody: function( request, method, body, cb ){ cb( null, body ); },
   extrapolateDoc: function( request, method, doc, cb ){ cb( null, doc ); },
   prepareBeforeSend: function( request, method, doc, cb ){ cb( null, doc ); },
+  manipulateQueryConditions: function( request, method, cb) { cb( null, this.queryConditions ); },
 
   // Permission stock functions
   checkPermissions: function( request, method, cb ){ cb( null, true ); },
@@ -119,6 +120,7 @@ var Store = declare( Object,  {
   afterCheckPermissions: function( request, method, cb ){ cb( null ); },
   afterDbOperation: function( request, method, cb ){ cb( null ); },
   afterEverything: function( request, method, cb ) { cb( null ); },
+
 
   logError: function( error ){ },
 
@@ -377,6 +379,178 @@ var Store = declare( Object,  {
   // ****************************************************
   // *** INTERNAL FUNCTIONS, DO NOT TOUCH
   // ****************************************************
+
+  // This function is self-contained so that it can be easily checked
+  // and debugged.
+
+  _resolveQueryConditions: function( queryConditions, conditionsHash, allowedFields ){
+
+    // Copy over conditionsHash and allowedFields so that they don't get polluted
+    // since things will possibly get added here
+    conditionsHash = JSON.parse( JSON.stringify( conditionsHash ) );
+    allowedFields = JSON.parse( JSON.stringify( allowedFields ) );
+
+    // Entry point for recursive function
+    // Note `o` will be copied over a pre-allocated `fc`
+    function visitQueryConditions( o, fc ){
+
+      // Copy o.args over to fc.args, running `visitQueryConditions` for each item,
+      // and checking that `and`,`or` and `each` have at least 2 conditions (if not,
+      // the first and only arg will become the item)
+      function goThroughArgs(){
+        o.args.forEach( function( queryCondition ){
+
+          // Make space for the new condition which will (hopefully) get pushed
+          var newQueryCondition = {};
+
+          // Get the result from the query conditions
+          var f = visitQueryConditions( queryCondition, newQueryCondition );
+
+          // A false return means not to add the condition. The `return`
+          // will interrupt the cycle, the condition will not get pushed
+          if( f === false ) return;
+
+          // At this point newCondition might be a `and` or `or` with
+          // wrong number of arguments (zero or 1). In that case,
+          // it will get zapped
+
+          // If it's 'and' or 'or', check the length of what gets returned
+          if( queryCondition.type === 'and' || queryCondition.type === 'or' || queryCondition.type === 'each'){
+
+            // newCondition is empty: do not add anything to fc
+            // This can happen if ifDefined weren't satisfied
+            if(  newQueryCondition.args.length === 0 ){
+              return ;
+
+            // Only one condition returned: get rid of logical operator, add the straight condition
+          } else if( newQueryCondition.args.length === 1 ){
+              var actualQueryCondition = newQueryCondition.args[ 0 ];
+              fc.args.push( { type: actualQueryCondition.type, args: actualQueryCondition.args } );
+
+            // Multiple queryConditions returned: the logical operator makes sense
+            } else {
+              fc.args.push( newQueryCondition );
+            }
+
+          // If it's a leaf
+          } else {
+            fc.args.push( newQueryCondition );
+          }
+        });
+      }
+
+      // Check o.ifDefined. If the corresponding element in conditionsHash
+      // is not defined, won't go there
+      if( o.ifDefined ){
+        if( ! conditionsHash[ o.ifDefined ] ){ return false; }
+      }
+
+      // If it's `and` or `or`, will go through o.args one after the other
+      // and (possibly) add them to fc's args
+      if( o.type === 'and' || o.type === 'or'){
+
+        fc.type = o.type;
+        fc.args = [];
+
+        goThroughArgs();
+
+      // If it' `each`, it will still go through `o.args` but N times,
+      // once for each word found in value (and split with the separator)
+      } else if( o.type === 'each') {
+
+        fc.type = o.type;
+        fc.args = [];
+
+         // Link type defaults to "and"
+        fc.type = o.linkType || 'and';
+
+        // If the field is not in the conditionsHash, there is no
+        // point in doing this
+        if( !conditionsHash[ o.value ]) return;
+
+        // Separator defaults to ' '
+        allValues = conditionsHash[ o.value ].split( o.separator || ' ' );
+
+        allValues.forEach( function( value ) {
+
+          // Assign the right value to conditionsHash and allowedFields so that
+          // referencing to #something# will work
+
+          // "as" defaults to value+'Each'
+          var k = o.as || o.value + "Each";
+          conditionsHash[ k ] = value;
+          allowedFields[ k ] = true;
+
+          goThroughArgs();
+
+        });
+
+      // It's not `and`, `or` nor `each`: it will NOT go through its
+      // args recursively, since it's an end point. However,
+      // the second argument might be resolved by conditionsHash
+      // if it's in the right #format#
+      } else {
+        var arg0 = o.args[ 0 ];
+        var arg1 = o.args[ 1 ];
+
+        // No arg1: most likely a unary operator, let it live.
+        if( typeof( arg1 ) === 'undefined'){
+
+          fc.type = o.type;
+          fc.args = [];
+
+          fc.args[ 0 ] = arg0;
+
+        // Two arguments. The second one must be resolved if it's
+        // in the right #format#
+        } else {
+
+          var m = ( arg1.match && arg1.match( /^#(.*?)#$/) );
+          if( m ) {
+            var osf = m[ 1 ];
+
+            // If it's in form #something#, then entry MUST be in allowedFields
+            if( ! allowedFields[ osf ] ) throw new Error("Searched for " + arg1 + ", but didn't find corresponding entry in onlineSearchSchema");
+
+            if( conditionsHash[ osf ] ){
+
+              fc.type = o.type;
+              fc.args = [];
+
+              fc.args[ 0 ] = arg0;
+              fc.args[ 1 ] = conditionsHash[ osf ];
+            } else {
+              // For leaves, this will tell the callee NOT to add this.
+              return false;
+            };
+
+          // The second argument is not in form #something#: it means it's a STRAIGHT value
+          } else {
+
+            fc.type = o.type;
+            fc.args = [];
+
+            fc.args[ 0 ] = arg0;
+            fc.args[ 1 ] = arg1;
+          }
+        }
+      }
+    }
+
+    // Function starts here
+    var res = {};
+    visitQueryConditions( queryConditions, res );
+
+    // visitQueryConditions does a great job avoiding duplication, but
+    // top-level duplication needs to be checked here
+    if( ( res.type === 'and' || res.type === 'or' )){
+      if( res.args.length === 0 ) return {};
+      if( res.args.length === 1 ) return res.args[ 0 ];
+    }
+    return res;
+  },
+
+
 
   _extrapolateDocProxyAndprepareBeforeSendProxyAll: function( request, method, fullDocs, cb ){
 
@@ -941,7 +1115,6 @@ var Store = declare( Object,  {
   _makeGetQuery: function( request, next ){
 
     var self = this;
-    var sort, range, conditions;
 
     if( typeof( next ) !== 'function' ) next = function(){};
 
@@ -966,11 +1139,8 @@ var Store = declare( Object,  {
         self.afterCheckPermissions( request, 'getQuery', function( err ){
           if( err ) return self._sendError( request, 'getQuery', next, err );
 
-          self.onlineSearchSchema.validate( request.options.conditions, { onlyObjectValues: true }, function( err, conditions, errors ){
+          self.onlineSearchSchema.validate( request.options.conditionsHash, { onlyObjectValues: true }, function( err, conditionsHash, errors ){
             if( err ) return self._sendError( request, 'getQuery', next, err );
-
-            // Actually assigning cast and validated conditions to `options`
-            request.options.conditions = conditions;
 
             // Errors in casting: give up, run away
             if( errors.length ) return self._sendError( request, 'getQuery', next, new self.BadRequestError( { errors: errors } ));
@@ -978,33 +1148,54 @@ var Store = declare( Object,  {
             self.afterValidate( request, 'getQuery', function( err ){
               if( err ) return self._sendError( request, 'getQuery', next, err );
 
-              self.implementQuery( request, function( err, fullDocs, total, grandTotal ){
+              // Actually assigning cast and validated conditions to `options`
+              request.options.conditionsHash = conditionsHash;
+
+              //var inn = function( o ) { return require('util').inspect( o, { depth: 10 } ) };
+              //console.log("CONDITION HASH:", inn( conditionsHash ) );
+              //console.log("QUERY CONDITIONS:", inn( self.queryConditions ) );
+
+              // Resolve queryConditions (with all #variable# replacement, `each` etc.
+              // properly expanded and ready to be fed to `implementQuery`)
+              request.options.resolvedQueryConditions = self._resolveQueryConditions(
+                self.queryConditions,
+                request.options.conditionsHash,
+                self.onlineSearchSchema.structure
+              );
+              //console.log("RESOLVED QUERY CONDITIONS:", inn( request.options.resolvedQueryConditions ) );
+
+              // TODO: Document if it sticks
+              self.manipulateQueryConditions( request, 'getQuery', function( err ){
                 if( err ) return self._sendError( request, 'getQuery', next, err );
 
-                // Make `total` and `grandTotal` part of the request, exposing them to all callbacks
-                request.data.fullDocs = fullDocs;
-                request.data.total = total;
-                request.data.grandTotal = grandTotal;
-
-                self.afterDbOperation( request, 'getQuery', function( err ){
+                self.implementQuery( request, function( err, fullDocs, total, grandTotal ){
                   if( err ) return self._sendError( request, 'getQuery', next, err );
 
-                  self._extrapolateDocProxyAndprepareBeforeSendProxyAll( request, 'getQuery', request.data.fullDocs, function( err, docs, preparedDocs ){
+                  // Make `total` and `grandTotal` part of the request, exposing them to all callbacks
+                  request.data.fullDocs = fullDocs;
+                  request.data.total = total;
+                  request.data.grandTotal = grandTotal;
+
+                  self.afterDbOperation( request, 'getQuery', function( err ){
                     if( err ) return self._sendError( request, 'getQuery', next, err );
 
-                    request.data.docs = docs;
-                    request.data.preparedDocs = preparedDocs;
-
-                    self.afterEverything( request, 'getQuery', function( err ) {
+                    self._extrapolateDocProxyAndprepareBeforeSendProxyAll( request, 'getQuery', request.data.fullDocs, function( err, docs, preparedDocs ){
                       if( err ) return self._sendError( request, 'getQuery', next, err );
 
-                      // Remote request: set headers, and send the doc back (if echo is on)
-                      if( request.remote ){
-                        self.sendData( request, 'getQuery', request.data.preparedDocs );
-                      // Local request: simply return the doc to the asking function
-                      } else {
-                        next( null, request.data.preparedDocs, request );
-                      }
+                      request.data.docs = docs;
+                      request.data.preparedDocs = preparedDocs;
+
+                      self.afterEverything( request, 'getQuery', function( err ) {
+                        if( err ) return self._sendError( request, 'getQuery', next, err );
+
+                        // Remote request: set headers, and send the doc back (if echo is on)
+                        if( request.remote ){
+                          self.sendData( request, 'getQuery', request.data.preparedDocs );
+                        // Local request: simply return the doc to the asking function
+                        } else {
+                          next( null, request.data.preparedDocs, request );
+                        }
+                      });
                     });
                   });
                 });
