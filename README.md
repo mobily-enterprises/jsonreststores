@@ -1018,10 +1018,33 @@ If you had defined both `name` and `surname` as searchable, `queryConditions` wo
 
 Basically, _both_ `name` and `surname` need to match their respective values in the query string. To know more about the syntax of `queryConditions`, please have a look at [the conditions object in SimpleDbLayer](https://github.com/mercmobily/simpledblayer#the-conditions-object).
 
+You can effectively create _any_ kind of query based on the passed parameter. For exampe, you could create a `searchAll` field like this:
+
+    onlineSearchSchema: new Schema( {
+      searchAll: { type: 'string', trim: 60 },
+    }),
+
+    queryConditions: {
+      type: 'or',
+      ifDefined: 'searchAll',
+      args: [
+        { type: 'startsWith', args: [ 'number', '#searchAll#' ] },
+        { type: 'startsWith', args: [ 'firstName', '#searchAll#' ] },
+        { type: 'startsWith', args: [ 'lastName', '#searchAll#' ] },
+      ]
+    },
+
+This example highlights that `onlineSearchSchema` fields don't have to match existing fields in the schema: they can be _anything_, which is then used as a `#field#` value in `queryConditions`. They are basically values that will be used when constructing the actual query in `queryConditions`.
+
 Keep in mind that the syntax of JsonRestStore's `queryConditions` is identical to the syntax of the `conditions` object in SimpleDbLayer, with the following extras:
 
-* In JsonRestStores, when a value is in the format `#something#`, that `something` will be replaced by the value in the corresponding value in the query string when making queries. _If `something` is not passed in the query string, that section of the query is ignored._
-* You can have the attribute `ifDefined` set as a value in `queryConditions`: in this case, that section of the query will only be evaluated if the corresponding value in the query string is defined.
+1) Value resolution
+
+In JsonRestStores, when a value is in the format `#something#`, that `something` will be replaced by the value in the corresponding value in the query string when making queries. _If `something` is not passed in the query string, that section of the query is ignored._
+
+2) `ifDefined` to filter out chunks
+
+You can have the attribute `ifDefined` set as a value in `queryConditions`: in this case, that section of the query will only be evaluated if the corresponding value in the query string is defined.
 
 For example, you could define `queryConditions` as:
 
@@ -1044,10 +1067,13 @@ For example, you could define `queryConditions` as:
 
 The strings `#surname#` and `#name#` are translated into their corresponding values in the query string. The `ifDefined` means that that whole section of the query will be ignored unless `surname` is passed to the query string. The comparison operators, which were `eq` in the generated `queryConditions`, are now much more useful `startsWith`.
 
-You can clearly see that thanks to `queryConditions` you can effectively create _any_ kind of query based on the passed parameter. For exampe, you could create a `searchAll` field like this:
+3) The immensely useful `each` statement
+
+You will often want to break down a string into words, and then use those individual words in your search criteria. This is what `each` is for. This will be a much more powerful implementation of `searchAll`:
 
     onlineSearchSchema: new Schema( {
       searchAll: { type: 'string', trim: 60 },
+      userId: { type: 'id' }
     }),
 
     queryConditions: {
@@ -1060,9 +1086,30 @@ You can clearly see that thanks to `queryConditions` you can effectively create 
       ]
     },
 
-This example highlights that `onlineSearchSchema` fields don't have to match existing fields in the schema: they can be _anything_, which is then used as a `#field#` value in `queryConditions`. They are basically values that will be used when constructing the actual query in `queryConditions`.
+    var initialQueryConditions = {
+      type: 'and',
+      args: [
 
-This makes JsonRestStores immensely flexible in terms of what queries can be implemented.
+        // First: filter by userId if passed
+        { type: 'eq', args: [ 'userId', '#userId#'] },
+
+        // Second: must satisfy _each_ condition based on the breakdown of #searchAll#, space-separated
+        { type: 'each', value: 'searchAll', as: 'searchAllEach', linkType: 'and', separator: ' ', args: [
+          { type: 'or', args: [
+            { type: 'contains', args: [ 'title', '#searchAllEach#' ] },
+            { type: 'contains', args: [ 'videosTags.tagName', '#searchAllEach#' ] },
+          ]},
+        ]},
+      ]
+    };
+
+Note that it comes with defaults, so that the `each` line could have looked like this:
+
+    { type: 'each', value: 'searchAll', args: [
+
+Since `linkType` defaults to `and`, the separator defaults to a space, and the `as` field defaults to the name of the value with `Each` added at the end.
+
+`queryConditions` is basically a very powerful engine that will generate the queries for you based on what parameters were passed.
 
 ## Nested data and queries
 
@@ -1911,7 +1958,7 @@ Here is an example of a store only allowing deletion only to specific admin user
         if( method !== 'delete' ) return cb( null, true );
 
         // User is logged in: all good
-        if( this.session.user ){
+        if( request._req.session.user ){
           cb( null, true );
 
         // User is not logged in: fail!
@@ -1941,7 +1988,7 @@ Note that if your store is derived from another one, and you want to preserve yo
           if( method !== 'delete' ) return cb( null, true );
 
           // User is admin (id: 1 )
-          if( this.session.user === 1){
+          if( request._req.session.user === 1){
             cb( null, true );
 
           // User is not logged in: fail!
