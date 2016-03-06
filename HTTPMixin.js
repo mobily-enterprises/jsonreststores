@@ -9,7 +9,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 */
 
 
-var 
+var
   dummy
 , declare = require('simpledeclare')
 , async = require('async')
@@ -54,7 +54,7 @@ var HTTPMixin = declare( Object,  {
           // Nice shorter variables
           var skip = request.options.ranges.skip || 0;
           var total = request.data.total;
-          
+
           // Work out 'of': it will depend on the grandTotal, and that's it. It's an easy one.
           var of = request.data.grandTotal;
 
@@ -80,7 +80,7 @@ var HTTPMixin = declare( Object,  {
     } else {
       request._res.status( status ).send( '' );
     }
-    
+
     cb( null );
 
   },
@@ -131,7 +131,7 @@ var HTTPMixin = declare( Object,  {
 
       // Sets all of the required fields for a request
       request.remote = true;
-      request.protocol = 'HTTP';  
+      request.protocol = 'HTTP';
       request.params = self._co( req.params ); // NOTE: this is a copy
       request.body = self._co( req.body ); // NOTE: this is a copy
       request.session = req.session;
@@ -139,13 +139,13 @@ var HTTPMixin = declare( Object,  {
       try {
         request.options = self._initOptionsFromReq( action, req );
       } catch( e ){ return next( e ); }
-      
+
       // Sets the request's _req and _res variables, extra fields hooks might want to use
       // request._res will be used as a sending medium by protocolSendHTTP
       request._req = req;
       request._res = res;
 
-      // Process the request, honouring the artificialDelay     
+      // Process the request, honouring the artificialDelay
       if( self.artificialDelay ) {
         setTimeout( function(){
           // Actually run the request
@@ -171,7 +171,7 @@ var HTTPMixin = declare( Object,  {
       if( req.headers[ 'if-match' ] === '*' )
         options.overwrite = true;
       if( req.headers[ 'if-none-match' ] === '*' )
-        options.overwrite = false;      
+        options.overwrite = false;
     }
 
     // deleteAfterGetQuery will depend on the store's setting
@@ -209,7 +209,7 @@ var HTTPMixin = declare( Object,  {
     if( mn == 'GetQuery' ){
       options.sort = self._parseSortBy( req );
       options.ranges = self._parseRangeHeaders( req );
-      options.conditions = self._parseConditions( req );
+      options.conditionsHash = self._parseConditions( req );
     }
 
     // If self.defaultSort was passed, then maybe it needs to be applied (depending on options.sort)
@@ -221,7 +221,7 @@ var HTTPMixin = declare( Object,  {
       }
     }
 
-    return options;    
+    return options;
   },
 
   _parseSortBy: function( req ){
@@ -257,7 +257,7 @@ var HTTPMixin = declare( Object,  {
       }
     }
     return sortObject;
-  },     
+  },
 
   _parseRangeHeaders: function( req ){
 
@@ -285,9 +285,9 @@ var HTTPMixin = declare( Object,  {
         });
 
       }
-    } 
+    }
 
-    // Range headers not found or not valid, return null 
+    // Range headers not found or not valid, return null
     return null;
   },
 
