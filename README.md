@@ -1677,8 +1677,9 @@ This means that the following attributes of the store will be reused (and redefi
 * `schema` (from the store's `schema` attribute)
 * `hardLimitOnQueries` (from the store's `hardLimitOnQueries` attribute)
 * `strictSchemaOnFetch` (from the store's `strictSchemaOnFetch` attribute)
+* `indexBase` (from the store's `indexBase` attribute)
 
-As a consequence, a derived store cannot redefine `idProperty`, `schema`, `hardLimitOnQueries`, `strictSchemaOnFetch` (since they are used to create the store when the base store is created).
+As a consequence, a derived store cannot redefine `idProperty`, `schema`, `hardLimitOnQueries`, `strictSchemaOnFetch`, `indexBase` (since they are used to create the dblayer instances when the base JsonRest store is created).
 
 This also means that position grouping will depend on the _base_ constructor's `paramIds`, since the collection's `positionBase` will depend _only_ on the base class' `paramIds`. (Note: `positionBase` in a collection defines which fields are used to 'group' ordering, see [how repositioning works in SimpleDbLayer](https://github.com/mercmobily/simpledblayer#nested-record-positioning)). This will only affect you if you are creating derived stores with positioning.
 

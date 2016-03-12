@@ -31,6 +31,8 @@ exports = module.exports = declare( Object,  {
 
   _foreignSearchFields: [],
 
+  indexBase: [],
+
   constructor: function(){
 
     var self = this;
@@ -84,6 +86,7 @@ exports = module.exports = declare( Object,  {
       self.nested = existingDbLayer.nested;
       self.hardLimitOnQueries = existingDbLayer.hardLimitOnQueries;
       self.strictSchemaOnFetch = existingDbLayer.strictSchemaOnFetch;
+      self.indexBase = existingDbLayer.indexBase,
 
       self.dbLayer = existingDbLayer;
 
@@ -93,6 +96,7 @@ exports = module.exports = declare( Object,  {
         idProperty: self.idProperty,
         schema: self.schema,
         nested: self.nested,
+        indexBase: self.indexBase,
         hardLimitOnQueries: self.hardLimitOnQueries,
         strictSchemaOnFetch: self.strictSchemaOnFetch,
 
@@ -107,6 +111,7 @@ exports = module.exports = declare( Object,  {
       layerOptions.table = self.collectionName;
       // Actually create the layer with the given parameters
       self.dbLayer = new self.DbLayer( layerOptions );
+      console.log("LAYEROPTIONS FOR ", self.collectionName, "IS: ", layerOptions );
     }
 
     var schema = self.schema;

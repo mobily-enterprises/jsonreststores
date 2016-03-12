@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2013 Tony Mobily
+Copyright (C) 2015 Tony Mobily
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
@@ -441,8 +441,11 @@ var Store = declare( Object,  {
 
       // Check o.ifDefined. If the corresponding element in conditionsHash
       // is not defined, won't go there
-      if( o.ifDefined ){
-        if( ! conditionsHash[ o.ifDefined ] ){ return false; }
+      // Note: ifDefined can be a list of comma-separated fields
+      if( o.ifDefined && typeof( o.ifDefined) === 'string' ){
+        if( ! o.ifDefined.split(',').every( function( s ){ return !!conditionsHash[ s ]; }) ){
+          return false;
+        }
       }
 
       // If it's `and` or `or`, will go through o.args one after the other
@@ -505,34 +508,34 @@ var Store = declare( Object,  {
         // in the right #format#
         } else {
 
-          var m = ( arg1.match && arg1.match( /^#(.*?)#$/) );
-          if( m ) {
-            var osf = m[ 1 ];
+          var sourceArgs = Array.isArray( arg1 ) ? arg1 : [ arg1 ];
+          var resultArgs = [];
 
-            // If it's in form #something#, then entry MUST be in allowedFields
-            if( ! allowedFields[ osf ] ) throw new Error("Searched for " + arg1 + ", but didn't find corresponding entry in onlineSearchSchema");
+          for( var i = 0, l = sourceArgs.length; i < l; i++ ){
 
-            if( conditionsHash[ osf ] ){
+            var arg = sourceArgs[ i ];
+            var m = ( arg.match && arg.match( /^#(.*?)#$/) );
+            if( m ) {
+              var osf = m[ 1 ];
 
-              fc.type = o.type;
-              fc.args = [];
+              // If it's in form #something#, then entry MUST be in allowedFields
+              if( ! allowedFields[ osf ] ) throw new Error("Searched for " + arg + ", but didn't find corresponding entry in onlineSearchSchema");
 
-              fc.args[ 0 ] = arg0;
-              fc.args[ 1 ] = conditionsHash[ osf ];
+              if( conditionsHash[ osf ] ){
+                resultArgs.push( conditionsHash[ osf ] );
+              } else {
+                // It will get dropped since the required variable is not set
+                return false;
+              }
+
+            // The second argument is not in form #something#: it means it's a STRAIGHT value
             } else {
-              // For leaves, this will tell the callee NOT to add this.
-              return false;
-            };
-
-          // The second argument is not in form #something#: it means it's a STRAIGHT value
-          } else {
-
-            fc.type = o.type;
-            fc.args = [];
-
-            fc.args[ 0 ] = arg0;
-            fc.args[ 1 ] = arg1;
+              resultArgs.push( arg );
+            }
           }
+
+          fc.type = o.type;
+          fc.args = [ arg0, Array.isArray( arg1 ) ? resultArgs : resultArgs[ 0 ] ];
         }
       }
     }
@@ -815,13 +818,8 @@ var Store = declare( Object,  {
           if( request.remote ){
             // Protected field are not allowed here
             for( var field in request.body ){
-              if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
-
-                //if( self.failWithProtectedFields ){
-                //  errors.push( { field: field, message: 'Field not allowed because protected: ' + field + ' in ' + self.storeName } );
-                //} else {
-                  delete validatedBody[ field ];
-                //}
+              if( self.schema.structure[ field ] && self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
+                delete validatedBody[ field ];
               }
             }
           }
@@ -1151,9 +1149,9 @@ var Store = declare( Object,  {
               // Actually assigning cast and validated conditions to `options`
               request.options.conditionsHash = conditionsHash;
 
-              //var inn = function( o ) { return require('util').inspect( o, { depth: 10 } ) };
-              //console.log("CONDITION HASH:", inn( conditionsHash ) );
-              //console.log("QUERY CONDITIONS:", inn( self.queryConditions ) );
+              var inn = function( o ) { return require('util').inspect( o, { depth: 10 } ) };
+              console.log("CONDITION HASH:", inn( conditionsHash ) );
+              console.log("QUERY CONDITIONS:", inn( self.queryConditions ) );
 
               // Resolve queryConditions (with all #variable# replacement, `each` etc.
               // properly expanded and ready to be fed to `implementQuery`)
@@ -1162,7 +1160,7 @@ var Store = declare( Object,  {
                 request.options.conditionsHash,
                 self.onlineSearchSchema.structure
               );
-              //console.log("RESOLVED QUERY CONDITIONS:", inn( request.options.resolvedQueryConditions ) );
+              console.log("RESOLVED QUERY CONDITIONS:", inn( request.options.resolvedQueryConditions ) );
 
               // TODO: Document if it sticks
               self.manipulateQueryConditions( request, 'getQuery', function( err ){
