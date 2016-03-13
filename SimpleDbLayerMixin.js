@@ -111,7 +111,7 @@ exports = module.exports = declare( Object,  {
       layerOptions.table = self.collectionName;
       // Actually create the layer with the given parameters
       self.dbLayer = new self.DbLayer( layerOptions );
-      console.log("LAYEROPTIONS FOR ", self.collectionName, "IS: ", layerOptions );
+      //console.log("LAYEROPTIONS FOR ", self.collectionName, "IS: ", layerOptions );
     }
 
     var schema = self.schema;
