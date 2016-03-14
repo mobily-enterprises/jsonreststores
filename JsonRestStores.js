@@ -1762,7 +1762,7 @@ Store.OneFieldStoreMixin = declare( Object,  {
 
 });
 
-// Initialise all layers, creating relationship hashes
+// Initialise all stores, running their .init() function
 Store.init = function(){
   Object.keys( Store.registry ).forEach( function( key ){
     var store = Store.registry[ key ];
