@@ -8,7 +8,7 @@
     "mongodb"
   ],
   "main": "JsonRestStores.js",
-  "version": "0.3.45",
+  "version": "0.3.46",
   "private": false,
   "repository": {
     "type": "git",
@@ -24,11 +24,11 @@
     "allhttperrors": "0.3.x",
     "simpledeclare": "0.3.x",
     "simpleschema": "0.3.x",
-    "async": "~0.9.0"
+    "async": "~1.5.2"
   },
   "devDependencies": {
     "nodeunit": "~0.9.1",
-    "tingodb": "~0.3.x",
+    "tingodb": "~0.4.x",
     "simpledblayer-tingo": "0.3.x",
     "simpledblayer": "0.3.x"
 
