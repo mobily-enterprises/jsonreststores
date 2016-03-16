@@ -25,6 +25,8 @@ var
 , async = require('async')
 , SimpleDbLayerMixin = require('./SimpleDbLayerMixin.js')
 , HTTPMixin = require('./HTTPMixin.js')
+, UploadOnStoreMixin = require('./UploadOnStoreMixin.js')
+
 ;
 
 var Store = declare( Object,  {
@@ -233,7 +235,6 @@ var Store = declare( Object,  {
         for( var k in self.onlineSearchSchema.structure )
           self.queryConditions.args.push( { type: 'eq', args: [ k, '#' + k + '#' ] } );
       }
-
     }
 
     Store.registry[ self.storeName ] = self;
@@ -1150,8 +1151,8 @@ var Store = declare( Object,  {
               request.options.conditionsHash = conditionsHash;
 
               var inn = function( o ) { return require('util').inspect( o, { depth: 10 } ) };
-              console.log("CONDITION HASH:", inn( conditionsHash ) );
-              console.log("QUERY CONDITIONS:", inn( self.queryConditions ) );
+              //console.log("CONDITION HASH:", inn( conditionsHash ) );
+              //console.log("QUERY CONDITIONS:", inn( self.queryConditions ) );
 
               // Resolve queryConditions (with all #variable# replacement, `each` etc.
               // properly expanded and ready to be fed to `implementQuery`)
@@ -1160,7 +1161,7 @@ var Store = declare( Object,  {
                 request.options.conditionsHash,
                 self.onlineSearchSchema.structure
               );
-              console.log("RESOLVED QUERY CONDITIONS:", inn( request.options.resolvedQueryConditions ) );
+              //console.log("RESOLVED QUERY CONDITIONS:", inn( request.options.resolvedQueryConditions ) );
 
               // TODO: Document if it sticks
               self.manipulateQueryConditions( request, 'getQuery', function( err ){
@@ -1528,23 +1529,23 @@ Store.OneFieldStoreMixin = declare( Object,  {
 
     // Check that the method is implemented
     if( ! self.handleGet && request.remote ){
-      return self._sendError( request, 'get', next, new self.NotImplementedError( ) );
+      return self._sendError( request, 'getOne', next, new self.NotImplementedError( ) );
     }
 
     // Check the IDs
     self._checkParamIds( request, false, function( err ){
-      if( err ) return self._sendError( request, 'get', next, err );
+      if( err ) return self._sendError( request, 'getOne', next, err );
 
       // Fetch the doc.
       self.implementFetchOne( request, function( err, fullDoc ){
-        if( err ) return self._sendError( request, 'get', next, err );
+        if( err ) return self._sendError( request, 'getOne', next, err );
 
-        if( ! fullDoc ) return self._sendError( request, 'get', next, new self.NotFoundError());
+        if( ! fullDoc ) return self._sendError( request, 'getOne', next, new self.NotFoundError());
 
         request.data.fullDoc = fullDoc;
 
-        self.afterDbOperation( request, 'get', function( err ){
-          if( err ) return self._sendError( request, 'get', next, err );
+        self.afterDbOperation( request, 'getOne', function( err ){
+          if( err ) return self._sendError( request, 'getOne', next, err );
 
           // Manipulate fullDoc: at this point, it's the WHOLE database record,
           // whereas I only want returned paramIds AND the piggyField
@@ -1552,34 +1553,34 @@ Store.OneFieldStoreMixin = declare( Object,  {
             if( ! self.paramIds[ field ] && field != self.piggyField ) delete fullDoc[ field ];
           }
 
-          self.extrapolateDocProxy( request, 'get', request.data.fullDoc, function( err, doc) {
-            if( err ) return self._sendError( request, 'get', next, err );
+          self.extrapolateDocProxy( request, 'getOne', request.data.fullDoc, function( err, doc) {
+            if( err ) return self._sendError( request, 'getOne', next, err );
 
             request.data.doc = doc;
 
             // Check the permissions
-            self._checkPermissionsProxy( request, 'get', function( err, granted ){
-              if( err ) return self._sendError( request, 'get', next, err );
+            self._checkPermissionsProxy( request, 'getOne', function( err, granted ){
+              if( err ) return self._sendError( request, 'getOne', next, err );
 
-              if( ! granted ) return self._sendError( request, 'get', next, new self.ForbiddenError() );
+              if( ! granted ) return self._sendError( request, 'getOne', next, new self.ForbiddenError() );
 
-              self.afterCheckPermissions( request, 'get', function( err ){
-                if( err ) return self._sendError( request, 'get', next, err );
+              self.afterCheckPermissions( request, 'getOne', function( err ){
+                if( err ) return self._sendError( request, 'getOne', next, err );
 
                 // "preparing" the doc. The same function is used by GET for collections
-                self.prepareBeforeSendProxy( request, 'get', doc, function( err, preparedDoc ){
-                  if( err ) return self._sendError( request, 'get', next, err );
+                self.prepareBeforeSendProxy( request, 'getOne', doc, function( err, preparedDoc ){
+                  if( err ) return self._sendError( request, 'getOne', next, err );
 
                   request.data.preparedDoc = preparedDoc;
 
-                  self.afterEverything( request, 'get', function( err ) {
-                    if( err ) return self._sendError( request, 'get', next, err );
+                  self.afterEverything( request, 'getOne', function( err ) {
+                    if( err ) return self._sendError( request, 'getOne', next, err );
 
                     // Remote request: set headers, and send the doc back
                     if( request.remote ){
 
                       // Send "prepared" doc
-                      self.sendData( request, 'get', request.data.preparedDoc );
+                      self.sendData( request, 'getOne', request.data.preparedDoc );
 
                       // Local request: simply return the doc to the asking function
                     } else {
@@ -1609,7 +1610,7 @@ Store.OneFieldStoreMixin = declare( Object,  {
 
     // Check that the method is implemented
     if( ! self.handlePut && request.remote ){
-      return self._sendError( request, 'put', next, new self.NotImplementedError( ) );
+      return self._sendError( request, 'putExistingOne', next, new self.NotImplementedError( ) );
     }
 
     // DETOUR: It's a reposition. Not allowed here!
@@ -1619,10 +1620,10 @@ Store.OneFieldStoreMixin = declare( Object,  {
 
     // Check the IDs.
     self._checkParamIds( request, false, function( err ){
-      if( err ) return self._sendError( request, 'put', next, err );
+      if( err ) return self._sendError( request, 'putExistingOne', next, err );
 
-      self.prepareBody( request, 'put', request.body, function( err, preparedBody ){
-        if( err ) return self._sendError( request, 'put', next, err );
+      self.prepareBody( request, 'putExistingOne', request.body, function( err, preparedBody ){
+        if( err ) return self._sendError( request, 'putExistingOne', next, err );
 
         // Request is changed, old value is saved
         request.bodyBeforePrepare = request.body;
@@ -1642,30 +1643,30 @@ Store.OneFieldStoreMixin = declare( Object,  {
             errorsInPiggyField.push( { field: field, message: 'Field not allowed because not a paramId nor the piggyBack field: ' + field + ' in ' + self.storeName } );
           }
         }
-        if( errorsInPiggyField.length ) return self._sendError( request, 'put', next, new self.UnprocessableEntityError( { errors: errorsInPiggyField } ) );
+        if( errorsInPiggyField.length ) return self._sendError( request, 'putExistingOne', next, new self.UnprocessableEntityError( { errors: errorsInPiggyField } ) );
 
 
         self.schema.validate( request.body, { onlyObjectValues: true }, function( err, validatedBody, errors ) {
-          if( err ) return self._sendError( request, 'put', next, err );
+          if( err ) return self._sendError( request, 'putExistingOne', next, err );
 
-          if( errors.length ) return self._sendError( request, 'put', next, new self.UnprocessableEntityError( { errors: errors } ) );
+          if( errors.length ) return self._sendError( request, 'putExistingOne', next, new self.UnprocessableEntityError( { errors: errors } ) );
 
           // request is changed, old value is saved (again!)
           request.bodyBeforeValidation = request.body;
           request.body = validatedBody;
 
-          if( errors.length ) return self._sendError( request, 'put', next, new self.UnprocessableEntityError( { errors: errors } ) );
+          if( errors.length ) return self._sendError( request, 'putExistingOne', next, new self.UnprocessableEntityError( { errors: errors } ) );
 
-          self.afterValidate( request, 'put', function( err ){
-            if( err ) return self._sendError( request, 'put', next, err );
+          self.afterValidate( request, 'putExistingOne', function( err ){
+            if( err ) return self._sendError( request, 'putExistingOne', next, err );
 
             // Fetch the doc
             self.implementFetchOne( request, function( err, fullDoc ){
-              if( err ) return self._sendError( request, 'put', next, err );
+              if( err ) return self._sendError( request, 'putExistingOne', next, err );
 
               // OneFieldStores will only ever work on already existing records
               if( ! fullDoc ){
-                return self._sendError( request, 'put', next, new self.NotFoundError());
+                return self._sendError( request, 'putExistingOne', next, new self.NotFoundError());
               }
 
               request.data.fullDoc = fullDoc;
@@ -1676,27 +1677,27 @@ Store.OneFieldStoreMixin = declare( Object,  {
                 if( self.paramIds.indexOf( field ) == -1 && field != self.piggyField ) delete fullDoc[ field ];
               }
 
-              self.extrapolateDocProxy( request, 'putExisting', request.data.fullDoc, function( err, doc) {
-                if( err ) return self._sendError( request, 'put', next, err );
+              self.extrapolateDocProxy( request, 'putExistingOne', request.data.fullDoc, function( err, doc) {
+                if( err ) return self._sendError( request, 'putExistingOne', next, err );
 
                 request.data.doc = doc;
 
                 // Actually check permissions
-                self._checkPermissionsProxy( request, 'putExisting', function( err, granted ){
-                  if( err ) return self._sendError( request, 'put', next, err );
+                self._checkPermissionsProxy( request, 'putExistingOne', function( err, granted ){
+                  if( err ) return self._sendError( request, 'putExistingOne', next, err );
 
-                  if( ! granted ) return self._sendError( request, 'put', next, new self.ForbiddenError() );
+                  if( ! granted ) return self._sendError( request, 'putExistingOne', next, new self.ForbiddenError() );
 
-                  self.afterCheckPermissions( request, 'putExisting', function( err ){
-                    if( err ) return self._sendError( request, 'put', next, err );
+                  self.afterCheckPermissions( request, 'putExistingOne', function( err ){
+                    if( err ) return self._sendError( request, 'putExistingOne', next, err );
 
                     self.implementUpdate( request, false, function( err, fullDocAfter ){
-                      if( err ) return self._sendError( request, 'put', next, err );
+                      if( err ) return self._sendError( request, 'putExistingOne', next, err );
 
                       request.data.fullDocAfter = fullDocAfter;
 
                       // Update must have worked -- if it hasn't, there was a (bad) problem
-                      if( ! fullDocAfter ) return self._sendError( request, 'put', next, new Error("Error re-fetching document after update in putExisting") );
+                      if( ! fullDocAfter ) return self._sendError( request, 'putExistingOne', next, new Error("Error re-fetching document after update in putExisting") );
 
                       // Manipulate fullDoc: at this point, it's the WHOLE database record,
                       // whereas I only want returned paramIds AND the piggyField
@@ -1704,27 +1705,27 @@ Store.OneFieldStoreMixin = declare( Object,  {
                         if( self.paramIds.indexOf( field ) == -1 && field != self.piggyField ) delete fullDocAfter[ field ];
                       }
 
-                      self.afterDbOperation( request, 'putExisting', function( err ){
-                        if( err ) return self._sendError( request, 'putExisting', next, err );
+                      self.afterDbOperation( request, 'putExistingOne', function( err ){
+                        if( err ) return self._sendError( request, 'putExistingOne', next, err );
 
-                        self.extrapolateDocProxy( request, 'putExisting', request.data.fullDocAfter, function( err, docAfter ) {
-                          if( err ) return self._sendError( request, 'putExisting', next, err );
+                        self.extrapolateDocProxy( request, 'putExistingOne', request.data.fullDocAfter, function( err, docAfter ) {
+                          if( err ) return self._sendError( request, 'putExistingOne', next, err );
 
                           request.data.docAfter = docAfter;
 
-                          self.prepareBeforeSendProxy( request, 'putExisting', docAfter, function( err, preparedDoc ){
-                            if( err ) return self._sendError( request, 'putExisting', next, err );
+                          self.prepareBeforeSendProxy( request, 'putExistingOne', docAfter, function( err, preparedDoc ){
+                            if( err ) return self._sendError( request, 'putExistingOne', next, err );
 
                             request.data.preparedDoc = preparedDoc;
 
-                            self.afterEverything( request, 'putExisting', function( err ) {
-                              if( err ) return self._sendError( request, 'putExisting', next, err );
+                            self.afterEverything( request, 'putExistingOne', function( err ) {
+                              if( err ) return self._sendError( request, 'putExistingOne', next, err );
 
                               if( request.remote ){
                                 if( self.echoAfterPutExisting ){
-                                  self.sendData( request, 'putExisting', request.data.preparedDoc );
+                                  self.sendData( request, 'putExistingOne', request.data.preparedDoc );
                                 } else {
-                                  self.sendData( request, 'putExisting', '' );
+                                  self.sendData( request, 'putExistingOne', '' );
                                 }
                               } else {
                                 next( null, preparedDoc, request.data.request );
@@ -1741,22 +1742,6 @@ Store.OneFieldStoreMixin = declare( Object,  {
           });
         });
       });
-    });
-  },
-
-  afterEverything: function f( request, method, done){
-    var self = this;
-
-    this.inheritedAsync( f, arguments, function( err ){
-      if( err ) return done( err );
-
-      // TODO: run a _broadcast on the *parent* store,
-      //self._broadcast( request, 'storeRecordUpdate', docAfter[ self.idProperty], docAfter, done );
-
-      //stores.workspacesContacts.broadcastStoreChanges( request, 'storeRecordUpdate', contact.id, contact, { tabId: null, cb );
-
-      done( null );
-
     });
   },
 
@@ -1780,3 +1765,4 @@ Store.registry = {};
 // without an extra require (they are VERY common)
 Store.SimpleDbLayerMixin = SimpleDbLayerMixin;
 Store.HTTPMixin = HTTPMixin;
+Store.UploadOnStoreMixin = UploadOnStoreMixin;
