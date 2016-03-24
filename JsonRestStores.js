@@ -26,7 +26,7 @@ var
 , SimpleDbLayerMixin = require('./SimpleDbLayerMixin.js')
 , HTTPMixin = require('./HTTPMixin.js')
 , UploadOnStoreMixin = require('./UploadOnStoreMixin.js')
-
+, path = require( 'path')
 ;
 
 var Store = declare( Object,  {
@@ -369,7 +369,6 @@ var Store = declare( Object,  {
   },
 
   getFullPublicURL: function(){
-    var path = require('path');
 
     // No prefix: return the publicURL straight
     if( ! this.publicURLPrefix ) return this.publicURL;
@@ -444,7 +443,7 @@ var Store = declare( Object,  {
       // is not defined, won't go there
       // Note: ifDefined can be a list of comma-separated fields
       if( o.ifDefined && typeof( o.ifDefined) === 'string' ){
-        if( ! o.ifDefined.split(',').every( function( s ){ return !!conditionsHash[ s ]; }) ){
+        if( ! o.ifDefined.split(',').every( function( s ){ return typeof conditionsHash[ s ] != 'undefined'; }) ){
           return false;
         }
       }
@@ -522,7 +521,7 @@ var Store = declare( Object,  {
               // If it's in form #something#, then entry MUST be in allowedFields
               if( ! allowedFields[ osf ] ) throw new Error("Searched for " + arg + ", but didn't find corresponding entry in onlineSearchSchema");
 
-              if( conditionsHash[ osf ] ){
+              if( typeof conditionsHash[ osf ] != 'undefined' ){
                 resultArgs.push( conditionsHash[ osf ] );
               } else {
                 // It will get dropped since the required variable is not set
@@ -799,6 +798,16 @@ var Store = declare( Object,  {
     self._checkParamIds( request, true, function( err ){
       if( err ) return self._sendError( request, 'post', next, err );
 
+      // Protect protected fields
+      if( request.remote){
+        // Protected field are not allowed here
+        for( var field in request.body ){
+          if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
+            delete body[ field ];
+          }
+        }
+      }
+
       self.prepareBody( request, 'post', request.body, function( err, preparedBody ){
         if( err ) return self._sendError( request, 'post', next, err );
 
@@ -815,15 +824,6 @@ var Store = declare( Object,  {
 
         self.schema.validate( request.body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, validatedBody, errors ){
           if( err ) return self._sendError( request, 'post', next, err );
-
-          if( request.remote ){
-            // Protected field are not allowed here
-            for( var field in request.body ){
-              if( self.schema.structure[ field ] && self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
-                delete validatedBody[ field ];
-              }
-            }
-          }
 
           request.bodyBeforeValidation = request.body;
           request.body = validatedBody;
@@ -915,6 +915,16 @@ var Store = declare( Object,  {
     self._checkParamIds( request, false, function( err ){
       if( err ) return self._sendError( request, 'put', next, err );
 
+      // Protect protected fields
+      if( request.remote){
+        // Protected field are not allowed here
+        for( var field in request.body ){
+          if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
+            delete body[ field ];
+          }
+        }
+      }
+
       self.prepareBody( request, 'put', request.body, function( err, preparedBody ){
         if( err ) return self._sendError( request, 'put', next, err );
 
@@ -929,21 +939,6 @@ var Store = declare( Object,  {
 
         self.schema.validate( request.body, function( err, validatedBody, errors ) {
           if( err ) return self._sendError( request, 'put', next, err );
-
-          if( request.remote){
-
-            // Protected field are not allowed here
-            for( var field in request.body ){
-              if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
-
-                //if( self.failWithProtectedFields ){
-                //  errors.push( { field: field, message: 'Field not allowed because protected: ' + field + ' in ' + self.storeName } );
-                //} else {
-                  delete validatedBody[ field ];
-                //}
-              }
-            }
-          }
 
           request.bodyBeforeValidation = request.body;
           request.body = validatedBody;
@@ -1645,7 +1640,6 @@ Store.OneFieldStoreMixin = declare( Object,  {
         }
         if( errorsInPiggyField.length ) return self._sendError( request, 'putExistingOne', next, new self.UnprocessableEntityError( { errors: errorsInPiggyField } ) );
 
-
         self.schema.validate( request.body, { onlyObjectValues: true }, function( err, validatedBody, errors ) {
           if( err ) return self._sendError( request, 'putExistingOne', next, err );
 
@@ -1670,6 +1664,7 @@ Store.OneFieldStoreMixin = declare( Object,  {
               }
 
               request.data.fullDoc = fullDoc;
+              request.data.originalFullDoc = self._co( fullDoc );
 
               // Manipulate fullDoc: at this point, it's the WHOLE database record,
               // whereas I only want returned paramIds AND the piggyField
