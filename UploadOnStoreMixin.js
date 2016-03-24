@@ -16,7 +16,6 @@ var UploadOnStoreMixin = declare( Object,  {
 
   // This would ideally be redefined
   makeUploadedFileName: function( req, file, cb ){
-    console.log( this );
     return cb( null, file.fieldname + '_' + req.params[ this.idProperty ] );
   },
 
