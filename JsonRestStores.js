@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2015 Tony Mobily
+Copyright (C) 2016 Tony Mobily
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
@@ -70,7 +70,9 @@ var Store = declare( Object,  {
 
   deleteAfterGetQuery: false, // Delete records after fetching them
 
-  strictSchemaOnFetch: true,
+  strictSchemaOnFetch: false,
+
+  singleFields: {}, // Fields that can be updated singularly
 
   //failWithProtectedFields: false,
 
@@ -122,7 +124,6 @@ var Store = declare( Object,  {
   afterCheckPermissions: function( request, method, cb ){ cb( null ); },
   afterDbOperation: function( request, method, cb ){ cb( null ); },
   afterEverything: function( request, method, cb ) { cb( null ); },
-
 
   logError: function( error ){ },
 
@@ -906,9 +907,13 @@ var Store = declare( Object,  {
     // Prepare request.data
     request.data = request.data || {};
 
-    // Check that the method is implemented
-    if( ! self.handlePut && request.remote ){
+    if( ! self.handlePut && ! request.options.field && request.remote ){
       return self._sendError( request, 'put', next, new self.NotImplementedError( ) );
+    }
+
+    // DETOUR: It's a reposition. Not allowed here!
+    if( typeof( request.options.putBefore ) !== 'undefined' ){
+      return cb( new Error("Option putBefore not allowed in OneFieldStore"));
     }
 
     // Check the IDs.
@@ -916,7 +921,7 @@ var Store = declare( Object,  {
       if( err ) return self._sendError( request, 'put', next, err );
 
       // Protect protected fields
-      if( request.remote){
+      if( request.remote && ! request.options.field ){
         // Protected field are not allowed here
         for( var field in request.body ){
           if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
@@ -937,8 +942,19 @@ var Store = declare( Object,  {
         // Delete _children which mustn't be here regardless
         delete request.body._children;
 
-        self.schema.validate( request.body, function( err, validatedBody, errors ) {
+        if( request.options.field ){
+          var errorsInPiggyField = [];
+          for( var field in request.body ){
+            if( self.paramIds.indexOf( field ) == -1 && field != request.options.field ){
+              errorsInPiggyField.push( { field: field, message: 'Field not allowed because not a paramId nor the single field: ' + field + ' in ' + self.storeName } );
+            }
+          }
+          if( errorsInPiggyField.length ) return self._sendError( request, 'put', next, new self.UnprocessableEntityError( { errors: errorsInPiggyField } ) );
+        }
+
+        self.schema.validate( request.body, { onlyObjectValues: !!request.options.field }, function( err, validatedBody, errors ) {
           if( err ) return self._sendError( request, 'put', next, err );
+
 
           request.bodyBeforeValidation = request.body;
           request.body = validatedBody;
@@ -951,6 +967,11 @@ var Store = declare( Object,  {
             // Fetch the doc
             self.implementFetchOne( request, function( err, fullDoc ){
               if( err ) return self._sendError( request, 'put', next, err );
+
+              // OneFieldStores will only ever work on already existing records
+              if( ! fullDoc && request.options.field ){
+                return self._sendError( request, 'putExisting', next, new self.NotFoundError());
+              }
 
               // Check the 'overwrite' option
               if( typeof( request.options.overwrite ) !== 'undefined' ){
@@ -1050,7 +1071,7 @@ var Store = declare( Object,  {
                         // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
                         self.schema.cleanup( request.body, 'doNotSave' );
 
-                        self.implementUpdate( request, true, function( err, fullDocAfter ){
+                        self.implementUpdate( request, !request.options.field, function( err, fullDocAfter ){
                           if( err ) return self._sendError( request, 'putExisting', next, err );
 
                           // Update must have worked -- if it hasn't, there was a (bad) problem
@@ -1076,6 +1097,12 @@ var Store = declare( Object,  {
 
                                   self.afterEverything( request, 'putExisting', function( err ) {
                                     if( err ) return self._sendError( request, 'putExisting', next, err );
+
+                                    // Manipulate fullDoc: at this point, it's the WHOLE database record,
+                                    // whereas I only want returned paramIds AND the piggyField
+                                    for( var field in fullDocAfter ){
+                                      if( self.paramIds.indexOf( field ) == -1 && field != request.options.field ) delete fullDocAfter[ field ];
+                                    }
 
                                     if( request.remote ){
                                       if( self.echoAfterPutExisting ){
@@ -1116,7 +1143,7 @@ var Store = declare( Object,  {
     request.data = request.data || {};
 
     // Check that the method is implemented
-    if( ! self.handleGetQuery && request.remote ){
+    if( ! self.handleGetQuery && ! request.options.field  && request.remote ){
       return self._sendError( request, 'getQuery', next, new self.NotImplementedError( ) );
     }
 
@@ -1259,6 +1286,14 @@ var Store = declare( Object,  {
 
                   self.afterEverything( request, 'get', function( err ) {
                     if( err ) return self._sendError( request, 'get', next, err );
+
+                    // Manipulate preparedDoc: at this point, it's the WHOLE database record,
+                    // whereas I only want returned paramIds AND the piggyField
+                    if( request.options.field ){
+                      for( var field in preparedDoc ){
+                        if( ! self.paramIds[ field ] && field != request.options.field ) delete preparedDoc[ field ];
+                      }
+                    }
 
                     // Remote request: set headers, and send the doc back
                     if( request.remote ){
@@ -1477,270 +1512,6 @@ Store.getAllStores = function(){
   return Store.registry;
 }
 
-// OneFieldStoreMixin, to create a one-field store based
-// on a "main" parent store
-
-Store.OneFieldStoreMixin = declare( Object,  {
-
-  // Variables that HAVE TO be set by the inherited constructor
-  storeName: null,
-  publicURL: null,
-  piggyField: null,
-
-  // Only PUT and GET allowed
-  handlePut: true,
-  handlePost: false,
-  handleGet: true,
-  handleGetQuery: false,
-  handleDelete: false,
-
-  // Reset possibly overloaded function which, although inherited, wouldn't
-  // make sense in a OneFieldStore context
-  prepareBody: function( request, method, body, cb ){ cb( null, body ); },
-  extrapolateDoc: function( request, method, doc, cb ){ cb( null, doc ); },
-  prepareBeforeSendProxy: function( request, method, doc, cb ){ cb( null, doc ); },
-
-  // Making sure unwanted methods  are not even implemented
-  _makePost: function( request, next ){
-    next( new Error( "Method not implemented" ));
-  },
-  _makeDelete: function( request, next ){
-    next( new Error(" Method not implemented" ));
-  },
-  _makeGetQuery: function( request, next ){
-    next( new Error( "Method not implemented" ));
-  },
-
-  // Implement the WANTED methods: Put and Get
-
-  _makeGet: function( request, next ){
-
-    var self = this;
-
-    if( typeof( next ) !== 'function' ) next = function(){};
-
-    // Prepare request.data
-    request.data = request.data || {};
-
-    // Check that the method is implemented
-    if( ! self.handleGet && request.remote ){
-      return self._sendError( request, 'getOne', next, new self.NotImplementedError( ) );
-    }
-
-    // Check the IDs
-    self._checkParamIds( request, false, function( err ){
-      if( err ) return self._sendError( request, 'getOne', next, err );
-
-      // Fetch the doc.
-      self.implementFetchOne( request, function( err, fullDoc ){
-        if( err ) return self._sendError( request, 'getOne', next, err );
-
-        if( ! fullDoc ) return self._sendError( request, 'getOne', next, new self.NotFoundError());
-
-        request.data.fullDoc = fullDoc;
-
-        self.afterDbOperation( request, 'getOne', function( err ){
-          if( err ) return self._sendError( request, 'getOne', next, err );
-
-          // Manipulate fullDoc: at this point, it's the WHOLE database record,
-          // whereas I only want returned paramIds AND the piggyField
-          for( var field in fullDoc ){
-            if( ! self.paramIds[ field ] && field != self.piggyField ) delete fullDoc[ field ];
-          }
-
-          self.extrapolateDocProxy( request, 'getOne', request.data.fullDoc, function( err, doc) {
-            if( err ) return self._sendError( request, 'getOne', next, err );
-
-            request.data.doc = doc;
-
-            // Check the permissions
-            self._checkPermissionsProxy( request, 'getOne', function( err, granted ){
-              if( err ) return self._sendError( request, 'getOne', next, err );
-
-              if( ! granted ) return self._sendError( request, 'getOne', next, new self.ForbiddenError() );
-
-              self.afterCheckPermissions( request, 'getOne', function( err ){
-                if( err ) return self._sendError( request, 'getOne', next, err );
-
-                // "preparing" the doc. The same function is used by GET for collections
-                self.prepareBeforeSendProxy( request, 'getOne', doc, function( err, preparedDoc ){
-                  if( err ) return self._sendError( request, 'getOne', next, err );
-
-                  request.data.preparedDoc = preparedDoc;
-
-                  self.afterEverything( request, 'getOne', function( err ) {
-                    if( err ) return self._sendError( request, 'getOne', next, err );
-
-                    // Remote request: set headers, and send the doc back
-                    if( request.remote ){
-
-                      // Send "prepared" doc
-                      self.sendData( request, 'getOne', request.data.preparedDoc );
-
-                      // Local request: simply return the doc to the asking function
-                    } else {
-                       next( null, request.data.preparedDoc, request );
-                    }
-
-                  });
-                });
-              });
-            });
-          });
-        });
-      });
-    });
-  },
-
-
-  _makePut: function( request, next ){
-
-    var self = this;
-    var overwrite;
-
-    if( typeof( next ) !== 'function' ) next = function(){};
-
-    // Prepare request.data
-    request.data = request.data || {};
-
-    // Check that the method is implemented
-    if( ! self.handlePut && request.remote ){
-      return self._sendError( request, 'putExistingOne', next, new self.NotImplementedError( ) );
-    }
-
-    // DETOUR: It's a reposition. Not allowed here!
-    if( typeof( request.options.putBefore ) !== 'undefined' ){
-      return cb( new Error("Option putBefore not allowed in OneFieldStore"));
-    }
-
-    // Check the IDs.
-    self._checkParamIds( request, false, function( err ){
-      if( err ) return self._sendError( request, 'putExistingOne', next, err );
-
-      self.prepareBody( request, 'putExistingOne', request.body, function( err, preparedBody ){
-        if( err ) return self._sendError( request, 'putExistingOne', next, err );
-
-        // Request is changed, old value is saved
-        request.bodyBeforePrepare = request.body;
-        request.body = preparedBody;
-
-        self._enrichBodyWithParamIdsIfRemote( request );
-
-        // Delete _children which mustn't be here regardless
-        delete request.body._children;
-
-        // Go through each field in body, and check that it's either
-        // a paramId OR piggyField
-        // After this, body will be validated with { onlyObjectValues }
-        var errorsInPiggyField = [];
-        for( var field in request.body ){
-          if( self.paramIds.indexOf( field ) == -1 && field != self.piggyField ){
-            errorsInPiggyField.push( { field: field, message: 'Field not allowed because not a paramId nor the piggyBack field: ' + field + ' in ' + self.storeName } );
-          }
-        }
-        if( errorsInPiggyField.length ) return self._sendError( request, 'putExistingOne', next, new self.UnprocessableEntityError( { errors: errorsInPiggyField } ) );
-
-        self.schema.validate( request.body, { onlyObjectValues: true }, function( err, validatedBody, errors ) {
-          if( err ) return self._sendError( request, 'putExistingOne', next, err );
-
-          if( errors.length ) return self._sendError( request, 'putExistingOne', next, new self.UnprocessableEntityError( { errors: errors } ) );
-
-          // request is changed, old value is saved (again!)
-          request.bodyBeforeValidation = request.body;
-          request.body = validatedBody;
-
-          if( errors.length ) return self._sendError( request, 'putExistingOne', next, new self.UnprocessableEntityError( { errors: errors } ) );
-
-          self.afterValidate( request, 'putExistingOne', function( err ){
-            if( err ) return self._sendError( request, 'putExistingOne', next, err );
-
-            // Fetch the doc
-            self.implementFetchOne( request, function( err, fullDoc ){
-              if( err ) return self._sendError( request, 'putExistingOne', next, err );
-
-              // OneFieldStores will only ever work on already existing records
-              if( ! fullDoc ){
-                return self._sendError( request, 'putExistingOne', next, new self.NotFoundError());
-              }
-
-              request.data.fullDoc = fullDoc;
-              request.data.originalFullDoc = self._co( fullDoc );
-
-              // Manipulate fullDoc: at this point, it's the WHOLE database record,
-              // whereas I only want returned paramIds AND the piggyField
-              for( var field in fullDoc ){
-                if( self.paramIds.indexOf( field ) == -1 && field != self.piggyField ) delete fullDoc[ field ];
-              }
-
-              self.extrapolateDocProxy( request, 'putExistingOne', request.data.fullDoc, function( err, doc) {
-                if( err ) return self._sendError( request, 'putExistingOne', next, err );
-
-                request.data.doc = doc;
-
-                // Actually check permissions
-                self._checkPermissionsProxy( request, 'putExistingOne', function( err, granted ){
-                  if( err ) return self._sendError( request, 'putExistingOne', next, err );
-
-                  if( ! granted ) return self._sendError( request, 'putExistingOne', next, new self.ForbiddenError() );
-
-                  self.afterCheckPermissions( request, 'putExistingOne', function( err ){
-                    if( err ) return self._sendError( request, 'putExistingOne', next, err );
-
-                    self.implementUpdate( request, false, function( err, fullDocAfter ){
-                      if( err ) return self._sendError( request, 'putExistingOne', next, err );
-
-                      request.data.fullDocAfter = fullDocAfter;
-
-                      // Update must have worked -- if it hasn't, there was a (bad) problem
-                      if( ! fullDocAfter ) return self._sendError( request, 'putExistingOne', next, new Error("Error re-fetching document after update in putExisting") );
-
-                      // Manipulate fullDoc: at this point, it's the WHOLE database record,
-                      // whereas I only want returned paramIds AND the piggyField
-                      for( var field in fullDocAfter ){
-                        if( self.paramIds.indexOf( field ) == -1 && field != self.piggyField ) delete fullDocAfter[ field ];
-                      }
-
-                      self.afterDbOperation( request, 'putExistingOne', function( err ){
-                        if( err ) return self._sendError( request, 'putExistingOne', next, err );
-
-                        self.extrapolateDocProxy( request, 'putExistingOne', request.data.fullDocAfter, function( err, docAfter ) {
-                          if( err ) return self._sendError( request, 'putExistingOne', next, err );
-
-                          request.data.docAfter = docAfter;
-
-                          self.prepareBeforeSendProxy( request, 'putExistingOne', docAfter, function( err, preparedDoc ){
-                            if( err ) return self._sendError( request, 'putExistingOne', next, err );
-
-                            request.data.preparedDoc = preparedDoc;
-
-                            self.afterEverything( request, 'putExistingOne', function( err ) {
-                              if( err ) return self._sendError( request, 'putExistingOne', next, err );
-
-                              if( request.remote ){
-                                if( self.echoAfterPutExisting ){
-                                  self.sendData( request, 'putExistingOne', request.data.preparedDoc );
-                                } else {
-                                  self.sendData( request, 'putExistingOne', '' );
-                                }
-                              } else {
-                                next( null, preparedDoc, request.data.request );
-                              }
-                            });
-                          });
-                        });
-                      });
-                    });
-                  });
-                });
-              });
-            });
-          });
-        });
-      });
-    });
-  },
-
-});
 
 // Initialise all stores, running their .init() function
 Store.init = function(){
@@ -1751,8 +1522,9 @@ Store.init = function(){
 
 };
 
-
 exports = module.exports = Store;
+
+/* Store's own "class" variables */
 Store.artificialDelay = 0;
 Store.registry = {};
 
@@ -1761,3 +1533,133 @@ Store.registry = {};
 Store.SimpleDbLayerMixin = SimpleDbLayerMixin;
 Store.HTTPMixin = HTTPMixin;
 Store.UploadOnStoreMixin = UploadOnStoreMixin;
+
+
+/* Make full documentation data for the stores */
+Store.makeDocsData = function( storeNames ){
+
+  var r = {}, rn, proto;
+  storeNames = storeNames || Object.keys( Store.registry );
+
+  storeNames.forEach( function( storeName ){
+    var s = Store.registry[ storeName ];
+    r[ storeName ] = rn = {};
+
+    // Get backend info (if backend is present)
+    if( s.dbLayer ){
+      rn.backEnd = {};
+      rn.backEnd.collectionName = s.collectionName;
+      rn.backEnd.hardLimitOnQueries = s.hardLimitOnQueries;
+      if( s.indexBase.length ) rn.indexBase = s.indexBase;
+    }
+
+    // Look for derivative stores
+    var derivates = [];
+    proto = s.__proto__;
+    while( ( proto = proto.__proto__) ){
+    if( proto.hasOwnProperty( 'storeName') && proto.storeName ) derivates.push( proto.storeName );
+    }
+    if( derivates.length ) rn.derivedFrom = derivates;
+
+    rn.singleFields = s.singleFields;
+
+
+    /* TODO:
+      FIELDS:
+      * Nested fields, as a store-wide thing (they are returned even after a PUT)
+      *  echoAfterPutNew, echoAfterPutExisting, echoAfterPost, echoAfterDelete
+      * chainErrors
+      * deleteAfterGetQuery
+      * stringSchemaOnFetch
+      * position
+      * logError, format ErrorMessage
+      Find new fields (after* ones, etc.) and hooks. For them, explain what they do
+    */
+
+    // Go through each method, document each one based on the store itself
+    rn.methods = {};
+    [ 'get', 'put', 'post', 'get', 'getQuery', 'delete'].forEach( function( method ){
+
+      switch( method ){
+
+        case 'getQuery':
+          if( ! s.handleGetQuery ) break;
+          var rnm = rn.methods[ method ] = {};
+
+          if( s.schema ) {
+            // Copy over the schema, taking out the docs parts
+            rnm.schema = s._co( s.schema.structure );
+            rnm.schemaExplanations = {};
+            Object.keys( rnm.schema ).forEach( function( k ){
+              if( rnm.schema[ k ].doc ){
+                rnm.schemaExplanations[ k ] = rnm.schema[ k ].doc;
+                delete rnm.schema[ k ] .doc;
+              }
+            })
+          }
+
+          if( s.onlineSearchSchema ) {
+            // Copy over the search schema, taking out the docs parts
+            rnm.onlineSearchSchema = s._co( s.onlineSearchSchema.structure );
+            rnm.onlineSearchSchemaExplanations = {};
+            Object.keys( rnm.onlineSearchSchema ).forEach( function( k ){
+              if( rnm.onlineSearchSchema[ k ].doc ){
+                rnm.onlineSearchSchemaExplanations[ k ] = rnm.onlineSearchSchema[ k ].doc;
+                delete rnm.onlineSearchSchema[ k ] .doc;
+              }
+            })
+          }
+
+          if( s[ 'schema-doc'] ) s.schemaExplanation = s[ 'schema-doc'];
+          if( s[ 'queryConditons-doc'] ) s.queryExplanation = s[ 'queryConditons-doc'];
+          if( s[ 'defaultSort'] ) s.defautSort = s[ 'defaultSort'];
+
+          /* TODO:
+            * How ranges work, incoming and outgoing
+            * URLs for each method
+          */
+
+        break;
+
+        case 'get':
+          if( ! s.handleGet && ! Object.keys( s.singleFields ).length ) break;
+
+          var rnm = rn.methods[ method ] = {};
+          if( !s.handleGet ) rnm.info = `This store only provides 'get' for its single fields`;
+
+        break;
+
+        case 'put':
+          if( ! s.handlePut && ! Object.keys( s.singleFields ).length ) break;
+
+          var rnm = rn.methods[ method ] = {};
+          if( ! s.handlePut ) rnm.info = `This store only provides 'put' for its single fields`;
+
+        break;
+
+        case 'post':
+          if( ! s.handlePost ) break;
+          var rnm = rn.methods[ method ] = {};
+        break;
+
+        case 'get':
+          if( ! s.handleGet ) break;
+          var rnm = rn.methods[ method ] = {};
+        break;
+
+        case 'delete':
+          if( ! s.handleDelete ) break;
+          var rnm = rn.methods[ method ] = {};
+        break;
+
+
+
+      }
+
+    })
+  })
+
+
+
+  return r;
+}

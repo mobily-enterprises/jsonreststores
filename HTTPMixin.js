@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2013 Tony Mobily
+Copyright (C) 2016 Tony Mobily
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
@@ -91,6 +91,8 @@ var HTTPMixin = declare( Object,  {
     var app = params.app;
     var idName;
 
+    var self = this;
+
     // Public URL must be set
     if( ! url ){
       throw( new Error( "protocolListenHTTP must be called on a store with a public URL" ) );
@@ -113,21 +115,29 @@ var HTTPMixin = declare( Object,  {
     app.get(    url,          this._getRequestHandler( 'GetQuery') );
     app.put(    url + idName, this._getRequestHandler( 'Put') );
     app.post(   url,          this._getRequestHandler( 'Post') );
-    app.delete( url + idName, this._getRequestHandler( 'Delete') );
+    app.delete( url + idName , this._getRequestHandler( 'Delete') );
+
+    // Add store entries for single fields
+    Object.keys( this.singleFields ).forEach( function( key ){
+      app.get(    url + idName + '/' + key, self._getRequestHandler( 'GetField', key ) );
+      app.put(    url + idName + '/' + key, self._getRequestHandler( 'PutField', key ) );
+    });
+
   },
 
 
-  _getRequestHandler: function( action ){
+  _getRequestHandler: function( action, field ){
 
     var self = this;
 
-    if( [ 'Get', 'GetQuery', 'Put', 'Post', 'Delete' ].indexOf( action ) === -1 ){
-      throw( new Error("action can be Get, GetQuery, Put, Post, Delete") );
+    if( [ 'Get', 'GetQuery', 'Put', 'Post', 'Delete', 'GetField', 'PutField' ].indexOf( action ) === -1 ){
+      throw( new Error("action can be Get, GetQuery, Put, Post, Delete, GetField, PutField") );
     }
 
     return function( req, res, next ){
 
       var request = new Object();
+      var finalAction;
 
       // Sets all of the required fields for a request
       request.remote = true;
@@ -145,14 +155,27 @@ var HTTPMixin = declare( Object,  {
       request._req = req;
       request._res = res;
 
+      // GetField and PutField are pseudo-request that will be translated back
+      // into `Put` and `Get` (with `field` set in option)
+      var finalAction;
+      if( action == 'GetField' ){
+        finalAction = "Get";
+        request.options.field = field;
+      } else if( action == 'PutField' ){
+        finalAction = "Put";
+        request.options.field = field;
+      } else {
+        finalAction = action;
+      }
+
       // Process the request, honouring the artificialDelay
       if( self.artificialDelay ) {
         setTimeout( function(){
           // Actually run the request
-          self['_make' + action ]( request, next );
+          self['_make' + finalAction ]( request, next );
         }, Math.floor( Math.random() * self.artificialDelay ) );
       } else {
-        self['_make' + action ]( request, next );
+        self['_make' + finalAction ]( request, next );
       }
 
     }
