@@ -804,7 +804,7 @@ var Store = declare( Object,  {
         // Protected field are not allowed here
         for( var field in request.body ){
           if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
-            delete body[ field ];
+            delete request.body[ field ];
           }
         }
       }
@@ -925,7 +925,7 @@ var Store = declare( Object,  {
         // Protected field are not allowed here
         for( var field in request.body ){
           if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
-            delete body[ field ];
+            delete request.body[ field ];
           }
         }
       }
