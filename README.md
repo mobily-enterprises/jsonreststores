@@ -1,13 +1,13 @@
 JsonRestStores
 ==============
 
-JsonRestStores is the best way to create REST stores that return JSON data. JsonRestStores is in RC1 status, and the API is locked. Please (find and) file bugs and requests as issues against this repo.
+JsonRestStores is the best way to create **self-documenting** REST stores that return JSON data (yes: self-documenting!). JsonRestStores is in RC3 status, and the API is 100% locked. Please (find and) file bugs and requests as issues against this repo.
 
 Rundown of features:
 
 * **DRY approach**. Create complex applications keeping your code short and tight, without repeating yourself.
 * **Down-to-earth**. It does what developers _actually_ need, using existing technologies.
-* **Database-agnostic**. You can either use a generic database connector, or implement the data-manipulation methods yourself.
+* **Database-agnostic**. You can either use a generic database connector, or implement the (simple!) data-manipulation methods yourself.
 * **Protocol-agnostic**. For now, only HTTP is implemented. However, with JsonRestStores the protocol used to make REST calls doesn't actually matter.
 * **Schema based**. Anything coming from the client will be validated and cast to the right type.
 * **API-ready**. Every store function can be called via API, which bypass permissions constraints
@@ -20,6 +20,10 @@ Rundown of features:
 * **Great documentation**. Every aspect of JsonRestStores is carefully explained and documented. Note that every day usage doesn't require knowlege of every single aspect of JsonRestStores.
 
 JsonRestStores even comes with its own database layer mixin, SimpleDbLayerMixin, which will implement all of the important methods that will read, write and delete elements from a database. The mixin uses [simpledblayer](https://github.com/mercmobily/simpledblayer) to access the database. For now, only MongoDb is supported but more will surely come.
+
+## TODO in documentation:
+
+* self-documenting feature
 
 # Introduction to (JSON) REST stores
 
@@ -43,19 +47,30 @@ And then to access users for that booking:
 * `POST /bookings/:bookingId/users/`
 * `DELETE /bookings/:bookingId/users/:userId`
 
+And then -- again -- to get/post data from individual fields with one call:
+
+* `GET /bookings/:bookingId/users/:userId/field1`
+* `PUT /bookings/:bookingId/users/:userId/field1`
+* `GET /bookings/:bookingId/users/:userId/field2`
+* `PUT /bookings/:bookingId/users/:userId/field2`
+* `GET /bookings/:bookingId/users/:userId/field3`
+* `PUT /bookings/:bookingId/users/:userId/field3`
+
 It sounds simple enough (although it's only two tables and it already looks rather boring). It gets tricky when you consider that:
 
 * You need to make sure that permissions are always carefully checked. For example, only users that are part of booking `1234` can `GET /bookings/1234/users`
 * When implementing `GET /bookings/`, you need to parse the URL in order to enable data filtering (for example, `GET /bookings?dateFrom=1976-01-10&name=Tony` will need to filter, on the database, all bookings made after the 10th of January 1976 by Tony).
 * When implementing `GET /bookings/`, you need to return the right `Content-Range` HTTP headers in your results so that the clients know what range they are getting.
 * When implementing `GET /bookings/`, you also need to make sure you take into account any `Range` header set by the client, which might only want to receive a subset of the data
+* When implementing `/bookings/:bookingId/users/:userId`, you need to make sure that the bookingId exists
 * With `POST` and `PUT`, you need to make sure that data is validated against some kind of schema, and return the appropriate errors if it's not.
 * With `PUT`, you need to consider the HTTP headers `If-match` and `If-none-match` to see if you can//should//must overwrite existing records
 * All unimplemented methods should return a `501 Unimplemented Method` server response
+* You need to implement all of the routes for individual fields, and add permissions
 
 This is only a short list of obvious things: there are many more to consider. The point is, when you make a store you should be focusing on the important parts (the data you gather and manipulate, and permission checking) rather than repetitive, boilerplate code.
 
-With JsonRestStores, you can create JSON REST stores without ever worrying about any one of those things. You can concentrate on what _really_ matters: your application's data and logic.
+With JsonRestStores, you can create JSON REST stores without ever worrying about any one of those things. You can concentrate on what _really_ matters: your application's data, permissions and logic.
 
 ## Understand a little about REST stores
 
@@ -89,7 +104,6 @@ Note that all of these modules are fully unit-tested, and are written and mainta
 
 Creating a store with JsonRestStores is very simple. Here is how you make a fully compliant store, ready to be added to your Express application:
 
-````Javascript
       var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
       var Schema = require('simpleschema');  // The main schema module
       var SimpleDbLayer = require('simpledblayer');
@@ -126,11 +140,9 @@ Creating a store with JsonRestStores is very simple. Here is how you make a full
 
       JsonRestStores.init();
       managers.protocolListen( 'HTTP', { app: app } );;
-````
 
 Note that since you will be mixing in `JsonRestStores` with `JsonRestStores.HTTPMixin` and `JsonRestStores.SimpleDbLayerMixin` for every single store you create (more about mixins shortly), you might decide to create the mixin once for all making the code less verbose:
 
-````Javascript
     var JsonRestStores = require('jsonreststores'); // The main JsonRestStores module
     var Schema = require('simpleschema');  // The main schema module
     var SimpleDbLayer = require('simpledblayer');
@@ -167,7 +179,6 @@ Note that since you will be mixing in `JsonRestStores` with `JsonRestStores.HTTP
 
     JsonRestStores.init();
     protocolListen( 'HTTP', { app: app } );
-````
 
 That's it: this is enough to add, to your Express application, a a full store which will handly properly all of the HTTP calls.
 
@@ -180,7 +191,6 @@ That's it: this is enough to add, to your Express application, a a full store wh
 * `protocolListen( 'HTTP', { app: app } )` creates the right Express routes to receive HTTP connections for the `GET`, `PUT`, `POST` and `DELETE` methods.
 * `JsonRestStores.init()` should _always_ be run once you have declared all of your stores. This function will run the initialisation code necessary to make nested stores work properly.
 
-
 ## The store live in action in your express application
 
 JsonRestStores is very unobtrusive of your Express application. In order to make everything work, you can just:
@@ -191,7 +201,6 @@ JsonRestStores is very unobtrusive of your Express application. In order to make
 
 This is how the stock express code would change to implement the store above (please note that this is mostly code autogenerated when you generate an Express application):
 
-````Javascript
     var express = require('express');
     var path = require('path');
     var favicon = require('serve-favicon');
@@ -303,7 +312,6 @@ This is how the stock express code would change to implement the store above (pl
 
     });
     module.exports = app;
-````
 
 The `dbConnect.js` file is simply something that will connect to the database and all the callback with the `db` instance:
 
@@ -567,136 +575,7 @@ In any case, the property `idProperty` is set as last element of `paramIds`; in 
 
 In the documentation, I will often refers to `paramIds`, which is an array of element in the schema which match the ones in the route. However, in all examples I will declare stores using the "shortened" version.
 
-# How stores work: a walk-through
-
-Here is a walk-through on how stores actually work, and how requests are fulfilled. Note that this refers very specifically to stores mixing in with HTTPMixin and with SimpleDbLayerMixin.
-
-## Store definition
-
-When you define a store like this:
-
-    var Managers = declare( Store, {
-
-      schema: new Schema({
-        name   : { type: 'string', trim: 60 },
-        surname: { type: 'string', trim: 60 },
-      }),
-
-      storeName: 'managers',
-      publicURL: '/managers/:id',
-
-      handlePut: true,
-      handlePost: true,
-      handleGet: true,
-      handleGetQuery: true,
-      handleDelete: true,
-
-      hardLimitOnQueries: 50,
-    });
-
-    JsonRestStores.init();
-    managers.protocolListen( 'HTTP', { app: app } );;
-
-## Request listening
-
-The last line is the one that makes the store "active": `managers.protocolListen()` will actually run `managers.protocolListenHTTP()`, which is defined thanks to HTTPMixin.
-`protocolListenHTTP()` will define the appropriate routes using Express' `app` (passed to it as a parameter).
-The code in HTTPMixin looks like this:
-
-````Javascript
-    // Make entries in "app", so that the application
-    // will give the right responses
-    app.get(      url + id, this._getRequestHandler( 'Get' ) );
-    app.get(      url,      this._getRequestHandler( 'GetQuery') );
-    app.put(      url + id, this._getRequestHandler( 'Put') );
-    app.post(     url,      this._getRequestHandler( 'Post') );
-    app.delete(   url + id, this._getRequestHandler( 'Delete') );
-````
-So, the following routes are defined:
-
-    GET /managers/:id -- returns a specific manager. Handler: `store._makeGet()`
-    GET /managers/ -- returns a collection of elements; you can filter by surname, which is searchable. Handler: `store._makeGetQuery()`
-    PUT /managers/:id -- writes over an existing manager object. Handler: `store._makePut()`
-    POST /managers/ -- creates a new manager object. Handler: `store._makePost()`
-    DELETE /managers/:id -- deletes a manager. Handler: `store._makeDelete()`
-
-## Receiving the request
-
-The method `this._getRequestHandler()`, also defined in HTTPMixin, will be responsible of creating a plain Javascript object called `request`, and enrich it with the following attributes:
-
-* `remote`: Set to `true`.
-* `protocol`: set to HTTP.
-* `params`: set to the URL parameters. For example, a request like this: `PUT /managers/10/cars/20` will have `params` set as `{ managerId: 10, id: 20 }`
-* `body`: set to the request's `body`.
-* `session`: set to the request's session.
-* `options`: set based on the request's query string and headers, see the next section for more details
-* `_req` and `_res`: set to the request's `req` and `res` parameters -- this is specific to HTTPMixin.
-
-After defining this object, `this._getRequestHandler()` will finally be ready to call one of the following methods (depending on the method):
-
- * `_makeGet( request, next )` (implements GET for one single document)
- * `_makeGetQuery( request, next )` (implements GET for a collection, no ID passed)
- * `_makePut( request, next )` (implements PUT for a collection)
- * `_makePost( request, next )` (implements POST for a collection)
- * `_makeDelete( request, next )` (implements DELETE for a collection)
-
-These methods are the heart of JsonRestStores: they will handle the request by calling `implementFetchOne()`, `implementInsert()`, `implementUpdate()`, `implementDelete()`, `implementQuery()` and `implementReposition()` (conveniently provided in this case by SimpleDbLayerMixin).
-
-### The `options` object
-
-The `options` object is the most complex and the most useful.
-Each request handlers will consider different attributes:
-
-#### `_makePut()`
-  * `putBefore`. If set, and if the store supports positioning, the entry will be placed before the entry with id `putBefore`.
-  * `putDefaultPosition`. If set, and if the store supports positioning, this option will instruct JsonRestStores where to place the entry: `start` or `end` (only used when `putBefore` isn't set)
-  * `overwrite`. If set to `true`, the `put` will only be successful if the record is an existing one. If set to `false`, the `put` will only be successful if the record didn't exist. If not set, the `put` will work either way.
-
-#### `_makePost()`
-  * `putBefore`. Same as the handler `_makePut`
-  * `putDefaultPosition`. Same as the handler `_makePut`
-
-#### `_makeGetQuery()`:
-  * `conditions`. An hash object containing the filter criteria, which will have to match `onlineSearchSchema`.
-  * `ranges`. It can have `skip` and `count`.
-  * `sort`. An hash that defines how to sort the query. For example `{ model: -1, maker: 1 }`. Note that each key needs to be listed in the `sortableFields` element of the store.
-  * `skipHardLimitOnQueries`. If set to `true`, the attribute `hardLimitOnQueries` will be ignored when making `getQuery` calls.
-  * `delete`. If set to `true`, each record will be deleted after retrieval. Note that if the store's `self.deleteAfterGetQuery` is set to `true`, then `delete` will automatically be set to true for each request.
-
-### How HTTPMixin creates the `options` object
-
-Protocol mixins (in this case, HTTPMixin) have the task of accepting the request, and make sure that the `options` object passed to the request handler is adequately filled depending on the request itself.
-
-Specifically:
-
-### `_makePut`
-  * `putBefore`. From header `x-put-before`
-  * `putDefaultPosition`. From header `x-put-default-position`
-  * `overwrite`. If the header `if-match` is set to `*`, it's set to true. If the header `if-none-match` is set to `*`, is set to false.
-
-### `_makePost`
-  * `putBefore`. Same as the handler `_makePut`
-  * `putDefaultPosition`. Same as the handler `_makePut`
-
-### `_makeGetQuery`:
-  * `conditions`. Worked out from the query string.
-  * `ranges`. Worked out from the `range` header; if the header is `3-10`, then `ranges` will be assigned `skip: 3, limit: 8 }` (it will skip to the third element, and will fetch 8 elements at the most).
-  * `sort`. Worked out from the `sortBy` element in the query string; if it is for example `?sortBy=-model,+maker`, `options.sort` will be `{ model: -1, maker: 1 }`.
-
-Please note that you can easily overload the specific methods in HTTPMixin if you want store parameters to be taken from the store differently.
-
-## Sending the response back to the client
-
-The `_make???()` request handlers will use the `self.sendData(  request, method, returnObject );` method to send data out to the client.  `sendData()`, in turn, will call `protocolSendHTTP( request, method, returnObject )`. This method has has access to the `request` attribute, which (as mentioned earlier) was assigned `_req` and `_res`. `req._res` is used by `protocolSendHTTP()` to set the right HTTP headers and status, and deliver the response to the client:
-
-* status is `200` by default.
-* if there is an error (the method is set as `error`, and `returnObject` is therefore an Error object), the status is set to the `httpError` attribute of the error, and the response will be the `responseBody` attribute of the error.
-* `post` and `putNew` and `putExisting` methods will set the `Location` header
-* `post` and `putNew` will set the status to 201. `delete` will set the status to `204`.
-* `getQuery` will set the `Content-Range` headers, like `items 3-10/100` (which will tell the client what was actually fetched in terms of range, and what the total count is).
-*
-
-# A nested store
+# Nested stores
 
 Stores are never "flat" as such: you have workspaces, and then you have users who "belong" to a workspace. Here is how you create a "nested" store:
 
@@ -894,6 +773,263 @@ It's important to be consistent in naming conventions while creating stores. In 
 
 * The nested store's name starts with the parent store's name (`managers`) keeping pluralisation
 * The URL is in small letters, starting with the URL of the parent store
+
+# Permissions
+
+By default, everything is allowed: stores allow pretty much anything and anything; anybody can DELETE, PUT, POST, etc. Furtunately, JsonRestStores allows you to decide exactly what is allowed and what isn't, by overriding specific methods.
+
+Every method runs the method `checkPermissions()` before continuing. If everything went fine, `checkPermissions()` will call the callback with `true`: `cb( null, true )`; otherwise, to fail, `cb( null, false )`.
+
+The `checkPermissions()` method has the following signature:
+
+    checkPermissions: function( request, method, cb )
+
+Here:
+
+* `request`. It is the request object
+* `method`. It can be `post`, `put`, `get`, `getQuery`, `delete`
+
+Here is an example of a store only allowing deletion only to specific admin users:
+
+    // The basic schema for the WorkspaceUsers table
+    var WorkspaceUsers = declare( Store, {
+
+      schema: new Schema({
+        email     :  { type: 'string', trim: 128, searchable: true, sortable: true  },
+        name      :  { type: 'string', trim: 60, searchable: true, sortable: true  },
+      }),
+
+      storeName:  'WorkspaceUsers',
+      publicURL: '/workspaces/:workspaceId/users/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+
+      checkPermissions: function( request, method, cb ){
+
+        // This will only affect `delete` methods
+        if( method !== 'delete' ) return cb( null, true );
+
+        // User is logged in: all good
+        if( request._req.session.user ){
+          cb( null, true );
+
+        // User is not logged in: fail!
+        } else {
+          cb( null, false );
+        }
+      },
+
+    });
+    var workspaceUsers = new WorkspaceUsers();
+    workspaceUsers.protocolListen( 'HTTP', { app: app } );;
+
+Permission checking can be as simple, or as complex, as you need it to be.
+
+Note that if your store is derived from another one, and you want to preserve your master store's permission model, you can run `this.inheritedAsync(arguments)` like so:
+
+      checkPermissions: function f( request, method, cb ){
+
+        this.inheritedAsync( f, arguments, function( err, granted ) {
+          if( err ) return cb( err, false );
+
+          // The parent's checkPermissions() method failed: this will honour that fail
+          if( ! granted) return cb( null, false );
+
+          // This will only affect `delete` methods
+          if( method !== 'delete' ) return cb( null, true );
+
+          // User is admin (id: 1 )
+          if( request._req.session.user === 1){
+            cb( null, true );
+
+          // User is not logged in: fail!
+          } else {
+            cb( null, false );
+          }
+       }
+     },
+
+This will ensure that the inherited `checkPermissionsDelete()` method is called and followed, and _then_ further checks are carried on.
+
+Please note that `checkPermissions()` is only run for local requests, with `remote` set to false. All requests coming from APIs will ignore the method.
+
+# Single fields
+
+Advanced applications allow users to make a PUT call as soon as they leave a field, rather than on submit of the whole form. To facilitate this, JsonRestStores implements "single fields", where `get` and `put` calls will only affect a single field -- and yet you get all of the authentication bonus from
+
+So do that, all you have to do is mark fields as `singleField` in your schema -- that's it!
+For example:
+
+    // Basic definition of the managers store
+    var Managers = declare( Store, {
+
+      schema: new Schema({
+        name   : { type: 'string', trim: 60, singleField: true },
+        surname: { type: 'string', searchable: true, trim: 60, singleField: true },
+      }),
+
+      storeName: 'managers',
+      publicURL: '/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+
+    var managers = new Managers();
+
+    JsonRestStores.init();
+    protocolListen( 'HTTP', { app: app } );
+
+In this case you are able to GET and PUT the field `name`, marked as `singleField`, individually.
+For example HTTPMixin will create the following routes:
+
+* GET /managers/:id/name
+* PUT /managers/:id/name
+* GET /managers/:id/surname
+* PUT /managers/:id/surname
+
+Note that _all_ of the permissions checks and hooks will be called as per normal for `put` and `get` requests. If you need to differenciate in your code, you can simply check for the `request.options.field` property.
+
+# Automatic lookup
+
+When you have a nested store, you would normally check if the _intermediate_ ID in the URL actually resolves to an existing record. It's also often important, when checking for store permissions, to access that record.
+
+Imagine that you have this store:
+
+    var ManagersCars = declare( Store, {
+
+      schema: new Schema({
+        make     : { type: 'string', trim: 60, required: true },
+        model    : { type: 'string', trim: 60, required: true },
+      }),
+
+      storeName: 'managersCars',
+      publicURL: '/managers/:managerId/cars/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+
+      autoLookup: {
+        managerId: 'managers'
+      },
+
+      nested: [
+        {
+          type: 'lookup',
+          localField: 'managerId',
+          store: 'managers',
+        }
+      ],
+    });
+    var managersCars = new ManagersCars();
+
+Note that the store has an extra `autoLookup` property, where:
+* the key is the name of the field, in `params`, for which automatic lookup will happen
+* the value is the name of the store where the lookup will happen
+
+Note that:
+
+* The lookup is _always_ carried out using the looked up store's ID, which needs to correspond to the value in the URL param
+* If lookup failes, the store returns a NotFound error
+* If lookup is successful, the looked up store's data is available under `request.lookup.managerId`. To get the record, JsonRestStore uses the looked up store's `implementFetchOne()` method, so _none_ of the normal hooks are called. Basically, in `request.lookup.managerId` the record is fetched "as is".
+
+A typical use case is to check, in a PUT for example, that only the logged in manager can change the car record:
+
+    checkPermissions: function f( request, method, cb ){
+
+      // First of all: user MUST be logged in
+      if( ! request.session.userId ) return cb( null, false );
+
+      // Get is always allowed
+      if( method === 'get' ) return cb( null, true );
+
+      // managerId is in the `autoLookup` list, hence this will work
+      if( request.lookup.managerId.id == request.session.userId ) return cb( null, true );
+
+      // Denied in other cases
+      return cb( null, false );
+    },
+
+
+# The `position` attribute
+
+When creating a store, you can set the `position` parameter as `true`. For example:
+
+````Javascript
+    var Managers= declare( Store, {
+
+      schema: new Schema({
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', trim: 60 },
+      }),
+
+      position: true,
+
+      storeName: 'managers',
+      publicURL: '/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+    var managers = new Managers();
+
+    JsonRestStores.init();
+    managers.protocolListen( 'HTTP', { app: app } );;
+````
+
+The `position` attribute means that `PUT` and `POST` calls will have to honour positioning based on `options.putBefore` and `options.putDefaultPosition`.
+
+The main use of `position: true` is that when no sorting is requested by the client, the items will be ordered correctly depending on their "natural" positioning.
+
+Positioning will keep into account the store's `paramIds` when applying positioning. This means that if you have a store like this:
+
+````Javascript
+    var Managers= declare( Store, {
+
+      schema: new Schema({
+        workspaceId: { type: 'id' },
+        name       : { type: 'string', trim: 60 },
+        surname    : { type: 'string', trim: 60 },
+      }),
+
+      position: true,
+
+      storeName: 'managers',
+      publicURL: '/workspaces/:workspaceId/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+    var managers = new Managers();
+````
+
+Positioning will have to take into account `workspaceId` when repositioning: if an user in workspace `A` repositions an item, it mustn't affect positioning in workspace `B`. Basically, when doing positioning, `paramIds` define the _domain_ of repositioning (in this case, elements with matching `workspaceId`s will belong to the same domain).
+
+# `deleteAfterGetQuery`: automatic deletion of records after retrieval
+
+If your store has the `deleteAfterGetQuery` set to `true`, it will automatically delete any elements fetched with a `getQuery` method (that is, a `GET` run without the final `id`, and therefore fetching elements based on a filter). This is done by forcing `options.delete` to `true` (unless it was otherwise defined) in `makeGetQuery()` .
+
+This is especially useful when a store has, for example, a set of records that need to be retrieved by a user only once (like message queues).
+
+# `hardLimitOnQueries`: limit the number of records
+
+If your store has the `hardLimitOnQueries` set, any `getQuery` method (that is, a `GET` without the final `id`, and therefore fetching elements based on a filter) will never return more than `hardLimitOnQueries` results (unless you are using JsonRestStore's API, and manually set `options.skipHardLimitOnQueries` to `true`).
 
 # Customise search rules
 
@@ -1361,76 +1497,6 @@ For example:
 
 This will ensure that comments are always retrieved in reversed order, newest first. Since `sortableFields` is not defined, the default order (by `posted`) is the only possible one for this store.
 
-# The `position` attribute
-
-When creating a store, you can set the `position` parameter as `true`. For example:
-
-````Javascript
-    var Managers= declare( Store, {
-
-      schema: new Schema({
-        name   : { type: 'string', trim: 60 },
-        surname: { type: 'string', trim: 60 },
-      }),
-
-      position: true,
-
-      storeName: 'managers',
-      publicURL: '/managers/:id',
-
-      handlePut: true,
-      handlePost: true,
-      handleGet: true,
-      handleGetQuery: true,
-      handleDelete: true,
-    });
-    var managers = new Managers();
-
-    JsonRestStores.init();
-    managers.protocolListen( 'HTTP', { app: app } );;
-````
-
-The `position` attribute means that `PUT` and `POST` calls will have to honour positioning based on `options.putBefore` and `options.putDefaultPosition`.
-
-The main use of `position: true` is that when no sorting is requested by the client, the items will be ordered correctly depending on their "natural" positioning.
-
-Positioning will keep into account the store's `paramIds` when applying positioning. This means that if you have a store like this:
-
-````Javascript
-    var Managers= declare( Store, {
-
-      schema: new Schema({
-        workspaceId: { type: 'id' },
-        name       : { type: 'string', trim: 60 },
-        surname    : { type: 'string', trim: 60 },
-      }),
-
-      position: true,
-
-      storeName: 'managers',
-      publicURL: '/workspaces/:workspaceId/managers/:id',
-
-      handlePut: true,
-      handlePost: true,
-      handleGet: true,
-      handleGetQuery: true,
-      handleDelete: true,
-    });
-    var managers = new Managers();
-````
-
-Positioning will have to take into account `workspaceId` when repositioning: if an user in workspace `A` repositions an item, it mustn't affect positioning in workspace `B`. Basically, when doing positioning, `paramIds` define the _domain_ of repositioning (in this case, elements with matching `workspaceId`s will belong to the same domain).
-
-# `deleteAfterGetQuery`: automatic deletion of records after retrieval
-
-If your store has the `deleteAfterGetQuery` set to `true`, it will automatically delete any elements fetched with a `getQuery` method (that is, a `GET` run without the final `id`, and therefore fetching elements based on a filter). This is done by forcing `options.delete` to `true` (unless it was otherwise defined) in `makeGetQuery()` .
-
-This is especially useful when a store has, for example, a set of records that need to be retrieved by a user only once (like message queues).
-
-# `hardLimitOnQueries`: limit the number of records
-
-If your store has the `hardLimitOnQueries` set, any `getQuery` method (that is, a `GET` without the final `id`, and therefore fetching elements based on a filter) will never return more than `hardLimitOnQueries` results (unless you are using JsonRestStore's API, and manually set `options.skipHardLimitOnQueries` to `true`).
-
 # Stores and collections when using SimpleDbLayerMixin
 
 When using SimpleDbLayerMixin (which is the most common case, unless you are [implementing data manipulation functions on your own](#naked-non-database-stores)), a SimpleDbLayer collection will be created using the following attributes passed to the store:
@@ -1612,8 +1678,6 @@ At this point it's clear that stores are defined as constructor classes, which a
 
 This allows you to define a base store, and derive stores off that base store. For example:
 
-````Javascript
-
     // The base WorkspacesUsersBase constructor
     // Note that the collectionName is defined to something different to
     // storeName
@@ -1664,7 +1728,6 @@ This allows you to define a base store, and derive stores off that base store. F
 
     });
     stores.usersWorkspaces = new UsersWorkspaces();
-````
 
 In this example, `WorkspacesUsersBase` is used as a starting point, defining `schema` and `idProperty`. Note that all `id` fields are defined in the schema manually (since there was no `paramIds` nor `publicURL` defined to do it automagically). `WorkspacesUsersBase` also defines `workspacesUsers` as `collectionName` (otherwise, `collectionName` would have been `workspacesUsersBase`). Two specialised stores are then inherited from `WorkspacesUsersBase`: `WorkspacesUsers` and `UsersWorkspaces`. They both enable `handleGetQuery` and are assigned different URLs, and therefore have different paramIds; however, they both use the same database collection called `workspacesUsers`.
 
@@ -1682,6 +1745,194 @@ This means that the following attributes of the store will be reused (and redefi
 As a consequence, a derived store cannot redefine `idProperty`, `schema`, `hardLimitOnQueries`, `strictSchemaOnFetch`, `indexBase` (since they are used to create the dblayer instances when the base JsonRest store is created).
 
 This also means that position grouping will depend on the _base_ constructor's `paramIds`, since the collection's `positionBase` will depend _only_ on the base class' `paramIds`. (Note: `positionBase` in a collection defines which fields are used to 'group' ordering, see [how repositioning works in SimpleDbLayer](https://github.com/mercmobily/simpledblayer#nested-record-positioning)). This will only affect you if you are creating derived stores with positioning.
+
+# Data preparation hooks
+
+With JsonRestStores, you are able to redefine specific methods to enrich the functionality of your stores. There are two classes of methods:
+
+* Methods to manipulate data fetched from external sources. They are:
+
+````Javascript
+    prepareBody: function( request, method, body, cb ){ cb( null, preparedBody ); }
+    extrapolateDoc: function( request, method, doc, cb ){ cb( null, extrapolatedDoc ); }
+    prepareBeforeSend: function( request, method, doc, cb ){ cb( null, preparedDoc ); }
+````
+
+* Methods to hook code at specific stages in the request's lifecycle. They are:
+
+````Javascript
+    afterValidate: function( request, method, p, cb ){ cb( null ); }
+    afterCheckPermissions: function( request, method, p, cb ){ cb( null ); }
+    afterDbOperation: function( request, method, p, cb ){ cb( null ); }
+    afterEverything: function( request, method, p, cb ) { cb( null ); }
+````
+## Data manipulation methods
+
+These hooks share the same signature (the third parameter is always the data to be manipulated), and must call the callback passing an object containing computed data; to minimise side effects, it's best to base the new data on a new object; to facilitate the shallow copying process, JsonRestStores provides the `_co()` method (which stands for _C_opy _O_bject). For example, to implement `prepareBody()` you would write:
+
+    prepareBody: function( request, method, body, cb ){
+
+      // Make a copy of body into newBody
+      var newBody = this._co( body );
+
+      // Some elaboration.
+      newBody.headerName = newBody.headerName + "." + newBody.name;
+
+      // Forces `createdBy` to the value passed to the session
+      if( request.remote ) newBody.createdBy = request.session.userId;
+
+      cb( null, newBody );
+    },
+
+In some cases, you will want to run the _original_ `prepareBody()` method, and then do more processing. In this case, you would write:
+
+    prepareBody: function f( request, method, body, cb ){
+
+      this.inheritedAsync( f, arguments, function( err, newBody ){
+
+        // Make a copy of body into newBody
+        var newBodyAgain = this._co( newBody );
+
+        // Some elaboration.
+        newBodyAgain.headerName = newBodyAgain.headerName + "." + newBodyAgain.name;
+
+        // Forces `createdBy` to the value passed to the session
+        if( request.remote ) newBodyAgain.createdBy = request.session.userId;
+
+        cb( null, newBodyAgain );
+
+      });
+
+    },
+
+Here, the original `preparebody()` is run through `this.inheritedAsync()`, and processing is done on its resulting `newBody`.
+
+For more information about `inheritedAsync()`, have a look at [SimpleDeclare's documentation on calling asynchronous parent methods](https://github.com/mercmobily/simpleDeclare#calling-the-super-function-with-node-style-callback).
+
+Throughout the request's life cycle, `request.data` will be enriched by each data preparation hook. This will allow any hook to access the processed data
+
+NOTE: `request.putNew` is set to `true` for PUT requests that are creating a new record. `request.putExisting` is set to `true` for PUT requests that are overwriting an existing record. This is set after the hook `afterValidate()`.
+
+###  `prepareBody( request, method, body, cb )`
+
+`prepareBody()` is called with the data passed from the client _as is_ (no casting, nor anything). Any manipolation done by `prepareBody()` will need to satisfy the schema, or validation will actually fail. This hook is useful if you want to force some fields to specific values, maybe depending on a session variable for the specific user. For example, when a record is created, you will have `creatorId` in the schema, but you won't want users to be able to specify any ID there. So, you can simply assign body.creatorId in the `prepareBody()` hook.
+
+The parameters are:
+
+ * `request`. The `request` object for this REST call.
+ * `method`. It can be `post` or `put`.
+ * `body`. The request's body.
+ * `cb( err, body ) `. The callback, which will need to be passed a `body` object as its second parameter.
+
+### `extrapolateDoc( request, method, doc, cb )`
+
+You can use this method to manipulate your data every time it's fetched from the data source. Fetching can happen for a number of reasons:
+
+* in `post`: after a new item is written, it's then fetched and then sent it to the client after `extrapolateDoc()`
+* in `put` (creating new records): after a new item is written, it's then fetched and then sent it to the client after `extrapolateDoc()`
+* in `put` (overwriting an existing record): `extrapolateDoc()` is actually called twice: the first time after the item is fetched, and then again when it's re-fetched after writing it to the database
+* in `get`: when an item is fetched
+* in `getQuery`: when several items are fetched
+* in `delete`: when an item is about to be deleted, it's fetched first
+
+Basically, think of `extrapolateDoc` as a hook to manipulate whatever is in the database in order to add fields or dynamic information as needed.
+
+The parameters are:
+
+ * `request`. The `request` object for this REST call.
+ * `method`. It can be `post`, `put`, `get`, `getQuery`, `delete`
+ * `doc`. The record after fetching
+ * `cb( err, doc ) `. The callback, which will need to be passed a `doc` object as its second parameter.
+
+
+Note that if the method is being called on nested data, `request.nested` will be set to `true`.
+
+### `prepareBeforeSend( request, method, doc, cb )`
+
+You can use this method to manipulate your data just before it's sent over to the client requesting it.
+
+Think of `extrapolateDoc` as a hook to make very-last-nanosecond changes to the result object before it's sent over to the client.
+
+The difference from `extrapolateDoc()` is conceptual: `extrapolateDoc()` extracts the right information from the data source, whereas `prepareBeforeSend()` makes very-last-nanosecond changes to keep the client happy.
+
+The parameters are:
+
+ * `request`. The `request` object for this REST call.
+ * `method`. It can be `post`, `put`, `get`, `getQuery`, `delete`
+ * `doc`. The entry after fetching
+ * `cb( err, doc ) `. The callback, which will need to be passed a `doc` object as its second parameter.
+
+Note that if the method is being called on nested data, `request.nested` will be set to `true`.
+
+## Stage methods
+
+Stage methods allow you to hook yourself to several stages of the request processing stages. You can manipulate the `request` object, or can simply make things happen.
+
+They all share the same signature: (`request, method, cb`). Each method has access to the `request` object, which has the `request.data` filled in with the data as it's fetched from the database and manipulated.
+
+To really use the stage hooks (and to extend JsonRestStores in general), it's important to know exactly [what happens in each request](#what-happens-exactly-in-each-request). Note how values are assigned to `request.data` as the request progresses. In general, the record fetched from the database will be `fullDoc`; once it's extrapolated, it's `doc`.
+
+### `afterValidate()`
+
+This method is called once validation is completed.
+
+ * `request`. The `request` object for this REST call.
+ * `method`. It can be `post`, `put` or `getQuery`.
+ * `cb( err ) `. The callback
+
+### `afterCheckPermissions()`
+
+This method is called once permission checks have passed.
+
+ * `request`. The `request` object for this REST call.
+ * `method`. It can be `post`, `put`, `get`, `getQuery`, `delete`.
+ * `cb( err ) `. The callback.
+
+### `afterDbOperation()`
+
+This method is called once data is read from, or written to, the data source for that request.
+
+ * `request`. The `request` object for this REST call.
+ * `method`. It can be `post`, `put`, `get`, `getQuery`, `delete`.
+ * `cb( err ) `. The callback.
+
+### `afterEverything()`
+
+This method is the very last one called before sending the response out.
+
+ * `request`. The `request` object for this REST call.
+ * `method`. It can be `post`, `put`, `get`, `getQuery`, `delete`.
+ * `cb( err ) `. The callback.
+
+# How stores work behind the scenes: a walk-through
+
+Here is a walk-through on how stores actually work, and how requests are fulfilled. Note that this refers very specifically to stores mixing in with HTTPMixin and with SimpleDbLayerMixin.
+
+## Store definition
+
+Assume you define a store like this:
+
+    var Managers = declare( Store, {
+
+      schema: new Schema({
+        name   : { type: 'string', trim: 60 },
+        surname: { type: 'string', trim: 60 },
+      }),
+
+      storeName: 'managers',
+      publicURL: '/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+
+      hardLimitOnQueries: 50,
+    });
+
+    JsonRestStores.init();
+    managers.protocolListen( 'HTTP', { app: app } );
 
 # Artificial delays
 
@@ -1763,245 +2014,165 @@ The stock `self.formatErrorResponse()` method will simply return a Json represen
 
 Whenever an error happens, JsonRestStore will run `self.logError()`. This happens regardless of what `self.chainErrors` contains (that is, whether the error is chained up to Express or it's managed internally). Note that there is no `callback` parameter to this method: since it's only a logging method, if it fails, it fails.
 
-# Data preparation hooks
+# How requests are managed in JsonRestStores
 
-With JsonRestStores, you are able to redefine specific methods to enrich the functionality of your stores. There are two classes of methods:
+In JsonRestStores, there are five different types of requests:
 
-* Methods to manipulate data fetched from external sources. They are:
+* `get`
+* `getQuery`
+* `put`
+* `post`
+* `delete`
 
-````Javascript
-    prepareBody: function( request, method, body, cb ){ cb( null, preparedBody ); }
-    extrapolateDoc: function( request, method, doc, cb ){ cb( null, extrapolatedDoc ); }
-    prepareBeforeSend: function( request, method, doc, cb ){ cb( null, preparedDoc ); }
-````
+The module is in itself decoupled from the transport protocol. Each request is in itself an object that can have the following attributes:
 
-* Methods to hook code at specific stages in the request's lifecycle. They are:
+* `remote`: Set to `true` for requests coming from the outside, and `false` for requests triggered internally (e.g. via API).
+* `protocol`: defaults to HTTP. It will define how data is sent and received.
+* `params`: the URL params -- For example, a request like this: `PUT /managers/10/cars/20` will have `params` set as `{ managerId: 10, id: 20 }`
+* `body`: the data sent by the users
+* `session`: the session variable
+* `options`: options that will determine how the request will be handled. Each method will expect different options.
 
-````Javascript
-    afterValidate: function( request, method, p, cb ){ cb( null ); }
-    afterCheckPermissions: function( request, method, p, cb ){ cb( null ); }
-    afterDbOperation: function( request, method, p, cb ){ cb( null ); }
-    afterEverything: function( request, method, p, cb ) { cb( null ); }
-````
-## Data manipulation methods
+## The `options` object
 
-These hooks share the same signature (the third parameter is always the data to be manipulated), and must call the callback passing an object containing computed data; to minimise side effects, it's best to base the new data on a new object; to facilitate the shallow copying process, JsonRestStores provides the `_co()` method (which stands for _C_opy _O_bject). For example, to implement `prepareBody()` you would write:
+This is a very important object, and its content will determine what the methods will actually do.
 
-    prepareBody: function( request, method, body, cb ){
+### `get` (implemented in `_makeget()`)
+  * `field`. If it's set, then it will only return that specific field (anything else will e stripped out of the record). All of the hooks will be called as per normal.
 
-      // Make a copy of body into newBody
-      var newBody = this._co( body );
+### `getQuery` (implemented in `_makeGetQuery()`)
+  * `conditionsHash`. An hash object containing the filter criteria, which will have to match `onlineSearchSchema`.
+  * `ranges`. It can have `skip` and `count`.
+  * `sort`. An hash that defines how to sort the query. For example `{ model: -1, maker: 1 }`. Note that each key needs to be listed in the `sortableFields` element of the store.
+  * `skipHardLimitOnQueries`. If set to `true`, the attribute `hardLimitOnQueries` will be ignored when making `getQuery` calls.
+  * `delete`. If set to `true`, each record will be deleted after retrieval. Note that if the store's `self.deleteAfterGetQuery` is set to `true`, then `delete` will automatically be set to true for each request.
 
-      // Some elaboration.
-      newBody.headerName = newBody.headerName + "." + newBody.name;
+### `put` (implemented in `_makePut()`)
+  * `putBefore`. If set, and if the store supports positioning, the entry will be placed before the entry with id `putBefore`.
+  * `putDefaultPosition`. If set, and if the store supports positioning, this option will instruct JsonRestStores where to place the entry: `start` or `end` (only used when `putBefore` isn't set)
+  * `overwrite`. If set to `true`, the `put` will only be successful if the record is an existing one. If set to `false`, the `put` will only be successful if the record didn't exist. If not set, the `put` will work either way.
+  * `field`. If it's set, then it will only set that specific field (anything else will e stripped out of the record). All of the hooks will be called as per normal.
 
-      // Forces `createdBy` to the value passed to the session
-      if( request.remote ) newBody.createdBy = request.session.userId;
+### `post` (implemented in `_makePost()`)
+  * `putBefore`. Same as the handler `_makePut`
+  * `putDefaultPosition`. Same as the handler `_makePut`
 
-      cb( null, newBody );
-    },
+### `delete` (implemented in `_makeDelete()`)
 
-In some cases, you will want to run the _original_ `prepareBody()` method, and then do more processing. In this case, you would write:
+This method doesn't take any options.
 
-    prepareBody: function f( request, method, body, cb ){
+## The response
 
-      this.inheritedAsync( f, arguments, function( err, newBody ){
+The reponse is delivered by JsonRestStores using the function `protocolSendHTTP` for HTTP transport, and `protocolSendXXX` for XXX transport. At the moment, only HTTP is implemented via the `HTTPMixin` mixin. `protocolSendXXX` has the following signature:
 
-        // Make a copy of body into newBody
-        var newBodyAgain = this._co( newBody );
+    protocolSendXXX( request, method, data, status, cb )
 
-        // Some elaboration.
-        newBodyAgain.headerName = newBodyAgain.headerName + "." + newBodyAgain.name;
+### Response in case everything went well
 
-        // Forces `createdBy` to the value passed to the session
-        if( request.remote ) newBodyAgain.createdBy = request.session.userId;
+In case there was no error, the parameters are as follows:
 
-        cb( null, newBodyAgain );
+* `request`: the request object
+* `method`: the method being handled; it can be `get`, `getQuery`, `put`, `post`, `delete`,
+* `data`: the data being delivered.
+* `status`: the status set by JsonRestStores. For non-errors, the status is set as:
+  * `get`: 200.
+  * `getQuery`: 200
+  * `put`: 201 for newly created records, and 200 for overwriting of existing records
+  * `post`: 201
+  * `delete`: 204
 
-      });
+### Response in case of error
 
-    },
+In case there was an error, the store will only send data if `chainError` is set to `none` or `nonhttp` (and the error isn't an HTTP error). Otherwise, it will simply call the callback with the error as its first parameter, as per normal in node (it will be up to your application to manage the error, which is simply pussed up the callback chain).
 
-Here, the original `preparebody()` is run through `this.inheritedAsync()`, and processing is done on its resulting `newBody`.
+If chaining is off, and a response is to be sent to the client, then `protocolSendXXX` will be used. In this case, the `data` argument of `protocolSendXXX` will be set as the error itself, with two properties added to it:
+  * `formattedErrorResponse` (the formatted error response, formatted thanks to the store's `formatErrorResponse()` method)
+  * `originalMethod` (the method that triggered the error).
 
-For more information about `inheritedAsync()`, have a look at [SimpleDeclare's documentation on calling asynchronous parent methods](https://github.com/mercmobily/simpleDeclare#calling-the-super-function-with-node-style-callback).
+Also, `status` will be set to the HTTP status code.
 
-Throughout the request's life cycle, `request.data` will be enriched by each data preparation hook. This will allow any hook to access the processed data
+_`protocolSendXXX()` is always passed an HTTP error._ In case the error was caused by something else (for example, the connection to the database dropped), the error will be set as 503, and the error object will also have a `originalErr` attribute which represents the original error that triggered the 503 HTTP error.
 
-###  `prepareBody( request, method, body, cb )`
+# Receiving HTTP requests and sending HTTP responses: `HTTPMixin`
 
-`prepareBody()` is called with the data passed from the client _as is_ (no casting, nor anything). Any manipolation done by `prepareBody()` will need to satisfy the schema, or validation will actually fail. This hook is useful if you want to force some fields to specific values, maybe depending on a session variable for the specific user. For example, when a record is created, you will have `creatorId` in the schema, but you won't want users to be able to specify any ID there. So, you can simply assign body.creatorId in the `prepareBody()` hook.
+## Listening to HTTP requests
 
-The parameters are:
+The last line is the one that makes the store "active": `managers.protocolListen( 'HTTP', { app: app } )` will actually run `managers.protocolListenHTTP()`, which is defined thanks to `HTTPMixin`.
+`protocolListenHTTP()` will define the appropriate routes using Express' `app` (passed to it as a parameter).
+The code in HTTPMixin looks like this:
 
- * `request`. The `request` object for this REST call.
- * `method`. It can be `post` or `put`.
- * `body`. The request's body.
- * `cb( err, body ) `. The callback, which will need to be passed a `body` object as its second parameter.
+    // Make entries in "app", so that the application
+    // will give the right responses
+    app.get(      url + id, this._getRequestHandler( 'Get' ) );
+    app.get(      url,      this._getRequestHandler( 'GetQuery') );
+    app.post(     url,      this._getRequestHandler( 'Post') );
+    app.put(      url + id, this._getRequestHandler( 'Put') );
+    app.delete(   url + id, this._getRequestHandler( 'Delete') );
 
-### `extrapolateDoc( request, method, doc, cb )`
+So, the following routes are defined:
 
-You can use this method to manipulate your data every time it's fetched from the data source. Fetching can happen for a number of reasons:
+    GET /managers/:id -- returns a specific manager. Handler: `store._makeGet()`
+    GET /managers/ -- returns a collection of elements; you can filter by surname, which is searchable. Handler: `store._makeGetQuery()`
+    PUT /managers/:id -- writes over an existing manager object. Handler: `store._makePut()`
+    POST /managers/ -- creates a new manager object. Handler: `store._makePost()`
+    DELETE /managers/:id -- deletes a manager. Handler: `store._makeDelete()`
 
-* in `post`: after a new item is written, it's then fetched and then sent it to the client after `extrapolateDoc()`
-* in `putNew`: after a new item is written, it's then fetched and then sent it to the client after `extrapolateDoc()`
-* in `putExisting`: `extrapolateDoc()` is actually called twice: the first time after the item is fetched, and then again when it's re-fetched after writing it to the database
-* in `get`: when an item is fetched
-* in `getQuery`: when several items are fetched
-* in `delete`: when an item is about to be deleted, it's fetched first
+Plus the `singleField` routes:
 
-Basically, think of `extrapolateDoc` as a hook to manipulate whatever is in the database in order to add fields or dynamic information as needed.
+    PUT /managers/:id/field1 -- writes over an existing manager object, ONLY field1
+    GET /managers/:id/field1 -- returns `field1` for a specific manager
 
-The parameters are:
+The method `this._getRequestHandler()`, also defined in HTTPMixin, will be responsible of creating a plain Javascript object called `request`. This object needs to be compatible with what was explained earlier in terms of parameters; HTTPMixin will create it as follows:
 
- * `request`. The `request` object for this REST call.
- * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`
- * `doc`. The record after fetching
- * `cb( err, doc ) `. The callback, which will need to be passed a `doc` object as its second parameter.
+* `remote`: Set to `true`.
+* `protocol`: set to HTTP.
+* `params`: set to the URL parameters. For example, a request like this: `PUT /managers/10/cars/20` will have `params` set as `{ managerId: 10, id: 20 }`
+* `body`: set to the request's `body`.
+* `session`: set to the request's session.
+* `_req` and `_res`: set to the request's `req` and `res` parameters -- this is specific to HTTPMixin.
+* `options`: set based on the request's query string and headers, see the next section for more details
 
-Note that if the method is being called on nested data, `request.nested` will be set to `true`.
+After defining this object, `this._getRequestHandler()` will finally be ready to call one of the following methods (depending on the method):
 
-### `prepareBeforeSend( request, method, doc, cb )`
+ * `_makeGet( request, next )` (implements GET for one single document)
+ * `_makeGetQuery( request, next )` (implements GET for a collection, no ID passed)
+ * `_makePut( request, next )` (implements PUT for a collection)
+ * `_makePost( request, next )` (implements POST for a collection)
+ * `_makeDelete( request, next )` (implements DELETE for a collection)
 
-You can use this method to manipulate your data just before it's sent over to the client requesting it.
+These methods are the heart of JsonRestStores: they will handle the request by calling `implementFetchOne()`, `implementInsert()`, `implementUpdate()`, `implementDelete()`, `implementQuery()` and `implementReposition()` (conveniently provided in this case by SimpleDbLayerMixin).
 
-Think of `extrapolateDoc` as a hook to make very-last-nanosecond changes to the result object before it's sent over to the client.
+### How HTTPMixin creates the `options` object
 
-The difference from `extrapolateDoc()` is conceptual: `extrapolateDoc()` extracts the right information from the data source, whereas `prepareBeforeSend()` makes very-last-nanosecond changes to keep the client happy.
+Protocol mixins (in this case, HTTPMixin) have the task of accepting the request, and make sure that the `options` object passed to the request handler is adequately filled depending on the request itself.
 
-The parameters are:
+Specifically:
 
- * `request`. The `request` object for this REST call.
- * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`
- * `doc`. The entry after fetching
- * `cb( err, doc ) `. The callback, which will need to be passed a `doc` object as its second parameter.
+#### `_makePut`
+  * `putBefore`. From header `x-put-before`
+  * `putDefaultPosition`. From header `x-put-default-position`
+  * `overwrite`. If the header `if-match` is set to `*`, it's set to true. If the header `if-none-match` is set to `*`, is set to false.
 
-Note that if the method is being called on nested data, `request.nested` will be set to `true`.
+#### `_makePost`
+  * `putBefore`. Same as the handler `_makePut`
+  * `putDefaultPosition`. Same as the handler `_makePut`
 
-## Stage methods
+#### `_makeGetQuery`:
+  * `conditions`. Worked out from the query string.
+  * `ranges`. Worked out from the `range` header; if the header is `3-10`, then `ranges` will be assigned `skip: 3, limit: 8 }` (it will skip to the third element, and will fetch 8 elements at the most).
+  * `sort`. Worked out from the `sortBy` element in the query string; if it is for example `?sortBy=-model,+maker`, `options.sort` will be `{ model: -1, maker: 1 }`.
 
-Stage methods allow you to hook yourself to several stages of the request processing stages. You can manipulate the `request` object, or can simply make things happen.
+Please note that you can easily overload the specific methods in HTTPMixin if you want store parameters to be taken from the store differently.
 
-They all share the same signature: (`request, method, cb`). Each method has access to the `request` object, which has the `request.data` filled in with the data as it's fetched from the database and manipulated.
+## How `HTTPMixin` sends data via HTTP
 
-To really use the stage hooks (and to extend JsonRestStores in general), it's important to know exactly [what happens in each request](#what-happens-exactly-in-each-request). Note how values are assigned to `request.data` as the request progresses. In general, the record fetched from the database will be `fullDoc`; once it's extrapolated, it's `doc`.
+HTTPMixin implements `protocolSendHTTP()``, as described earlier in this guide.
+If the response is empty, it simply uses express' `res.send()`. If there is data, the data is expected to be JSON. So, it uses `res.json(...)` (which will set the corresponding `Content-type` header to `application/json`).
 
-### `afterValidate()`
+Also:
 
-This method is called once validation is completed.
-
- * `request`. The `request` object for this REST call.
- * `method`. It can be `post`, `put` or `getQuery`.
- * `cb( err ) `. The callback
-
-### `afterCheckPermissions()`
-
-This method is called once permission checks have passed.
-
- * `request`. The `request` object for this REST call.
- * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`.
- * `cb( err ) `. The callback.
-
-### `afterDbOperation()`
-
-This method is called once data is read from, or written to, the data source for that request.
-
- * `request`. The `request` object for this REST call.
- * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`.
- * `cb( err ) `. The callback.
-
-### `afterEverything()`
-
-This method is the very last one called before sending the response out.
-
- * `request`. The `request` object for this REST call.
- * `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`.
- * `cb( err ) `. The callback.
-
-# Permissions
-
-By default, everything is allowed: stores allow pretty much anything and anything; anybody can DELETE, PUT, POST, etc. Furtunately, JsonRestStores allows you to decide exactly what is allowed and what isn't, by overriding specific methods.
-
-Every method runs the method `checkPermissions()` before continuing. If everything went fine, `checkPermissions()` will call the callback with `true`: `cb( null, true )`; otherwise, to fail, `cb( null, false )`.
-
-The `checkPermissions()` method has the following signature:
-
-    checkPermissions: function( request, method, cb )
-
-Here:
-
-* `request`. It is the request object
-* `method`. It can be `post`, `putNew`, `putExisting`, `get`, `getQuery`, `delete`
-
-Here is an example of a store only allowing deletion only to specific admin users:
-
-````Javascript
-    // The basic schema for the WorkspaceUsers table
-    var WorkspaceUsers = declare( Store, {
-
-      schema: new Schema({
-        email     :  { type: 'string', trim: 128, searchable: true, sortable: true  },
-        name      :  { type: 'string', trim: 60, searchable: true, sortable: true  },
-      }),
-
-      storeName:  'WorkspaceUsers',
-      publicURL: '/workspaces/:workspaceId/users/:id',
-
-      handlePut: true,
-      handlePost: true,
-      handleGet: true,
-      handleGetQuery: true,
-      handleDelete: true,
-
-      checkPermissions: function( request, method, cb ){
-
-        // This will only affect `delete` methods
-        if( method !== 'delete' ) return cb( null, true );
-
-        // User is logged in: all good
-        if( request._req.session.user ){
-          cb( null, true );
-
-        // User is not logged in: fail!
-        } else {
-          cb( null, false );
-        }
-      },
-
-    });
-    var workspaceUsers = new WorkspaceUsers();
-    workspaceUsers.protocolListen( 'HTTP', { app: app } );;
-````
-
-Permission checking can be as simple, or as complex, as you need it to be.
-
-Note that if your store is derived from another one, and you want to preserve your master store's permission model, you can run `this.inheritedAsync(arguments)` like so:
-
-      checkPermissions: function f( request, method, cb ){
-
-        this.inheritedAsync( f, arguments, function( err, granted ) {
-          if( err ) return cb( err, false );
-
-          // The parent's checkPermissions() method failed: this will honour that fail
-          if( ! granted) return cb( null, false );
-
-          // This will only affect `delete` methods
-          if( method !== 'delete' ) return cb( null, true );
-
-          // User is admin (id: 1 )
-          if( request._req.session.user === 1){
-            cb( null, true );
-
-          // User is not logged in: fail!
-          } else {
-            cb( null, false );
-          }
-       }
-     },
-
-This will ensure that the inherited `checkPermissionsDelete()` method is called and followed, and _then_ further checks are carried on.
-
-Please note that `checkPermissions()` is only run for local requests, with `remote` set to false. All requests coming from APIs will ignore the method.
+* The `post` and `put` methods will set the `Location` header, IF `handleGet` is set to `true` for the store
+* `getQuery` will set the `Content-Range` headers, e.g. `items 3-10/100`, which will tell the client what was actually fetched in terms of range, and what the total count is.
 
 # Store APIs
 
@@ -2009,15 +2180,15 @@ JsonRestStores allows you to run store methods from within your programs, rather
 
 The API is really simple:
 
-* `Store.Get( id, options, next( err, doc ) {})`
-* `Store.GetQuery( options, next( err, queryDocs ){} )`
-* `Store.Put(  body, options, next( err, doc ){} )`
-* `Store.Post( body, options, next( err, doc ){} )`
-* `Store.Delete( id, options, next( err, doc ){} )`
+* `Store.apiGet( id, options, next( err, doc ) {})`
+* `Store.apiGetQuery( options, next( err, queryDocs ){} )`
+* `Store.apiPut(  body, options, next( err, doc ){} )`
+* `Store.apiPost( body, options, next( err, doc ){} )`
+* `Store.apiDelete( id, options, next( err, doc ){} )`
 
 The `next()` call is the callback called at the end.
 
-When using the API, the `options` object is especially important, as it defines how the API will work. When a request comes from a remote operation, the `options` object is populated depending on the requested URL and HTTP headers. When using the API, you need to popuate `options` manually in order to obtain what you desire. `options` is especially important while querying, as that's where you define what you filter and order the results by. (If you are curious, when a remote connection is established the function `_initOptionsFromReq()` is the one responsible of getting headers and URL, and populating `options` before running the appropriate function).
+When using the API, the `options` object is especially important, as it defines how the API will work. When a request comes from a remote operation, the `options` object is populated depending on the requested URL and HTTP headers. When using the API, you need to popuate `options` manually in order to obtain what you desire. `options` is especially important while querying, as that's where you define what you filter and order the results by.
 
 Since there is no HTTP connection to extrapolate options from, the `options` parameter in every API call is assigned directly to `request.options`. For all of the available options, refer to the [The options object](the-options-object) section in this guide.
 
@@ -2028,7 +2199,7 @@ All normal hooks are called when using these functions. However:
 * All `store.handleXXX` properties are ignored: all methods will work
 * The `request.remote` variable is set to false
 * Permissions checking methods are not called at all: permission is always granted
-* When the request is done, rather than using `self.sendData()`, the `next()` callback is called with the results.
+* When the request is done, rather than ending data through using the transport of choice (for example HTTP), the `next()` callback is called with the results.
 
 # Naked, non-database stores
 
@@ -2037,8 +2208,8 @@ JsonRestStores is powerful thanks to `SimpleDbLayerMixin`, which allows you to c
 To do that, you will need to write a store that implements the `implement***` methods, which are:
 
  * `implementFetchOne( request, cb )`. Required for methods `put`, `get`, `delete`.
- * `implementInsert( request, forceId, cb )`. Required for methods `post` and `put` (`putNew`).
- * `implementUpdate( request, deleteUnsetFields, cb )`. Required for method `put` (`putExisting`).
+ * `implementInsert( request, forceId, cb )`. Required for methods `post` and `put` (new records)
+ * `implementUpdate( request, deleteUnsetFields, cb )`. Required for method `put` (existing records)
  * `implementDelete( request, cb )`. Required for method `delete`.
  * `implementQuery( request, next )`. Required for methods `getQuery`.
  * `implementReposition( doc, where, beforeId, cb )`. Required for methods `post` and `put`.
@@ -2100,7 +2271,9 @@ This method is used to fetch a set of records from the data source. The attribut
 * `request.options`. The options object that will define what data is to be fetched. Specifically:
   * `request.options.conditions`: an object specifying key/value criteria to be applied for filtering
   * `request.options.sort`: an object specifying how sorting should happen. For example `{ surname: -1, age: 1  }`.
-  * `request.options.range`: an object with up to attributes: `limit` must make sure that only a limited number of records are fetched; `skip` must make sure that a number of records are skipped.
+  * `request.options.range`: an object with up to attributes:
+    * `limit` must make sure that only a limited number of records are fetched;
+    * `skip` must make sure that a number of records are skipped.
   * `request.options.delete`: if set to `true`, each fetched record will be deleted after fetching. The default is the store's own `self.deleteAfterGetQuery` attribute (which is itself `false` by default).
   * `request.options.skipHardLimitOnQueries`: if set to `true`, the limitation set by the store's own attribute `hardLimitOnQueries` will not be applied.
 
@@ -2168,7 +2341,7 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 
 * (CHECK) check that `self.handleGet` is true for remote requests. If false, send `NotImplementedError`
 * (CHECK) incoming `request.params` (`:ids` from URL) match types of `store.paramIds` array (type is taking from schema). If fail, send `BadRequestError`
-* (INTERFACE) `implementFetchOne( request )` is run. If record isn't therem send `NotFoundError` => `request.data.fullDoc`
+* (INTERFACE) `implementFetchOne( request )` is run. If record isn't there, send `NotFoundError` => `request.data.fullDoc`
 * (HOOK) `self.afterDbOperation( request, 'get' )` is run
 * (DATA) `self.extrapolateDoc( request, 'get', fullDoc )` is run against the record just fetched => `request.data.doc`
 * (HOOK) `self.checkPermissions( request, 'get' )` is run. If fail, send `ForbiddenError`
@@ -2188,7 +2361,6 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * (DATA) `self.prepareBeforeSend( request, 'delete', doc )` is run => `request.data.preparedDoc`
 * (HOOK) `self.afterEverything( request, 'delete' )` is run
 * (DATA) `preparedDoc` is sent (status: 200, if remote)/returned (for API). Party!
-
 
 ### `_makePost()` (for POST requests)
 * (ATTR) check that `self.handlePost` is true for remote requests. If false, send `NotImplementedError`
@@ -2226,32 +2398,33 @@ JsonRestStores does all of the boring stuff for you -- the kind things that you 
 * (CHECK) Check if `request.options.overwrite` is set. If it is, then apply restraints: 1) if `overwrite` is `true`, then `fullDoc` _must_ be set (existing record) 2) if `overwrite` is `false`, then `fullDoc` _must_ be null (new record)
 
 #### ...and then, for NEW records (`implementFetchOne` returned `fullDoc` as `null`)
-
-* (HOOK) `self.checkPermissions( request, 'putNew' )` is run. If fail, send `ForbiddenError`
+* (DATA) `request.putNew` is set to `true`
+* (HOOK) `self.checkPermissions( request, 'put' )` is run. If fail, send `ForbiddenError`
 * (HOOK) `self.afterCheckPermissions( request, 'post' )` is run
 * (DATA) All fields with `doNotSave` set to `true` in the schema are purged from `request.body`
 * (INTERFACE) `implementInsert( request, null )` is run. If record isn't therem send `Error` => `request.data.fullDoc`
 * (INTERFACE) `implementReposition( request, ... )` is run. Parameters will depend on `request.options.putBefore` and `request.options.putDefaultPosition`.
-* (HOOK) `self.afterDbOperation( request, 'putNew' )` is run
-* (DATA) `self.extrapolateDoc( request, 'putNew', fullDoc )` is run against the record just added => `request.data.doc`
-* (DATA) `self.prepareBeforeSend( request, 'putNew', doc )` is run => `request.data.preparedDoc`
-* (HOOK) `self.afterEverything( request, 'putNew' )` is run
-* (DATA) `preparedDoc` is sent (status: 201, if remote and `echoAfterPutNew`)/returned (for API). Party!
+* (HOOK) `self.afterDbOperation( request, 'put' )` is run
+* (DATA) `self.extrapolateDoc( request, 'put', fullDoc )` is run against the record just added => `request.data.doc`
+* (DATA) `self.prepareBeforeSend( request, 'put', doc )` is run => `request.data.preparedDoc`
+* (HOOK) `self.afterEverything( request, 'put' )` is run
+* (DATA) `preparedDoc` is sent (status: 201, if remote and `echoAfterPut`)/returned (for API). Party!
 
 #### ...or  then, for EXISTING records (`implementFetchOne` returned `fullDoc` not `null`):
 
-* => `request.data.fullDoc`
-* (DATA) `self.extrapolateDoc( request, 'putExisting', fullDoc )` is run against the record just fetched => `request.data.doc`
-* (HOOK) `self.checkPermissions( request, 'putExisting' )` is run. If fail, send `ForbiddenError`
+* (DATA) `request.putExisting` is set to `true`
+* (DATA) => `request.data.fullDoc`
+* (DATA) `self.extrapolateDoc( request, 'put', fullDoc )` is run against the record just fetched => `request.data.doc`
+* (HOOK) `self.checkPermissions( request, 'put' )` is run. If fail, send `ForbiddenError`
 * (HOOK) `self.afterCheckPermissions( request, 'post' ) is run
 * (DATA) All fields with `doNotSave` set to `true` in the schema are purged from `request.body`
 * (INTERFACE) `implementUpdate( request, true )` is run. If record isn't therem send `Error` => `request.data.fullDocAfter`
 * (INTERFACE) `implementReposition( request, ... )` is run. Parameters will depend on `request.options.putBefore` and `request.options.putDefaultPosition`.
-* (HOOK) `self.afterDbOperation( request, 'putExisting' )` is run
-* (DATA) `self.extrapolateDoc( request, 'putExisting', fullDocAfter )` is run against the record just added => `request.data.docAfter`
-* (DATA) `self.prepareBeforeSend( request, 'putExisting', docAfter )` is run => `request.data.preparedDoc`
-* (HOOK) `self.afterEverything( request, 'putExisting' )` is run
-* (DATA) `preparedDoc` is sent (status: 200, if remote and `echoAfterPutExisting`)/returned (for API). Party!
+* (HOOK) `self.afterDbOperation( request, 'put' )` is run
+* (DATA) `self.extrapolateDoc( request, 'put', fullDocAfter )` is run against the record just added => `request.data.docAfter`
+* (DATA) `self.prepareBeforeSend( request, 'put', docAfter )` is run => `request.data.preparedDoc`
+* (HOOK) `self.afterEverything( request, 'put' )` is run
+* (DATA) `preparedDoc` is sent (status: 200, if remote and `echoAfterPut`)/returned (for API). Party!
 
 # Implementing protocol mixins
 
@@ -2288,17 +2461,6 @@ There is a special case in terms of the `method` argument: it can be the method 
 
 * `responseBody`: what JsonRestStores wants to return in terms of data. This is the result of the store's `self.formatErrorResponse()`,  which you can redefine
 * `originalMethod`: the original method that originated the error
-
-For example, HTTPMixin does this to handle the error:
-
-    // Sets status and responseBody
-    var status = 200;
-    var responseBody = data;
-    switch( method ){
-      case 'post': case 'putNew': status = 201; break;
-      case 'delete': if( data == '' ) status = 204; break;
-      case 'error': status = data.httpError; responseBody = data.responseBody; break;
-    };
 
 ### Internal hooks
 
@@ -2348,3 +2510,5 @@ By default, this method simply logs the problem. However, in a real application 
 # Conclusion
 
 I started writing this module to make it easy to write stores. While it _is_ really easy to create stores with JsonRestStores, and the module itself is quite simple in the way it works, there _is_ a lot to learn, especially if you want to use its more advanced features.
+
+The time saved in the long run is remarkable.
