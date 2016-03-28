@@ -19,30 +19,59 @@ var
 
 var HTTPMixin = declare( Object,  {
 
+  changeDoc: function( store, rn ){
+    var headers;
+
+    if( rn.methods.getQuery ){
+      rn.methods.getQuery.incomingHeaders =  rn.methods.getQuery.incomingHeaders || [];
+      headers = rn.methods.getQuery.incomingHeaders;
+      headers.push( { Range: "Only request a subset of the items. For example: `Range: items=0-24`"})
+
+      rn.methods.getQuery.outgoingHeaders =  rn.methods.getQuery.outgoingHeaders || [];
+      headers = rn.methods.getQuery.outgoingHeaders;
+      headers.push( { 'Content-Range': "Only set if `Range` was set in the request. It returns how many items are being returned and how many total items exist. For example: `Content-Range: items 0-24/66`" });
+    }
+
+    [ 'post', 'put' ].forEach( function( m ){
+      if( rn[ m ] ){
+        if( store.handleGet ){
+          rn.methods[ m ].outGoingHeaders = rn.methods[ m ].outGoingHeaders || [];
+          var headers = rn.methods[ m ].outgoingingHeaders;
+          headers.push( { 'Location': "Since this store implements `get`, this header will be set as the URL where the item can be retrieved" });
+        }
+      }
+    })
+
+    if( rn.put ){
+      rn.methods.put.incomingHeaders =  rn.methods.put.incomingHeaders || [];
+      var headers = rn.methods.put.incomingHeaders;
+      headers.push( { 'If-match': "If set to `*`, sets the `overwrite` option to `true`: the `put` will only ever overwrite an existing record. It will refuse to create a ne record."})
+      headers.push( { 'If-none-match': "If set to `*`, sets the `overwrite` option to `false`: the `put` will only ever create a new record. It will refuse to overwrite an existing record."})
+    }
+
+  },
+
   // Sends the information out, for HTTP calls.
   // The medium is request._res, which is set in protocolListenHTTP
-  protocolSendHTTP: function( request, method, data, cb ){
+  protocolSendHTTP: function( request, method, data, status, cb ){
 
     var self = this;
 
-    // Sets status and responseBody
-    var status = 200;
-    var responseBody = data;
-    switch( method ){
-      case 'post': case 'putNew': status = 201; break;
-      case 'delete': if( data == '' ) status = 204; break;
-      case 'error': status = data.httpError; responseBody = data.responseBody; break;
-    };
+    // If it's sending and error, `data` is the actual error. The responseBody
+    // will be the error's responseBody
+    if( method == 'error' ) responseBody = data.formattedErrorResponse;
+    else responseBody = data;
 
     // Sets location and range headers
     switch( method ){
       case 'post':
-        request._res.setHeader( 'Location', request._req.originalUrl + data[ self.idProperty ] );
+        if( self.handleGet )
+          request._res.setHeader( 'Location', request._req.originalUrl + data[ self.idProperty ] );
       break;
 
-      case 'putNew':
-      case 'putExisting':
-        request._res.setHeader( 'Location', request._req.originalUrl );
+      case 'put':
+        if( self.handleGet )
+          request._res.setHeader( 'Location', request._req.originalUrl );
       break;
 
       case 'getQuery':
@@ -118,7 +147,7 @@ var HTTPMixin = declare( Object,  {
     app.delete( url + idName , this._getRequestHandler( 'Delete') );
 
     // Add store entries for single fields
-    Object.keys( this.singleFields ).forEach( function( key ){
+    Object.keys( this._singleFields ).forEach( function( key ){
       app.get(    url + idName + '/' + key, self._getRequestHandler( 'GetField', key ) );
       app.put(    url + idName + '/' + key, self._getRequestHandler( 'PutField', key ) );
     });
