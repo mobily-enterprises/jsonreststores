@@ -8,6 +8,14 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+
+/*
+  THIS MIXIN IS UGLY.
+  File uploads should be handles better. Either straight from within JsonRestStores (ugh), or in a much nicer
+  way than this.
+  The main problem is that it expects to be mixed in with HTTPMixin, since it creates a specifically crafted route
+
+  */
 var
   dummy
 , e = require('allhttperrors')
@@ -33,26 +41,8 @@ var UploadOnStoreMixin = declare( Object,  {
     return cb( null, true );
   },
 
-  checkPermissions: function f( request, method, cb ){
-
-    var self = this;
-
-    this.inheritedAsync( f, arguments, function( err, res ){
-      if( err ) return cb( err );
-      if( ! res ) return cb( null, false );
-
-      if( request.isUpload) return cb( null, true );
-
-      var found = false;
-      Object.keys( self.uploadFields ).forEach( function( fieldKey ){
-        if( request.body[ fieldKey ] ) found = true;
-      });
-      if( found ) return cb( new e.UnprocessableEntityError("You cannot set path fields directly") );
-
-      // TODO: IMPLEMENT CHECK FOR EVERY FIELD, IT MUSTN'T CHANGE
-      cb( null, true );
-    })
-
+  'permissions-doc': {
+    'put': `Testing string. This should be displayed in the derivative one if requested. And this should work too: {{permissions-doc.put}}`
   },
 
   // It will oveload protocolListenHTTP
@@ -99,31 +89,22 @@ var UploadOnStoreMixin = declare( Object,  {
             if( err ) return next( err );
           }
 
-          self.dbLayer.selectById( self.schema.vendor.ObjectId( req.params[ self.idProperty ]), function( err, record ){
-            if( err ) return self._sendError( request, 'upload', next, err );
+          var fullDoc = {};
+          fullDoc[ fieldKey ] = req.file.filename;
 
-            if( !record ) return next( new e.NotFoundError() );
+          // Make up the PUT request
+          var request = new Object();
+          request.remote = true;
+          request.protocol = 'HTTP';
+          request.params = self._co( req.params ); // NOTE: this is a copy
+          request.body = fullDoc;
+          request.session = req.session;
+          request.options = { field: fieldKey };
+          request.isUpload = true;
+          request._req = req;
+          request._res = res;
 
-            // Use fullDoc, which is the doc before any manipulation
-            // or postprocessing, as it came from the DB
-            var fullDoc = record;
-            delete fullDoc._children;
-            fullDoc[ fieldKey ] = req.file.filename;
-
-            // Make up the PUT request
-            var request = new Object();
-            request.remote = true;
-            request.protocol = 'HTTP';
-            request.params = self._co( req.params ); // NOTE: this is a copy
-            request.body = self._co( fullDoc ); // NOTE: this is a copy
-            request.session = req.session;
-            request.options = { }; // Always empty for a get
-            request.isUpload = true;
-            request._req = req;
-            request._res = res;
-
-            self._makePut( request, next );
-          });
+          self._makePut( request, next );
         });
       });
     });
