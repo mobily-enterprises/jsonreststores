@@ -15,9 +15,24 @@ var
 , async = require('async')
 , url = require('url')
 , querystring = require('querystring')
+, multer  = require('multer')
+, crypto = require('crypto')
 ;
 
 var HTTPMixin = declare( Object,  {
+
+  // sub-fields: `destination` (can be a string or a function ), `fileName` (must be undefined for default, or a function)
+  uploadFields: {},
+
+  uploadFilter: null,
+  uploadLimits: null,
+
+  uploadErrorProcessor: function( err, next ){
+    var ReturnedError = new this.UnprocessableEntityError( (err.field ? err.field : '' ) + ": " + err.message );
+    ReturnedError.OriginalError = err;
+    return next( ReturnedError );
+  },
+
 
   changeDoc: function( store, rn ){
     var headers;
@@ -111,7 +126,63 @@ var HTTPMixin = declare( Object,  {
     }
 
     cb( null );
+  },
 
+
+  // Will make sure only fields marked as file uploads are accepted
+  _multerFileFilter: function( req, file, cb ){
+    var self = this;
+
+    var storeAttributes = self.uploadFields[ file.fieldname ];
+
+    // If it's not in uploadFields, then end of the story: not allowed
+    if( ! storeAttributes ){
+      return cb( new this.UnprocessableEntityError( "Unacceptable upload field: " + file.fieldname ), false );
+
+    // There is no filter set by the store itself: allow it.
+  } else if( typeof( self.uploadFilter ) !== 'function' ){
+      return cb( null, true );
+
+    // There is a filter: run it, the filter will either allow it or reject it
+    } else {
+      return self.uploadFilter.apply( this, [].slice.call( arguments ) );
+    }
+  },
+
+
+  _determineUploadDestinaton: function( req, file, cb ){
+    var self = this;
+
+    var storeAttributes = self.uploadFields[ file.fieldname ];
+
+    if( typeof( storeAttributes.destination ) === 'string' ) {
+      return cb( null, storeAttributes.destination );
+    } else if( typeof( storeAttributes.destination ) === 'function'){
+      return storeAttributes.destination.apply( this, [].slice.call( arguments ) );
+    } else {
+      return cb( new Error("destination needs to be set as string or function for uploadField entries"))
+    }
+
+  },
+  _determineUploadFileName: function( req, file, cb ){
+    var self = this;
+
+    var storeAttributes = self.uploadFields[ file.fieldname ];
+
+    // If there is a function defined as fileName, use it
+    if( typeof( storeAttributes.fileName ) === 'function'){
+      return storeAttributes.fileName.apply( this, [].slice.call( arguments ) );
+    // If not, just use the stock function that mixes the record ID with the fieldName in one string
+    } else {
+
+      // If the ID is there (that's the case with a PUT), then use it. Otherwise,
+      // simply generate a random string
+      var id = req.params[ this.idProperty ];
+      if( ! id ) id = crypto.randomBytes( 20 ).toString( 'hex' );
+
+      // That's it
+      return cb( null, file.fieldname + '_' + id );
+    }
   },
 
   protocolListenHTTP: function( params ){
@@ -121,6 +192,39 @@ var HTTPMixin = declare( Object,  {
     var idName;
 
     var self = this;
+
+    // Make up the upload middleware to parse the files correctly
+    // The middleware will be empty if there are no upload fields
+    var uploadMiddleware;
+    if( ! Object.keys( self.uploadFields ).length ){
+      uploadMiddleware = function( req, res, next ) { next( null ); };
+    } else {
+
+      // Make up the storage for multer
+      var storage = multer.diskStorage({
+        destination: self._determineUploadDestinaton.bind( self ),
+        filename: self._determineUploadFileName.bind( self )
+      });
+
+      // Make up the iptions
+      var options =  { storage: storage, fileFilter: self._multerFileFilter.bind( self ) };
+      // Commeted out as it throws generic errors, which become 503s
+      if( self.uploadLimits ) options.limits = self.uploadLimits;
+
+      // Create the multer middleware. Errors are wrapped around HTTP error UnprocesableEntity
+      // otherwise the server will generate 503 for big uploads
+      var upload = multer( options ).any();
+      uploadMiddleware = function( req, res, next ){
+        upload( req, res, function( err ){
+          if( err ){
+            self.uploadErrorProcessor( err, next );
+
+          }
+          next( null );
+        });
+      }
+
+    }
 
     // Public URL must be set
     if( ! url ){
@@ -142,16 +246,15 @@ var HTTPMixin = declare( Object,  {
     // will give the right responses
     app.get(    url + idName, this._getRequestHandler( 'Get' ) );
     app.get(    url,          this._getRequestHandler( 'GetQuery') );
-    app.put(    url + idName, this._getRequestHandler( 'Put') );
-    app.post(   url,          this._getRequestHandler( 'Post') );
+    app.put(    url + idName, uploadMiddleware, this._getRequestHandler( 'Put') );
+    app.post(   url,          uploadMiddleware, this._getRequestHandler( 'Post') );
     app.delete( url + idName , this._getRequestHandler( 'Delete') );
 
     // Add store entries for single fields
     Object.keys( this._singleFields ).forEach( function( key ){
-      app.get(    url + idName + '/' + key, self._getRequestHandler( 'GetField', key ) );
-      app.put(    url + idName + '/' + key, self._getRequestHandler( 'PutField', key ) );
+      app.get(    url + idName + '/' + key, uploadMiddleware, self._getRequestHandler( 'GetField', key ) );
+      app.put(    url + idName + '/' + key, uploadMiddleware, self._getRequestHandler( 'PutField', key ) );
     });
-
   },
 
 
@@ -175,6 +278,8 @@ var HTTPMixin = declare( Object,  {
       request.body = self._co( req.body ); // NOTE: this is a copy
       request.session = req.session;
       request.options = {};
+      request.bodyComputed = {};
+
       try {
         request.options = self._initOptionsFromReq( action, req );
       } catch( e ){ return next( e ); }
@@ -196,6 +301,17 @@ var HTTPMixin = declare( Object,  {
       } else {
         finalAction = action;
       }
+
+      // Assign body
+      request.bodyComputed = {};
+      if( finalAction == 'Put' || finalAction == 'Post' ) {
+        if(  Array.isArray( req.files ) ) {
+          req.files.forEach( function( file ){
+            request.body[ file.fieldname ] = file.filename;
+            request.bodyComputed[ file.fieldname ] = 1;
+          });
+        }
+      };
 
       // Process the request, honouring the artificialDelay
       if( self.artificialDelay ) {
@@ -253,6 +369,7 @@ var HTTPMixin = declare( Object,  {
         if( typeof( req.headers[ 'put-before' ] ) !== 'undefined' )
           options.putBefore = req.headers[ 'put-before' ];
       }
+
     }
 
     // Set the 'SortBy', 'ranges' and 'conditions' in

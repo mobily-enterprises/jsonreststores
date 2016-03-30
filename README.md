@@ -10,6 +10,7 @@ Rundown of features:
 * **Database-agnostic**. You can either use a generic database connector, or implement the (simple!) data-manipulation methods yourself.
 * **Protocol-agnostic**. For now, only HTTP is implemented. However, with JsonRestStores the protocol used to make REST calls doesn't actually matter.
 * **Schema based**. Anything coming from the client will be validated and cast to the right type.
+* **File uploads**. It automatically supports file uploads, where the field will be the file's path
 * **API-ready**. Every store function can be called via API, which bypass permissions constraints
 * **Tons of hooks**. You can hook yourself to every step of the store processing process: `afterValidate()`,   `afterCheckPermissions()`, `afterDbOperation()`, `afterEverything()`
 * **Authentication hooks**. Only implement things once, and keep authentication tight and right.
@@ -819,7 +820,7 @@ Here is an example of a store only allowing deletion only to specific admin user
 
         // User is not logged in: fail!
         } else {
-          cb( null, false );
+          cb( null, false, "Must login" );
         }
       },
 
@@ -833,11 +834,11 @@ Note that if your store is derived from another one, and you want to preserve yo
 
       checkPermissions: function f( request, method, cb ){
 
-        this.inheritedAsync( f, arguments, function( err, granted ) {
+        this.inheritedAsync( f, arguments, function( err, granted, message ) {
           if( err ) return cb( err, false );
 
           // The parent's checkPermissions() method failed: this will honour that fail
-          if( ! granted) return cb( null, false );
+          if( ! granted) return cb( null, false, message );
 
           // This will only affect `delete` methods
           if( method !== 'delete' ) return cb( null, true );
@@ -848,7 +849,7 @@ Note that if your store is derived from another one, and you want to preserve yo
 
           // User is not logged in: fail!
           } else {
-            cb( null, false );
+            cb( null, false, "Must login" );
           }
        }
      },
@@ -1020,6 +1021,173 @@ Positioning will keep into account the store's `paramIds` when applying position
 ````
 
 Positioning will have to take into account `workspaceId` when repositioning: if an user in workspace `A` repositions an item, it mustn't affect positioning in workspace `B`. Basically, when doing positioning, `paramIds` define the _domain_ of repositioning (in this case, elements with matching `workspaceId`s will belong to the same domain).
+
+# File uploads
+
+JsonRestStores in itself doesn't manage file uploads. The reason is simple: file uploads are a _very_ protocol-specific feature. For example, you can decide to upload files, along with your form, by using `multipart-formdata` as your `Content-type`, to instruct the browser to encode the information (before sending it to the sever) in a specific way that accommodates multiple file uploads. However, this is a separate issue to the store itself, which will only ever store the file's _name_, rather than the raw data.
+
+Basicaly, all of the features to uplaod files in JsonRestStores are packed in HTTPMixin. This is how you do it:
+
+    var VideoResources = declare( [ Store ], {
+
+      schema: new HotSchema({
+        fileName         : { default: '', type: 'string', protected: true, singleField: true, trim: 128, searchable: false },
+        description      : { default: '', type: 'string', trim: 1024, searchable: false },
+      }),
+
+      uploadFields: {
+        fileName: {
+          destination: '/home/www/node/deployed/node_modules/wonder-server/public/resources',
+        },
+      },
+
+      storeName:  'videoResources',
+
+      publicURL: '/videosResources/:id',
+      hotExpose: true,
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+
+    });
+    stores.videoTemplatesResources = new VideoTemplatesResources();
+
+In this store:
+
+* The store has an `uploadFields` attribute, which lists the fields that will represent file paths resulting from the successful upload
+* The field is marked as `protected`; remember that the field represents the file's path, and that you don't want users to directly change it.
+
+For this store, HTTPMixin will do the following:
+
+* add a middleware in stores with `uploadFields`, adding the ability to parse `multipart/formdata` input from the client
+* save the files in the required location
+* set req.body as the file's path, and req.bodyComputed to true for all those fields. This will make sure that JsonRestStores will allow rewriting of those protected fields
+
+JsonRestStores will simply see values in `req.body`, blissfully unaware of the work done to parse the requests' input and the work to automatically populate `req.body` with the form values as well as the file paths.
+
+The fact that the fields are protected meand that you are _not_ forced to re-upload files every time you submit the form: if the values are set (thanks to an upload), they will change; if they are not set, they will be left "as is".
+
+On the backend, JsonRestStores uses `multer`, a powerful multipart-parsing module. However, this is basically transparent to JsonRestStores and to developers, except some familiarity with the configuration functions.
+
+## Configuring file uploads
+
+The store above only covers a limited use case. Remembering that the `file` object has the following fields:
+
+* `fieldname` - Field name specified in the form
+* `originalname` - Name of the file on the user's computer
+* `encoding` - Encoding type of the file
+* `mimetype` - Mime type of the file
+* `size` - Size of the file in bytes
+* `destination` - The folder to which the file has been saved
+* `filename` - The name of the file within the destination
+* `path` - The full path to the uploaded file
+
+
+In order to configure file uploads, you can set three attributes when you declare you store:
+
+* `uploadFilter` -- to filter incoming files based on their names or fieldName
+* `uploadLimits` -- to set some upload limits, after which JsonRestStores will throw a `UnprocessableEntity` error.
+* `uploadFields` -- it can have two properties: `destination` and `fileName`.
+
+Here are these options in detail:
+
+### `uploadFilter`
+
+This allows you to filter files based on their names and `fieldName`s. You only have limited amount of information for each file:
+
+    { fieldname: 'fileName',
+      originalname: 'test.mp4',
+      encoding: '7bit',
+      mimetype: 'video/mp4' }
+
+This is especially useful if you want to check for swearwords in the file name, or the file type. You can throw and error if the file type doesn't correspond to what you were expecting:
+
+    uploadFilter: function( req, file, cb ){
+      if( file.mimetype != 'video/mp4') return cb( null, false );
+      cb( null, true );
+    },
+
+### `uploadLimits`
+
+This allows you to set specific download limits. The list comes straight from `busbuy`, on which JsonRestStores is based:
+
+* `fieldNameSize` -- Max field name size (in bytes) (Default: 100 bytes).
+* `fieldSize` -- Max field value size (in bytes) (Default: 1MB).
+* `fields` -- Max number of non-file fields (Default: Infinity).
+* `fileSize` -- For multipart forms, the max file size (in bytes) (Default: Infinity).
+* `files` -- For multipart forms, the max number of file fields (Default: Infinity).
+* `parts` -- For multipart forms, the max number of parts (fields + files) (Default: Infinity).
+* `headerPairs` -- For multipart forms, the max number of header key=>value pairs to parse Default: 2000 (same as node's http).
+
+For example, the most typical use case would be:
+
+    uploadLimits: {
+      fileSize: 50000000 // 50 Mb
+    },
+
+### `uploadFields`
+
+This is the heart of the upload abilities of JsonRestStores.
+
+It accepts two parameters:
+
+#### `destination`
+
+This parameter is mandatory, and defines where the files connected to that field will be stored. It can either be a string, or a function with the following signature: `function( req, file, cb )`. It will need to call the callback `cb` with `cb( null, FULL_PATH )`. For example:
+
+    uploadFields: {
+
+      avatarImage: {
+        destination: function (req, file, cb) {
+          // This can depend on req, or file's attribute
+          cb( null, '/tmp/my-uploads');
+        }
+      }
+
+    },
+
+#### `fileName`
+
+It's a function that will determine the file name. By default, it will be a function that works out the file name from the field name and either the record's ID (for PUT requests, where the ID is known) or a random string (for POST requests, where the ID is not known).
+
+If you don't set it, it will be:
+
+uploadFields: {
+
+      avatarImage: {
+        destination: function (req, file, cb) {
+          // This can depend on req, or file's attribute
+          cb( null, '/tmp/my-uploads');
+        },
+
+        // If the ID is there (that's the case with a PUT), then use it. Otherwise,
+        // simply generate a random string
+        fileName: function( req, file, cb ){
+          var id = req.params[ this.idProperty ];
+          if( ! id ) id = crypto.randomBytes( 20 ).toString( 'hex' );
+
+          // That's it
+          return cb( null, file.fieldname + '_' + id );
+        }
+      }
+    },
+
+The default function works fine in most cases. However, you may want to change it.
+
+#### `uploadErrorProcessor`
+
+By default, when there is an error, the file upload module `multer` will throw and error. It's  much better to encapsulate those errors in HTTP errors. This is what uploadErrorProcessor does. By default, it's defined as follow (although you can definitely change it if needed):
+
+    uploadErrorProcessor: function( err, next ){
+      var ReturnedError = new this.UnprocessableEntityError( (err.field ? err.field : '' ) + ": " + err.message );
+      ReturnedError.OriginalError = err;
+      return next( ReturnedError );
+    },
+
+
+
+####
 
 # `deleteAfterGetQuery`: automatic deletion of records after retrieval
 
@@ -1497,6 +1665,8 @@ For example:
 
 This will ensure that comments are always retrieved in reversed order, newest first. Since `sortableFields` is not defined, the default order (by `posted`) is the only possible one for this store.
 
+Note that the field is marked as `protected`. This means that the user won't be able to change it directly: if `body.posted` is set, it will automatically be unset by JsonRestStores (unless `bodyComputed.posted` is `true` -- this is used for example by HTTPMixin to overwrite upload fields, which are normally protected).
+
 # Stores and collections when using SimpleDbLayerMixin
 
 When using SimpleDbLayerMixin (which is the most common case, unless you are [implementing data manipulation functions on your own](#naked-non-database-stores)), a SimpleDbLayer collection will be created using the following attributes passed to the store:
@@ -1971,12 +2141,10 @@ The error objects are all pretty standard. However:
 * `UnprocessableEntityError` and `BadRequestError` are both created when field validation fails. They error objects will always have an `errors` attribute, which will represent an array of errors as they were returned by SimpleSchema. For example:
 
 
-````Javascript
     [
       { field: 'nameOfFieldsWithProblems', message: 'Message to the user for this field' },
       { field: 'nameOfAnotherField', message: 'Message to the user for this other field' },
     ]
-````
 
 JsonRestStores only ever throws (generic) Javascript errors if the class constructor was called incorrectly, or if an element in `paramIds` is not found within the schema. So, it will only ever happen if you use the module incorrectly. Any other case is chained through.
 
@@ -2030,6 +2198,7 @@ The module is in itself decoupled from the transport protocol. Each request is i
 * `protocol`: defaults to HTTP. It will define how data is sent and received.
 * `params`: the URL params -- For example, a request like this: `PUT /managers/10/cars/20` will have `params` set as `{ managerId: 10, id: 20 }`
 * `body`: the data sent by the users
+* `bodyComputed`: an associative array; for each key set to `true`, the `protected` attribute in the schema won't apply
 * `session`: the session variable
 * `options`: options that will determine how the request will be handled. Each method will expect different options.
 
@@ -2509,6 +2678,6 @@ By default, this method simply logs the problem. However, in a real application 
 
 # Conclusion
 
-I started writing this module to make it easy to write stores. While it _is_ really easy to create stores with JsonRestStores, and the module itself is quite simple in the way it works, there _is_ a lot to learn, especially if you want to use its more advanced features.
+I started writing this module to make it easy to write stores. While it _is_ really easy to create (self-documenting!) stores with JsonRestStores, and the module itself is quite simple in the way it works, there _is_ a lot to learn, especially if you want to use its more advanced features (APIs, etc.)
 
 The time saved in the long run is remarkable.

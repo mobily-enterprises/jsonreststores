@@ -106,7 +106,6 @@ var Store = declare( Object,  {
     throw("implementReposition not implemented, store is not functional");
   },
 
-
   // ****************************************************
   // *** FUNCTIONS THAT CAN BE OVERRIDDEN BY DEVELOPERS
   // ****************************************************
@@ -128,6 +127,7 @@ var Store = declare( Object,  {
 
   logError: function( error ){ },
 
+  'error-format-doc': "{ message: 'The message', errors: [ { field1: 'message1',  field2: 'message2' } ] } (errors is optional)",
   formatErrorResponse: function( error ){
 
     if( error.errors ){
@@ -852,9 +852,15 @@ var Store = declare( Object,  {
       if( request.remote){
 
         // Protected field are not allowed here
+        // (Except the ones marked in `bodyProtected`)
         for( var field in request.body ){
-          if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
-            delete request.body[ field ];
+          if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined' ){
+
+            // NOTE: Will only delete it if it wasn't marked as "computed" in the request.
+            if( typeof( request.bodyComputed ) === 'object' && request.bodyComputed != null && !request.bodyComputed[ field ] ){
+              delete request.body[ field ];
+            }
+
           }
         }
       }
@@ -974,12 +980,20 @@ var Store = declare( Object,  {
     self._checkParamIds( request, false, function( err ){
       if( err ) return self._sendError( request, 'put', next, err );
 
-      // Protect protected fields
-      if( request.remote && ! request.options.field ){
+
+      // Protect protected fields (only for remote calls)
+      if( request.remote ){ // /* COMMENTED OUT, will facilitate file uploads  */ && !request.options.field ){
+
         // Protected field are not allowed here
+        // (Except the ones marked in `bodyProtected`)
         for( var field in request.body ){
-          if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined'){
-            delete request.body[ field ];
+          if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined' ){
+
+            // NOTE: Will only delete it if it wasn't marked as "computed" in the request.
+            if( typeof( request.bodyComputed ) === 'object' && request.bodyComputed != null && !request.bodyComputed[ field ] ){
+              delete request.body[ field ];
+            }
+
           }
         }
       }
@@ -1011,7 +1025,6 @@ var Store = declare( Object,  {
 
           self.schema.validate( request.body, { onlyObjectValues: !!request.options.field }, function( err, validatedBody, errors ) {
             if( err ) return self._sendError( request, 'put', next, err );
-
 
             request.bodyBeforeValidation = request.body;
             request.body = validatedBody;
@@ -1719,6 +1732,8 @@ Store.makeDocsData = function( storeNames ){
       });
     }
 
+    rn.position = !!s.position;
+
     /*
     TODO
     FIELDS:
@@ -1729,17 +1744,24 @@ Store.makeDocsData = function( storeNames ){
       [X] TODO item in UploadOnStoreMixin
       [X] Get rid of putExisting, putNew as a method ANYWHERE in the codebase
       [X] Add automatic lookup of parameters providing store
+      [X] For putExisting, make sure that 'protected' fields are copied over from existing record
 
-      [ ] FIELD position
-      [ ] FIELD: formatErrorMessage
+      [X] FIELD position
+      [X] FIELD: formatErrorMessage
 
-      [ ] Document get, getQuery, put, post, delete in every store in Wonder (permissions for all of them too)
-      [ ] Call changeDocGlobal everywhere in the proto chain, or find a way to document pseudo-stores
+      BETTER UPLOADS
+      [X] PROPERLY implement file uploads in JsonRestStores, change "submit" so that it works properly
 
-      [ ] Make first attempt to format all of the annotations in a nice page documenting a whole store (EJS outputing text should be the way to go)
-
+      SELF-DOCUMENTATION EFFORTS
+      [ ] Separate functions so that I can create pseudo-stores and pass them to the formatting function
+      [ ] Have a proper way of documenting what a GET element looks like (important!)
+      [ ] Take documentation out of testing, place it in self-loading file, ready to generate EJS
       [ ] Make a comprehensive list of doc fields created in doc object, optional and not, document all of them
       [ ] Make a comprehensive list of annotation attributes that can be added to a store, document all of them
+      [ ] Make example EJS that formats all of the annotations in a nice page documenting a whole store
+
+      WONDER
+      [ ] Document get, getQuery, put, post, delete in every store in Wonder (permissions for all of them too)
 */
 
     // Go through each method, document each one based on the store itself
@@ -1757,6 +1779,13 @@ Store.makeDocsData = function( storeNames ){
           if( s.schema ) {
             // Copy over the schema, taking out the docs parts
             rnm.schema = s._co( s.schema.structure );
+            if( s['schema-computed-doc'] ){
+              for( var k in s['schema-computed-doc'] ){
+                rnm.schema[ k ] = s['schema-computed-doc'][ k ];
+                rnm.schema[ k ].computed = true;
+              }
+            }
+
             rnm.schemaExplanations = {};
             Object.keys( rnm.schema ).forEach( function( k ){
               if( rnm.schema[ k ].doc ){
@@ -1785,13 +1814,16 @@ Store.makeDocsData = function( storeNames ){
 
           rnm.OKresponse = [
             { name: 'OK', status: 200, data: '[ item1, item2 ]' }
-          ],
+          ];
 
           rnm.ErrorResponses = [
-            { name: 'NotImplementedError', status: 501, data: '', doc: "The method requested isn't implemented" },
-            { name: 'ForbiddenError', status: 403, data: '', doc: "Access to the resource was forbidden" },
-            { name: 'BadRequestError', Status: 400, data: "{ errors: [ { field1: 'message1',  field2: 'message2' } ] }", doc:"Some of the input fields didn't validate"},
+            { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
+            { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
+            { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
+            { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
           ];
+
+          if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].getQuery) rnm.permissions = f.call( s, 'permissions-doc.getQuery' );
 
         break;
 
@@ -1801,18 +1833,47 @@ Store.makeDocsData = function( storeNames ){
           var rnm = rn.methods[ method ] = {};
           if( !s.handleGet ) rnm.onlySingleFields = true;
 
+          if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].get) rnm.permissions = f.call( s, 'permissions-doc.get' );
+
+          rnm.OKresponse = [
+            { name: 'OK', status: 200, data: '{ ...item... }' }
+          ];
+
+          rnm.ErrorResponses = [
+            { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
+            { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
+            { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
+            { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
+          ];
+
         break;
 
         case 'put':
+
           if( ! s.handlePut && ! Object.keys( s._singleFields ).length ) break;
-
-          //  echoAfterPut
-
           var rnm = rn.methods[ method ] = {};
           if( ! s.handlePut ) rnm.onlySingleFields = true;
 
-          // YOU ARE HERE. NEEDS TO RESOLVE THAT  {{parent:put}}
           if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].put) rnm.permissions = f.call( s, 'permissions-doc.put' );
+
+          rnm.echo = !! s.echoAfterPut;
+          if( s.echoAfterPut ){
+            rnm.OKresponse = [
+              { name: 'OK', status: 200, data: '{ ...item... }', 'Content-type': 'application/json' }
+            ];
+          } else {
+            rnm.OKresponse = [
+              { name: 'OK', status: 200, data: '', 'Content-type': 'text/html' }
+            ];
+          }
+
+          rnm.ErrorResponses = [
+            { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
+            { name: 'UnprocessableEntityError', status: 422, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "One of the parameters in the body has errors" },
+            { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
+            { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"Some IDs in the URL are in the wrong format"},
+            { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
+          ];
 
         break;
 
@@ -1820,17 +1881,54 @@ Store.makeDocsData = function( storeNames ){
           if( ! s.handlePost ) break;
           var rnm = rn.methods[ method ] = {};
 
-          // echoAfterPost
+          if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].post) rnm.permissions = f.call( s, 'permissions-doc.post' );
+
+          rnm.echo = !! s.echoAfterPost;
+          if( s.echoAfterPost ){
+            rnm.OKresponse = [
+              { name: 'OK', status: 200, data: '{ ...item... }', 'Content-type': 'application/json' }
+            ];
+          } else {
+            rnm.OKresponse = [
+              { name: 'OK', status: 200, data: '', 'Content-type': 'text/html' }
+            ];
+          }
+
+          rnm.ErrorResponses = [
+            { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
+            { name: 'UnprocessableEntityError', status: 422, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "One of the parameters in the body has errors" },
+            { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
+            { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
+            { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
+          ];
+
         break;
 
         case 'delete':
           if( ! s.handleDelete ) break;
           var rnm = rn.methods[ method ] = {};
 
-          //  echoAfterDelete
+          if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].delete) rnm.permissions = f.call( s, 'permissions-doc.delete' );
+
+          rnm.echo = !! s.echoAfterDelete;
+          if( s.echoAfterDelete ){
+            rnm.OKresponse = [
+              { name: 'OK', status: 200, data: '{ ...item... }', 'Content-type': 'application/json' }
+            ];
+          } else {
+            rnm.OKresponse = [
+              { name: 'OK', status: 200, data: '', 'Content-type': 'text/html' }
+            ];
+          }
+
+          rnm.ErrorResponses = [
+            { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
+            { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
+            { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
+            { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
+          ];
+
         break;
-
-
 
       }
     })
