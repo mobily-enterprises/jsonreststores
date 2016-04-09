@@ -22,10 +22,6 @@ Rundown of features:
 
 JsonRestStores even comes with its own database layer mixin, SimpleDbLayerMixin, which will implement all of the important methods that will read, write and delete elements from a database. The mixin uses [simpledblayer](https://github.com/mercmobily/simpledblayer) to access the database. For now, only MongoDb is supported but more will surely come.
 
-## TODO in documentation:
-
-* self-documenting feature
-
 # Introduction to (JSON) REST stores
 
 Here is an introduction on REST, JSON REST, and this module. If you are a veteran of REST stores, you can probably just skim through this.
@@ -1915,6 +1911,124 @@ This means that the following attributes of the store will be reused (and redefi
 As a consequence, a derived store cannot redefine `idProperty`, `schema`, `hardLimitOnQueries`, `strictSchemaOnFetch`, `indexBase` (since they are used to create the dblayer instances when the base JsonRest store is created).
 
 This also means that position grouping will depend on the _base_ constructor's `paramIds`, since the collection's `positionBase` will depend _only_ on the base class' `paramIds`. (Note: `positionBase` in a collection defines which fields are used to 'group' ordering, see [how repositioning works in SimpleDbLayer](https://github.com/mercmobily/simpledblayer#nested-record-positioning)). This will only affect you if you are creating derived stores with positioning.
+
+# Self-documetation
+
+JsonRestStores offers the ablity to write estensive documentation about the stores created. The key to this feature is a documentation object that gets generated using the store's attributes as information source.
+
+## `main-doc` (source: the store's `main-doc` string)
+
+The store's main documentation. Here you would put a general description of what the store is for, specific features you need to be aware of, etc.
+
+## `storeName` (source: the store's `storeName` string)
+
+The store's name
+
+## `schema-doc` (source: the store's `schema-doc` string)
+
+An general explanation of what the schema contains.
+
+## `schema` and `schemaExplanations` (source: the store's `schema` hash)
+
+* `schema` is a copy of the `schema` object, where in each object the `doc` part is taken out.
+* `schemaExplanations` is a hash with the same keys as `schema`, where each value is the respective `doc` value taken out of the original object
+
+## `backEnd` (source: the store's `layer` object )
+
+If set, it means that the store uses a database backend, for which it will return:
+
+* `collectionName` -- the name of the database collection
+* `hardLimitOnQueries` -- the hard limit on `getQuery` queries
+
+## `parents` (source: the store's prototype chain)
+
+An array with the list of `storeName`s the store is derived from. This assumes that every prototype has a `storeName` set.
+
+## `strictSchemaOnFetch` (source: the store's `strictSchemaOnFetch` flag)
+
+Set to `true` if the store will enforce schema-checking when fetching records, and `false` otherwise.
+
+## `singleFields` (source: the store's `_singleFields` hash)
+
+A hash with the list of "single fields" for the store, where each key is an entry in the store's schema.
+
+## `nested` (source: the store's `nested` array)
+
+An array of sentences, where each one describes how records in a nested store are fetched.
+
+## `position` (source: the store's `position` flag)
+
+Set to `true` if the store manages positioning, and `false` otherwise.
+
+## `item-doc` (source: the store's `item-doc` string)
+
+What a returned item looks like, after a get/getQuery or after a put/post/delete
+
+## `error-format-doc` (source: the store's `error-format-doc` string)
+
+Is a string representing what an error object looks like. You will normally change it in a store if yo uredefine the `formatErrorResponse()` method, which by default returns:
+
+    "{ message: 'The message', errors: [ { field1: 'message1',  field2: 'message2' } ] } (errors is optional)"
+
+Note that this is a string.
+
+## `permissions-doc` (source: the store's `permissions-doc` hash)
+
+A hash where each key can be 'getQuery', 'get', 'put', 'post', 'delete'. Each key has a text explanation of what the store's permissions are for that specific method.
+
+## `methods`
+
+A hash where each key is a supported method (for example 'getQuery', 'get', 'put', 'post', 'delete' ).
+
+Each method object has the following attributes:
+
+* `OKresponses`. An array of objects, where each item can be:
+    { name: 'OK', status: 200, data: '[ item1, item2 ]', doc: `where item1, item2 are the full items` }
+
+* `errorResponses`. An array of objects, where rach item will look like this:
+
+    { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
+
+* `url`. The URL for that method. Source: the `getFullPublicURL()` method
+
+* `permissions`. A string describing the permissions for that method. Source: The relevant key of the store's `permissions-doc` hash.
+
+* `incomingHeaders` and `outgoingHeaders` (array of objects). The headers: the incoming ones will affect how the method works, and the outgoing will provide extra information. For example PUT and POST methods will set the `Location` header. En entry could be:
+   { 'Location': "Since this store implements `get`, this header will be set as the URL where the item can be retrieved" }`
+
+However, each method will then return a different set of responses.
+
+### `getQuery`
+
+* `onlineSearchSchema` and `onlineSearchSchemaExplanations`: they are created exacly like `schema`. However, it uses the store's `onlineSearchSchema` hash as starting point.
+* `search-doc`. An explanation on how the `onlineSearchSchema` works. Source: `store.getQuery['search-doc']`
+* `defaultSort`. The fields the store will use as default sort.  Source: the store's `defaultSort` attribute
+* `deleteAfterFetchRecords`. True if the store's `deleteAfterGetQuery` attribute it true, false otherwise.
+
+### `get`
+
+* `onlySingleFields`: set to `true` if the store only allows `get` for single fields
+
+### `put`
+
+* `onlySingleFields`: set to `true` if the store only allows `put` for single fields
+* `echo`: set to `true` if the store's `echoAfterPut` attribute is true, false otherwise.
+
+### `post`
+
+* `echo`: set to `true` if the store's `echoAfterPost` attribute is true, false otherwise.
+
+### `delete`
+
+* `echo`: set to `true` if the store's `echoAfterDelete` attribute is true, false otherwise.
+
+## Final changes (source: the object's `changeDoc()` method)
+
+The final changes to the documentation object are applied by running the `changeDoc(s)` method, which is called in a "constructor-like" fashion: starting from the first prototype in the chain to the last. This ensures that _all_ of the changes are applied.
+
+This method can be defined when you need to change the default settings of a store.
+
+
 
 # Data preparation hooks
 

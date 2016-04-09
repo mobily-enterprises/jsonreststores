@@ -164,9 +164,6 @@ var Store = declare( Object,  {
 
     var self = this;
 
-    // StoreName cannot be repeated amongst stores, ONE storeName per store!
-    //Store.registry = Store.registry || {};
-
     // Set artificialDelay from the constructor's default
     this.artificialDelay = this.constructor.artificialDelay;
 
@@ -729,7 +726,7 @@ var Store = declare( Object,  {
           // It's not an HTTP error: make up a new one, and incapsulate original error in it
           if( typeof( e[ error.name ] ) === 'undefined'  ){
             error = new self.ServiceUnavailableError( { originalErr: error } );
-            error.stack = originalErr.stack;
+            error.stack = error.stack;
           }
 
           // Make up the response body based on the error, attach it to the error itself
@@ -1622,8 +1619,8 @@ Store.HTTPMixin = HTTPMixin;
 Store.UploadOnStoreMixin = UploadOnStoreMixin;
 
 
-/* Make full documentation data for the stores */
-Store.makeDocsData = function( storeNames ){
+
+Store.document = function( s ) {
 
   function f( path ){
     var scope = this;
@@ -1684,257 +1681,268 @@ Store.makeDocsData = function( storeNames ){
     });
   }
 
-  var r = {}, rn, proto;
-  storeNames = storeNames || Object.keys( Store.registry );
+  var rn = {};
+  var storeName = rn.storeName = s.storeName;
 
-  storeNames.forEach( function( storeName ){
-    var s = Store.registry[ storeName ];
-    r[ storeName ] = rn = {};
+  if( s['main-doc'] ) rn['main-doc'] = f.call( s, 'main-doc' );
 
-    if( s['main-doc'] ) rn.doc = f.call( s, 'main-doc' );
+  // Get backend info (if backend is present)
+  rn.backEnd = {};
+  if( s.dbLayer ){
+    rn.backEnd.collectionName = s.collectionName;
+    rn.backEnd.hardLimitOnQueries = s.hardLimitOnQueries;
+    //if( s.indexBase.length ) rn.indexBase = s.indexBase;
+  }
 
-    // Get backend info (if backend is present)
-    if( s.dbLayer ){
-      rn.backEnd = {};
-      rn.backEnd.collectionName = s.collectionName;
-      rn.backEnd.hardLimitOnQueries = s.hardLimitOnQueries;
-      if( s.indexBase.length ) rn.indexBase = s.indexBase;
+  // Look for derivative stores
+  var parents = [];
+  proto = s.__proto__;
+  while( ( proto = proto.__proto__) ){
+    if( proto.hasOwnProperty( 'storeName') && proto.storeName ) parents.push( proto.storeName );
+  }
+  if( parents.length ) rn.parents = parents;
+
+  if( s._singleFields && Object.keys( s._singleFields ).length ) rn.singleFields = s._singleFields;
+  else rn.singleFields = {};
+
+  rn.strictSchemaOnFetch = !! s.strictSchemaOnFetch;
+
+  rn.nested  = [];
+  if( s.nested && s.nested.length ){
+    nested = rn.nested  = [];
+
+    s.nested.forEach( function( entry ){
+
+      var line = {};
+      line.type = entry.type;
+      var foreignStore = entry.store.storeName;
+      line.foreignStoreData = '_children.' + foreignStore;
+      line.foreignStore = foreignStore;
+      line.conditions = [];
+
+      if( entry.type == 'lookup' ){
+        line.conditions.push( {
+          foreignProperty: foreignStore + '.' + entry.store.idProperty,
+          localProperty: storeName + '.' + entry.localField
+        } );
+      } else {
+        Object.keys( entry.join ).forEach( function( joinField ){
+          line.conditions.push( {
+            foreignProperty: foreignStore + '.' + joinField,
+            localProperty: storeName + '.' + entry.join[ joinField ]
+          } );
+        });
+      }
+      nested.push( line );
+    });
+  }
+
+  rn.position = !!s.position;
+  rn['item-doc'] = s[ 'item-doc'] || '';
+  if( s[ 'schema-doc'] ) rn['schema-doc'] = f.call( s, 'schema-doc' );
+
+  if( s.schema ) {
+    // Copy over the schema, taking out the docs parts
+    rn.schema = s._co( s.schema.structure );
+    if( s['schema-extras-doc'] ){
+      for( var k in s['schema-extras-doc'] ){
+        rn.schema[ k ] = s['schema-extras-doc'][ k ];
+        rn.schema[ k ].computed = true;
+      }
     }
 
-    // Look for derivative stores
-    var derivates = [];
-    proto = s.__proto__;
-    while( ( proto = proto.__proto__) ){
-    if( proto.hasOwnProperty( 'storeName') && proto.storeName ) derivates.push( proto.storeName );
-    }
-    if( derivates.length ) rn.derivedFrom = derivates;
-
-    if( s._singleFields && Object.keys( s._singleFields ).length ) rn._singleFields = s._singleFields;
-    rn.stringSchemaOnFetch = !! s.stringSchemaOnFetch;
-
-    if( s.nested.length ){
-      var nested = rn.nestedFields  = [];
-
-      s.nested.forEach( function( entry ){
-        var line = '';
-        line = entry.type == 'lookup' ? "Lookup record: " : "Nested records: ";
-        var foreignStore = entry.store.storeName;
-        var s = '';
-        if( entry.type == 'lookup' ){
-          s = s + '_children.' + foreignStore + ' will contain the record from ' + foreignStore + ' where ' + foreignStore + '.' + entry.store.idProperty + ' is ' + storeName + '.' + entry.localField;
-        } else {
-          s = s + '_children.' + foreignStore + ' will contain an array of entries from ' + foreignStore + ' where: ';
-          Object.keys( entry.join ).forEach( function( joinField ){
-            s = s + foreignStore + '.' + joinField + " == " + storeName + "." + entry.join[ joinField ] + '; ';
-          });
-        }
-        nested.push( line + s );
-      });
-    }
-
-    rn.position = !!s.position;
-
-    /*
-    TODO
-    FIELDS:
-      [X] FIELD: Nested fields, as a store-wide thing (they are returned even after a PUT)
-      [X] Call changeDoc everywhere in the prototype chain, in the right order (inner to outer)
-      Once for every store.
-      [X] Allow to get the parent's value within a string, so that if inherited is used, it can be pulled
-      [X] TODO item in UploadOnStoreMixin
-      [X] Get rid of putExisting, putNew as a method ANYWHERE in the codebase
-      [X] Add automatic lookup of parameters providing store
-      [X] For putExisting, make sure that 'protected' fields are copied over from existing record
-
-      [X] FIELD position
-      [X] FIELD: formatErrorMessage
-
-      BETTER UPLOADS
-      [X] PROPERLY implement file uploads in JsonRestStores, change "submit" so that it works properly
-
-      SELF-DOCUMENTATION EFFORTS
-      [ ] Separate functions so that I can create pseudo-stores and pass them to the formatting function
-      [ ] Have a proper way of documenting what a GET element looks like (important!)
-      [ ] Take documentation out of testing, place it in self-loading file, ready to generate EJS
-      [ ] Make a comprehensive list of doc fields created in doc object, optional and not, document all of them
-      [ ] Make a comprehensive list of annotation attributes that can be added to a store, document all of them
-      [ ] Make example EJS that formats all of the annotations in a nice page documenting a whole store
-
-      WONDER
-      [ ] Document get, getQuery, put, post, delete in every store in Wonder (permissions for all of them too)
-*/
-
-    // Go through each method, document each one based on the store itself
-    rn.methods = {};
-    [ 'getQuery', 'get', 'put', 'post', 'delete'].forEach( function( method ){
-
-      switch( method ){
-
-        case 'getQuery':
-          if( ! s.handleGetQuery ) break;
-          var rnm = rn.methods[ method ] = {};
-
-          if( s.publicURL ) rnm.url = s.getFullPublicURL().replace( /\/:\w*$/, '');
-
-          if( s.schema ) {
-            // Copy over the schema, taking out the docs parts
-            rnm.schema = s._co( s.schema.structure );
-            if( s['schema-computed-doc'] ){
-              for( var k in s['schema-computed-doc'] ){
-                rnm.schema[ k ] = s['schema-computed-doc'][ k ];
-                rnm.schema[ k ].computed = true;
-              }
-            }
-
-            rnm.schemaExplanations = {};
-            Object.keys( rnm.schema ).forEach( function( k ){
-              if( rnm.schema[ k ].doc ){
-                rnm.schemaExplanations[ k ] = rnm.schema[ k ].doc;
-                delete rnm.schema[ k ] .doc;
-              }
-            })
-          }
-
-          if( s.onlineSearchSchema ) {
-            // Copy over the search schema, taking out the docs parts
-            rnm.onlineSearchSchema = s._co( s.onlineSearchSchema.structure );
-            rnm.onlineSearchSchemaExplanations = {};
-            Object.keys( rnm.onlineSearchSchema ).forEach( function( k ){
-              if( rnm.onlineSearchSchema[ k ].doc ){
-                rnm.onlineSearchSchemaExplanations[ k ] = rnm.onlineSearchSchema[ k ].doc;
-                delete rnm.onlineSearchSchema[ k ] .doc;
-              }
-            })
-          }
-
-          if( s[ 'schema-doc'] ) rnm.schemaExplanation = f.call( s, 'schema-doc' );
-          if( s[ 'search-doc'] ) rnm.queryExplanation = f.call( s, 'search-doc' );
-          if( s[ 'defaultSort'] ) rnm.defautSort = s[ 'defaultSort'];
-          rnm.deleteFetchedRecords = !! s[ 'deleteAfterGetQuery' ];
-
-          rnm.OKresponse = [
-            { name: 'OK', status: 200, data: '[ item1, item2 ]' }
-          ];
-
-          rnm.ErrorResponses = [
-            { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
-            { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
-            { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
-            { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
-          ];
-
-          if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].getQuery) rnm.permissions = f.call( s, 'permissions-doc.getQuery' );
-
-        break;
-
-        case 'get':
-          if( ! s.handleGet && ! Object.keys( s._singleFields ).length ) break;
-
-          var rnm = rn.methods[ method ] = {};
-          if( !s.handleGet ) rnm.onlySingleFields = true;
-
-          if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].get) rnm.permissions = f.call( s, 'permissions-doc.get' );
-
-          rnm.OKresponse = [
-            { name: 'OK', status: 200, data: '{ ...item... }' }
-          ];
-
-          rnm.ErrorResponses = [
-            { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
-            { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
-            { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
-            { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
-          ];
-
-        break;
-
-        case 'put':
-
-          if( ! s.handlePut && ! Object.keys( s._singleFields ).length ) break;
-          var rnm = rn.methods[ method ] = {};
-          if( ! s.handlePut ) rnm.onlySingleFields = true;
-
-          if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].put) rnm.permissions = f.call( s, 'permissions-doc.put' );
-
-          rnm.echo = !! s.echoAfterPut;
-          if( s.echoAfterPut ){
-            rnm.OKresponse = [
-              { name: 'OK', status: 200, data: '{ ...item... }', 'Content-type': 'application/json' }
-            ];
-          } else {
-            rnm.OKresponse = [
-              { name: 'OK', status: 200, data: '', 'Content-type': 'text/html' }
-            ];
-          }
-
-          rnm.ErrorResponses = [
-            { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
-            { name: 'UnprocessableEntityError', status: 422, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "One of the parameters in the body has errors" },
-            { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
-            { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"Some IDs in the URL are in the wrong format"},
-            { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
-          ];
-
-        break;
-
-        case 'post':
-          if( ! s.handlePost ) break;
-          var rnm = rn.methods[ method ] = {};
-
-          if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].post) rnm.permissions = f.call( s, 'permissions-doc.post' );
-
-          rnm.echo = !! s.echoAfterPost;
-          if( s.echoAfterPost ){
-            rnm.OKresponse = [
-              { name: 'OK', status: 200, data: '{ ...item... }', 'Content-type': 'application/json' }
-            ];
-          } else {
-            rnm.OKresponse = [
-              { name: 'OK', status: 200, data: '', 'Content-type': 'text/html' }
-            ];
-          }
-
-          rnm.ErrorResponses = [
-            { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
-            { name: 'UnprocessableEntityError', status: 422, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "One of the parameters in the body has errors" },
-            { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
-            { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
-            { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
-          ];
-
-        break;
-
-        case 'delete':
-          if( ! s.handleDelete ) break;
-          var rnm = rn.methods[ method ] = {};
-
-          if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].delete) rnm.permissions = f.call( s, 'permissions-doc.delete' );
-
-          rnm.echo = !! s.echoAfterDelete;
-          if( s.echoAfterDelete ){
-            rnm.OKresponse = [
-              { name: 'OK', status: 200, data: '{ ...item... }', 'Content-type': 'application/json' }
-            ];
-          } else {
-            rnm.OKresponse = [
-              { name: 'OK', status: 200, data: '', 'Content-type': 'text/html' }
-            ];
-          }
-
-          rnm.ErrorResponses = [
-            { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
-            { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
-            { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
-            { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
-          ];
-
-        break;
-
+    rn.schemaExplanations = {};
+    Object.keys( rn.schema ).forEach( function( k ){
+      if( rn.schema[ k ].doc ){
+        rn.schemaExplanations[ k ] = rn.schema[ k ].doc;
+        delete rn.schema[ k ].doc;
       }
     })
-    callAll( s, 'changeDoc', rn  );
+  } else {
+    rn.schema = {};
+  }
 
+  if( s.getFullPublicURL ) rn.fullPublicURL = s.getFullPublicURL();
+
+  // Go through each method, document each one based on the store itself
+  rn.methods = {};
+
+  [ 'getQuery', 'get', 'put', 'post', 'delete'].forEach( function( method ){
+
+    switch( method ){
+
+      case 'getQuery':
+        if( ! s.handleGetQuery ) break;
+
+        var rnm = rn.methods[ method ] = {};
+
+        if( s.publicURL ) rnm.url = s.getFullPublicURL().replace( /\/:\w*$/, '');
+
+        if( s.onlineSearchSchema ) {
+          // Copy over the search schema, taking out the docs parts
+          rnm.onlineSearchSchema = s._co( s.onlineSearchSchema.structure );
+          rnm.onlineSearchSchemaExplanations = {};
+          Object.keys( rnm.onlineSearchSchema ).forEach( function( k ){
+            if( rnm.onlineSearchSchema[ k ].doc ){
+              rnm.onlineSearchSchemaExplanations[ k ] = rnm.onlineSearchSchema[ k ].doc;
+              delete rnm.onlineSearchSchema[ k ] .doc;
+            }
+          })
+        }
+
+        if( s[ 'search-doc'] ) rnm['search-doc'] = f.call( s, 'search-doc' );
+        if( s[ 'defaultSort'] ) rnm.defautSort = s[ 'defaultSort'];
+        rnm.deleteFetchedRecords = !! s[ 'deleteAfterGetQuery' ];
+
+        rnm.OKresponses = [
+          { name: 'OK', status: 200, data: '[ item1, item2 ]', doc: `where item1, item2 are the full items` }
+        ];
+
+        rnm.errorResponses = [
+          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
+          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
+          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
+          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
+        ];
+
+        if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].getQuery) rnm.permissions = f.call( s, 'permissions-doc.getQuery' );
+
+      break;
+
+      case 'get':
+        if( ! s.handleGet && ( ! s._singleFields || !Object.keys( s._singleFields ).length )  ) break;
+
+        var rnm = rn.methods[ method ] = {};
+
+        if( s.publicURL ) rnm.url = s.getFullPublicURL();
+        if( !s.handleGet ) rnm.onlySingleFields = true;
+
+        if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].get) rnm.permissions = f.call( s, 'permissions-doc.get' );
+
+        rnm.OKresponses = [
+          { name: 'OK', status: 200, data: '{ ...item... }', doc: 'The item returned' }
+        ];
+
+        rnm.errorResponses = [
+          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
+          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
+          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
+          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
+        ];
+
+      break;
+
+      case 'put':
+
+        if( ! s.handlePut && ( !s._singleFields || !Object.keys( s._singleFields ).length ) ) break;
+        var rnm = rn.methods[ method ] = {};
+        if( ! s.handlePut ) rnm.onlySingleFields = true;
+
+        if( s.publicURL ) rnm.url = s.getFullPublicURL();
+
+        if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].put) rnm.permissions = f.call( s, 'permissions-doc.put' );
+
+        rnm.echo = !! s.echoAfterPut;
+        if( s.echoAfterPut ){
+          rnm.OKresponses = [
+            { name: 'OK', status: 200, data: '{ ...item... }', 'Content-type': 'application/json', doc: 'the item returned' }
+          ];
+        } else {
+          rnm.OKresponses = [
+            { name: 'OK', status: 200, data: '', 'Content-type': 'text/html' }
+          ];
+        }
+
+        rnm.errorResponses = [
+          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
+          { name: 'UnprocessableEntityError', status: 422, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "One of the parameters in the body has errors" },
+          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
+          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"Some IDs in the URL are in the wrong format"},
+          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
+        ];
+
+      break;
+
+      case 'post':
+        if( ! s.handlePost ) break;
+        var rnm = rn.methods[ method ] = {};
+
+        if( s.publicURL ) rnm.url = s.getFullPublicURL().replace( /\/:\w*$/, '');
+
+        if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].post) rnm.permissions = f.call( s, 'permissions-doc.post' );
+
+        rnm.echo = !! s.echoAfterPost;
+        if( s.echoAfterPost ){
+          rnm.OKresponses = [
+            { name: 'OK', status: 200, data: '{ ...item... }', 'Content-type': 'application/json', doc: 'the item returned' }
+          ];
+        } else {
+          rnm.OKresponses = [
+            { name: 'OK', status: 200, data: '', 'Content-type': 'text/html' }
+          ];
+        }
+
+        rnm.errorResponses = [
+          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
+          { name: 'UnprocessableEntityError', status: 422, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "One of the parameters in the body has errors" },
+          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
+          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
+          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
+        ];
+
+      break;
+
+      case 'delete':
+        if( ! s.handleDelete ) break;
+        var rnm = rn.methods[ method ] = {};
+
+        if( s.publicURL ) rnm.url = s.getFullPublicURL();
+
+        if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].delete) rnm.permissions = f.call( s, 'permissions-doc.delete' );
+
+        rnm.echo = !! s.echoAfterDelete;
+        if( s.echoAfterDelete ){
+          rnm.OKresponses = [
+            { name: 'OK', status: 200, data: '{ ...item... }', 'Content-type': 'application/json', doc: 'the item returned' }
+          ];
+        } else {
+          rnm.OKresponses = [
+            { name: 'OK', status: 200, data: '', 'Content-type': 'text/html' }
+          ];
+        }
+
+        rnm.errorResponses = [
+          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
+          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
+          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
+          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
+        ];
+
+      break;
+
+    }
   })
 
+  /* TODO:
+    * Add markdown-compiling function, apply to everything called -doc BEFORE applying the template
+    * Document each of the store's methods
+  */
+
+  rn.hasMethods = !! Object.keys( rn.methods ).length;
+  callAll( s, 'changeDoc', rn  );
+
+  return rn;
+};
+
+/* Make full documentation data for the stores */
+Store.makeDocsData = function(){
+  var r = {}, rn, proto;
+  [].slice.call( arguments ).forEach( function( storesHash ){
+    Object.keys( storesHash ).forEach( function( storeName ){
+      var s = storesHash[ storeName ];
+      if( r[ storeName] ) throw new Error("makeDocsData: You cannot have two stores with the same name!");
+      r[ storeName ] = Store.document( s );
+    });
+  });
   return r;
 }

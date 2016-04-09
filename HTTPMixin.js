@@ -62,7 +62,14 @@ var HTTPMixin = declare( Object,  {
       var headers = rn.methods.put.incomingHeaders;
       headers.push( { 'If-match': "If set to `*`, sets the `overwrite` option to `true`: the `put` will only ever overwrite an existing record. It will refuse to create a ne record."})
       headers.push( { 'If-none-match': "If set to `*`, sets the `overwrite` option to `false`: the `put` will only ever create a new record. It will refuse to overwrite an existing record."})
+
+      if( rn.position ){
+        var positionHeaders = rn.methods.put.incomingHeaders;
+        headers.push( { 'Put-before': "If set, it will place the element before the one with the ID matching the one passed in the header."} );
+        headers.push( { 'Put-default-position': "It can be 'start' or 'end'. If set, it will place the element at the beginning or at the end. Only considered if `Put-before` is not set."} );
+      }
     }
+    // TODO: Add explanation for position headers
 
   },
 
@@ -351,23 +358,22 @@ var HTTPMixin = declare( Object,  {
     // options.putBefore and options.putDefaultPosition
     if( mn === 'Put' || mn === "Post" ){
 
-      // The header `put-default-position` always wins
-      if( typeof( req.headers[ 'put-default-position' ]) !== 'undefined'){
-
-        // Set options.putDefaultPosition depending on passed header. Default is `false`
-        if( req.headers[ 'put-default-position' ] === 'start' ){
-          options.putDefaultPosition = 'start';
-        } else {
-          options.putDefaultPosition = 'end';
-        }
-
-      // There is no `put-default-position`: see if put-before is set
-      // and if it is, set options.putBefore
       // NOTE: in the server context, putBefore ALWAYS needs to be an id, and NEVER null
+      if( typeof( req.headers[ 'put-before' ] ) !== 'undefined' ) {
+        options.putBefore = req.headers[ 'put-before' ];
       } else {
 
-        if( typeof( req.headers[ 'put-before' ] ) !== 'undefined' )
-          options.putBefore = req.headers[ 'put-before' ];
+        // The header `put-default-position` is used if `put-before` isn't set
+        if( typeof( req.headers[ 'put-default-position' ]) !== 'undefined'){
+
+          // Set options.putDefaultPosition depending on passed header.
+          if( req.headers[ 'put-default-position' ] === 'start' ){
+            options.putDefaultPosition = 'start';
+          } else {
+            options.putDefaultPosition = 'end';
+          }
+
+        }
       }
 
     }
