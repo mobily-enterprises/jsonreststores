@@ -14,14 +14,14 @@ var
 
 var allTests = require( "./test-all.js" );
 
-// This function needs to return the DB layer connected to the mongo 
+// This function needs to return the DB layer connected to the mongo
 
 var tests = allTests.get(
 
   function getDbAndDbLayerAndJRS( done ) {
 
     mongo.MongoClient.connect( 'mongodb://localhost/tests', {}, function( err, db ){
-  
+
     //mw.connect('mongodb://localhost/tests', {}, function( err, db ){
       if( err ){
         throw new Error("MongoDB connect: could not connect to database");
@@ -42,6 +42,3 @@ var tests = allTests.get(
 for(var test in tests){
     exports[ test ] = tests[ test ];
 }
-
-
-

@@ -231,7 +231,7 @@ exports = module.exports = declare( Object,  {
     }
 
     // Make the database call
-    self.dbLayer.select( { conditions: conditions, ranges: { limit: 1 } }, { children: true }, function( err, docs ){
+    self.dbLayer.select( conditions, { ranges: { limit: 1 }, children: true }, function( err, docs ){
       if( err ) return cb( err );
 
       if( docs.length === 0 ) return cb( null, null );
@@ -317,6 +317,7 @@ exports = module.exports = declare( Object,  {
     var self = this;
     var cursor;
     var dbLayerOptions = {};
+    var conditions;
 
     // If options.delete was on or if it's set at store-level
     // pass {delete: true } to the db layer
@@ -330,18 +331,16 @@ exports = module.exports = declare( Object,  {
     // Children is always true
     dbLayerOptions.children = true;
 
-    // Make up the filter
-    var filter = {
-      sort: request.options.sort || {},
-      ranges: request.options.ranges || {},
-      conditions: request.options.resolvedQueryConditions
-    }
+    conditions = request.options.resolvedQueryConditions;
 
     // Add extra  constraints for remote requests
-    if( request.remote) filter.conditions = self._enrichConditionsWithParams( filter.conditions, request.params );
+    if( request.remote) conditions = self._enrichConditionsWithParams( conditions, request.params );
+    if( request.options.ranges ) dbLayerOptions.ranges = request.options.ranges;
+    if( request.options.sort ) dbLayerOptions.sort = request.options.sort;
+
 
     // Run the select based on the passed parameters
-    self.dbLayer.select( filter, dbLayerOptions, next );
+    self.dbLayer.select( conditions, dbLayerOptions, next );
   },
 
 });

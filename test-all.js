@@ -340,7 +340,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
 
       // Clear people table
       g.dbPeople = g.people.dbLayer;
-      g.dbPeople.delete( { }, { multi: true }, function( err ){
+      g.dbPeople.delete( { }, { multi: true, allowEmptyQuery: true }, function( err ){
         if( err ){
           throw( new Error("Could not empty people database, giving up") );
           process.exit();
@@ -348,7 +348,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
 
           // Clear people table
           g.dbWsPeople = g.wsPeople.dbLayer;
-          g.dbWsPeople.delete( { }, { multi: true }, function( err ){
+          g.dbWsPeople.delete( { }, { multi: true, allowEmptyQuery: true }, function( err ){
             if( err ){
               throw( new Error("Could not empty wsPeople database, giving up") );
               process.exit();
@@ -384,12 +384,12 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
 
 
   function zap( done ){
-    g.dbPeople.delete( { }, { multi: true }, function( err ){
+    g.dbPeople.delete( { }, { multi: true, allowEmptyQuery: true }, function( err ){
       if( err ){
         done( err );
       } else {
 
-        g.dbWsPeople.delete( { }, { multi: true }, function( err ){
+        g.dbWsPeople.delete( { }, { multi: true, allowEmptyQuery: true }, function( err ){
           if( err ){
             done( err );
           } else {
@@ -428,7 +428,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
         g.people.apiPost( { name: 'Tony', surname: "Mobily", age: 37 }, function( err, person ){
           test.ifError( err ); if( err ) return test.done();
 
-          g.dbPeople.select( { conditions: { type: 'eq', args: [ 'id', person.id ] } }, function( err, data, total ){
+          g.dbPeople.select( { type: 'eq', args: [ 'id', person.id ] }, function( err, data, total ){
             test.ifError( err ); if( err ) return test.done();
             compareItems( test, data[ 0 ], person );
 
@@ -882,7 +882,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
           test.ifError( err ); if( err ) return test.done();
 
 
-          g.dbPeople.select( { conditions: { type: 'eq', args: [ 'id', person.id ] }  }, function( err, data, total ){
+          g.dbPeople.select( { type: 'eq', args: [ 'id', person.id ] }, function( err, data, total ){
             test.ifError( err ); if( err ) return test.done();
             compareItems( test,  data[ 0 ], person );
 
@@ -891,7 +891,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             g.people.apiPut( p, function( err, person ){
               test.ifError( err ); if( err ) return test.done();
 
-              g.dbPeople.select( { conditions: { type: 'eq', args: [ 'id', person.id ] } }, function( err, data, total ){
+              g.dbPeople.select( { type: 'eq', args: [ 'id', person.id ] }, function( err, data, total ){
                 test.ifError( err ); if( err ) return test.done();
 
                 compareItems( test,  data[ 0 ], person );
@@ -922,7 +922,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
             g.people.apiPut( p, { overwrite: true }, function( err, person ){
               test.ifError( err ); if( err ) return test.done();
 
-              g.dbPeople.select( { conditions: { type: 'eq', args: [ 'id', person.id ] } }, function( err, data, total ){
+              g.dbPeople.select( { type: 'eq', args: [ 'id', person.id ] }, function( err, data, total ){
                 test.ifError( err ); if( err ) return test.done();
                 compareItems( test,  data[ 0 ], person );
 
@@ -934,7 +934,7 @@ exports.get = function( getDbAndDbLayerAndJRS, closeDb ){
                   g.people.apiPut( p, { overwrite: false }, function( err, person ){
                     test.ifError( err ); if( err ) return test.done();
 
-                    g.dbPeople.select( { conditions: { type: 'eq', args: [ 'id', person.id ] } }, function( err, data, total ){
+                    g.dbPeople.select( { type: 'eq', args: [ 'id', person.id ] }, function( err, data, total ){
                       test.ifError( err ); if( err ) return test.done();
                       compareItems( test,  data[ 0 ], person );
                       test.equal( data[ 0 ].age, 38 );
