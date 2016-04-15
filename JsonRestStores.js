@@ -25,7 +25,6 @@ var
 , async = require('async')
 , SimpleDbLayerMixin = require('./SimpleDbLayerMixin.js')
 , HTTPMixin = require('./HTTPMixin.js')
-, UploadOnStoreMixin = require('./UploadOnStoreMixin.js')
 , path = require( 'path')
 , DO = require("deepobject")
 ;
@@ -1616,7 +1615,6 @@ Store.registry = {};
 // without an extra require (they are VERY common)
 Store.SimpleDbLayerMixin = SimpleDbLayerMixin;
 Store.HTTPMixin = HTTPMixin;
-Store.UploadOnStoreMixin = UploadOnStoreMixin;
 
 
 
