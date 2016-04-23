@@ -40,6 +40,7 @@ var Store = declare( Object,  {
   nested: [],
   autoLookup: {},
   _singleFields: {}, // Fields that can be updated singularly
+  _uniqueFields: {}, // Fields that absolutely must be unique
 
 
   // ****************************************************
@@ -246,6 +247,14 @@ var Store = declare( Object,  {
         self._singleFields[ k ] = self.schema.structure[ k ];
       }
     }
+
+    self._uniqueFields = {};
+    for( var k in self.schema.structure ){
+      if( self.schema.structure[ k ].unique ){
+        self._uniqueFields[ k ] = self.schema.structure[ k ];
+      }
+    }
+
 
     Store.registry[ self.storeName ] = self;
   },
@@ -826,6 +835,80 @@ var Store = declare( Object,  {
     f.call( this, params );
   },
 
+
+  // Check if there is already a record where field `field`
+  // already has value `value` and it's not id `id`
+  _isFieldUnique: function( field, value, id, cb ){
+    var self = this;
+
+    var conditions;
+
+    if( id ) {
+      conditions = {
+        type: 'and',
+        args: [
+          {
+            type: 'eq',
+            args: [ field, value ]
+          },
+          {
+            type: 'ne',
+            args: [ self.idProperty, id ]
+          },
+        ]
+      }
+    } else {
+      conditions = {
+        type: 'eq',
+        args: [ field, value ]
+      };
+    };
+
+    self.dbLayer.select( conditions, function( err, data, total ){
+      if( err ) return cb( err );
+
+      if( total ) return cb( null, false );
+      cb( null, true );
+    })
+
+  },
+
+
+
+  _areFieldsUnique: function( id, body, cb ){
+
+    var self = this;
+
+    var errors = [];
+
+    async.each(
+      Object.keys( self._uniqueFields ),
+      function( field, cb ) {
+
+        // The field is not defined
+        if( typeof body[ field ] == 'undefined' ) return cb( null );
+
+        self._isFieldUnique( field, body[ field ], id, function( err, isUnique ){
+          if( err ) return cb( err );
+
+          // If it's a duplicate, enrich the `errors` array
+          if( !isUnique ) errors.push( { field: field, message: 'Field already in database'} );
+
+          cb( null );
+        })
+      },
+      function( err ){
+        if( err ) return cb( err );
+
+        // There are no errors: all good, return "true"
+        if( errors.length == 0 ) return cb( null, true, [] );
+
+        // Errors: return them, along with `false`
+        return cb( null, false, errors );
+      }
+    );
+  },
+
   _makePost: function( request, next ){
 
     var self = this;
@@ -889,54 +972,60 @@ var Store = declare( Object,  {
             self.afterValidate( request, 'post', function( err ){
               if( err ) return self._sendError( request, 'post', next, err );
 
-              // Actually check permissions
-              self._checkPermissionsProxy( request, 'post', function( err, granted, message ){
+              self._areFieldsUnique( null, request.body, function( err, allUnique, errors ){
                 if( err ) return self._sendError( request, 'post', next, err );
 
-                if( ! granted ) return self._sendError( request, 'post', next, new self.ForbiddenError( message ) );
+                if( ! allUnique ) return self._sendError( request, 'post', next, new self.UnprocessableEntityError( { errors: errors } ) );
 
-                self.afterCheckPermissions( request, 'post', function( err ){
+                // Actually check permissions
+                self._checkPermissionsProxy( request, 'post', function( err, granted, message ){
                   if( err ) return self._sendError( request, 'post', next, err );
 
-                  // Clean up body from things that are not to be submitted
-                  self.schema.cleanup( request.body, 'doNotSave' );
+                  if( ! granted ) return self._sendError( request, 'post', next, new self.ForbiddenError( message ) );
 
-                  self.schema.makeId( request.body, function( err, forceId ){
+                  self.afterCheckPermissions( request, 'post', function( err ){
                     if( err ) return self._sendError( request, 'post', next, err );
 
-                    self.implementInsert( request, forceId, function( err, fullDoc ){
+                    // Clean up body from things that are not to be submitted
+                    self.schema.cleanup( request.body, 'doNotSave' );
+
+                    self.schema.makeId( request.body, function( err, forceId ){
                       if( err ) return self._sendError( request, 'post', next, err );
 
-                      request.data.fullDoc = fullDoc;
-
-                      self._repositionBasedOnOptions( request.data.fullDoc, request.options.putBefore, request.options.putDefaultPosition, false, function( err ){
+                      self.implementInsert( request, forceId, function( err, fullDoc ){
                         if( err ) return self._sendError( request, 'post', next, err );
 
-                        self.afterDbOperation( request, 'post', function( err ){
-                        if( err ) return self._sendError( request, 'post', next, err );
+                        request.data.fullDoc = fullDoc;
 
-                          self.extrapolateDocProxy( request, 'post', request.data.fullDoc, function( err, doc ) {
-                            if( err ) return self._sendError( request, 'post', next, err );
+                        self._repositionBasedOnOptions( request.data.fullDoc, request.options.putBefore, request.options.putDefaultPosition, false, function( err ){
+                          if( err ) return self._sendError( request, 'post', next, err );
 
-                            request.data.doc = doc;
+                          self.afterDbOperation( request, 'post', function( err ){
+                          if( err ) return self._sendError( request, 'post', next, err );
 
-                            self.prepareBeforeSendProxy( request, 'post', request.data.doc, function( err, preparedDoc ){
+                            self.extrapolateDocProxy( request, 'post', request.data.fullDoc, function( err, doc ) {
                               if( err ) return self._sendError( request, 'post', next, err );
 
-                              request.data.preparedDoc = preparedDoc;
+                              request.data.doc = doc;
 
-                              self.afterEverything( request, 'post', function( err ){
+                              self.prepareBeforeSendProxy( request, 'post', request.data.doc, function( err, preparedDoc ){
                                 if( err ) return self._sendError( request, 'post', next, err );
 
-                                if( request.remote ){
-                                  if( self.echoAfterPost ){
-                                    self.sendData( request, 'post', request.data.preparedDoc );
+                                request.data.preparedDoc = preparedDoc;
+
+                                self.afterEverything( request, 'post', function( err ){
+                                  if( err ) return self._sendError( request, 'post', next, err );
+
+                                  if( request.remote ){
+                                    if( self.echoAfterPost ){
+                                      self.sendData( request, 'post', request.data.preparedDoc );
+                                    } else {
+                                      self.sendData( request, 'post', '' );
+                                    }
                                   } else {
-                                    self.sendData( request, 'post', '' );
+                                    next( null, request.data.preparedDoc, request );
                                   }
-                                } else {
-                                  next( null, request.data.preparedDoc, request );
-                                }
+                                });
                               });
                             });
                           });
@@ -1060,52 +1149,58 @@ var Store = declare( Object,  {
 
                     request.putNew = true;
 
-                    // Actually check permissions
-                    self._checkPermissionsProxy( request, 'put', function( err, granted, message ){
-                      if( err ) return self._sendError( request, 'put', next, err );
+                    self._areFieldsUnique( null, request.body, function( err, allUnique, errors ){
+                      if( err ) return self._sendError( request, 'post', next, err );
 
-                      if( ! granted ) return self._sendError( request, 'put', next, new self.ForbiddenError( message ) );
+                      if( ! allUnique ) return self._sendError( request, 'post', next, new self.UnprocessableEntityError( { errors: errors } ) );
 
-                      self.afterCheckPermissions( request, 'put', function( err ){
+                      // Actually check permissions
+                      self._checkPermissionsProxy( request, 'put', function( err, granted, message ){
                         if( err ) return self._sendError( request, 'put', next, err );
 
-                        // Clean up body from things that are not to be submitted
-                        // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
-                        self.schema.cleanup( request.body, 'doNotSave' );
+                        if( ! granted ) return self._sendError( request, 'put', next, new self.ForbiddenError( message ) );
 
-                        self.implementInsert( request, null, function( err, fullDoc ){
+                        self.afterCheckPermissions( request, 'put', function( err ){
                           if( err ) return self._sendError( request, 'put', next, err );
 
-                          request.data.fullDoc = fullDoc;
+                          // Clean up body from things that are not to be submitted
+                          // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                          self.schema.cleanup( request.body, 'doNotSave' );
 
-                          self._repositionBasedOnOptions( request.data.fullDoc, request.options.putBefore, request.options.putDefaultPosition, false, function( err ){
+                          self.implementInsert( request, null, function( err, fullDoc ){
                             if( err ) return self._sendError( request, 'put', next, err );
 
-                            self.afterDbOperation( request, 'put', function( err ){
+                            request.data.fullDoc = fullDoc;
+
+                            self._repositionBasedOnOptions( request.data.fullDoc, request.options.putBefore, request.options.putDefaultPosition, false, function( err ){
                               if( err ) return self._sendError( request, 'put', next, err );
 
-                              self.extrapolateDocProxy( request, 'put', request.data.fullDoc, function( err, doc ) {
+                              self.afterDbOperation( request, 'put', function( err ){
                                 if( err ) return self._sendError( request, 'put', next, err );
 
-                                request.data.doc = doc;
-
-                                self.prepareBeforeSendProxy( request, 'put', request.data.doc, function( err, preparedDoc ){
+                                self.extrapolateDocProxy( request, 'put', request.data.fullDoc, function( err, doc ) {
                                   if( err ) return self._sendError( request, 'put', next, err );
 
-                                  request.data.preparedDoc = preparedDoc;
+                                  request.data.doc = doc;
 
-                                  self.afterEverything( request, 'put', function( err ){
+                                  self.prepareBeforeSendProxy( request, 'put', request.data.doc, function( err, preparedDoc ){
                                     if( err ) return self._sendError( request, 'put', next, err );
 
-                                    if( request.remote ){
-                                      if( self.echoAfterPut ){
-                                        self.sendData( request, 'put', request.data.preparedDoc );
+                                    request.data.preparedDoc = preparedDoc;
+
+                                    self.afterEverything( request, 'put', function( err ){
+                                      if( err ) return self._sendError( request, 'put', next, err );
+
+                                      if( request.remote ){
+                                        if( self.echoAfterPut ){
+                                          self.sendData( request, 'put', request.data.preparedDoc );
+                                        } else {
+                                          self.sendData( request, 'put', '' );
+                                        }
                                       } else {
-                                        self.sendData( request, 'put', '' );
+                                        next( null, request.data.preparedDoc, request );
                                       }
-                                    } else {
-                                      next( null, request.data.preparedDoc, request );
-                                    }
+                                    });
                                   });
                                 });
                               });
@@ -1122,68 +1217,74 @@ var Store = declare( Object,  {
                     request.data.fullDoc = fullDoc;
                     request.putExisting = true;
 
-                    self.extrapolateDocProxy( request, 'put', request.data.fullDoc, function( err, doc ) {
-                      if( err ) return self._sendError( request, 'put', next, err );
+                    self._areFieldsUnique( fullDoc[ self.idProperty ], request.body, function( err, allUnique, errors ){
+                      if( err ) return self._sendError( request, 'post', next, err );
 
-                      request.data.doc = doc;
+                      if( ! allUnique ) return self._sendError( request, 'post', next, new self.UnprocessableEntityError( { errors: errors } ) );
 
-                      // Actually check permissions
-                      self._checkPermissionsProxy( request, 'put', function( err, granted, message ){
+                      self.extrapolateDocProxy( request, 'put', request.data.fullDoc, function( err, doc ) {
                         if( err ) return self._sendError( request, 'put', next, err );
 
-                        if( ! granted ) return self._sendError( request, 'put', next, new self.ForbiddenError( message ) );
+                        request.data.doc = doc;
 
-                        self.afterCheckPermissions( request, 'put', function( err ){
+                        // Actually check permissions
+                        self._checkPermissionsProxy( request, 'put', function( err, granted, message ){
                           if( err ) return self._sendError( request, 'put', next, err );
 
-                          // Clean up body from things that are not to be submitted
-                          // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
-                          self.schema.cleanup( request.body, 'doNotSave' );
+                          if( ! granted ) return self._sendError( request, 'put', next, new self.ForbiddenError( message ) );
 
-                          self.implementUpdate( request, !request.options.field, function( err, fullDocAfter ){
+                          self.afterCheckPermissions( request, 'put', function( err ){
                             if( err ) return self._sendError( request, 'put', next, err );
 
-                            // Update must have worked -- if it hasn't, there was a (bad) problem
-                            if( ! fullDocAfter ) return self._sendError( request, 'put', next, new Error("Error re-fetching document after update in put") );
+                            // Clean up body from things that are not to be submitted
+                            // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
+                            self.schema.cleanup( request.body, 'doNotSave' );
 
-                            request.data.fullDocAfter = fullDocAfter;
-
-                            self._repositionBasedOnOptions( request.data.fullDoc, request.options.putBefore, request.options.putDefaultPosition, true, function( err ){
+                            self.implementUpdate( request, !request.options.field, function( err, fullDocAfter ){
                               if( err ) return self._sendError( request, 'put', next, err );
 
-                              self.afterDbOperation( request, 'put', function( err ){
+                              // Update must have worked -- if it hasn't, there was a (bad) problem
+                              if( ! fullDocAfter ) return self._sendError( request, 'put', next, new Error("Error re-fetching document after update in put") );
+
+                              request.data.fullDocAfter = fullDocAfter;
+
+                              self._repositionBasedOnOptions( request.data.fullDoc, request.options.putBefore, request.options.putDefaultPosition, true, function( err ){
                                 if( err ) return self._sendError( request, 'put', next, err );
 
-                                self.extrapolateDocProxy( request, 'put', request.data.fullDocAfter, function( err, docAfter ) {
+                                self.afterDbOperation( request, 'put', function( err ){
                                   if( err ) return self._sendError( request, 'put', next, err );
 
-                                  request.data.docAfter = docAfter;
-
-                                  self.prepareBeforeSendProxy( request, 'put', request.data.docAfter, function( err, preparedDoc ){
+                                  self.extrapolateDocProxy( request, 'put', request.data.fullDocAfter, function( err, docAfter ) {
                                     if( err ) return self._sendError( request, 'put', next, err );
 
-                                    request.data.preparedDoc = preparedDoc;
+                                    request.data.docAfter = docAfter;
 
-                                    self.afterEverything( request, 'put', function( err ) {
+                                    self.prepareBeforeSendProxy( request, 'put', request.data.docAfter, function( err, preparedDoc ){
                                       if( err ) return self._sendError( request, 'put', next, err );
 
-                                      // Manipulate fullDoc: at this point, it's the WHOLE database record,
-                                      // whereas I only want returned paramIds AND the piggyField
-                                      if( request.options.field ){
-                                        for( var field in fullDocAfter ){
-                                          if( self.paramIds.indexOf( field ) == -1 && field != request.options.field ) delete fullDocAfter[ field ];
-                                        }
-                                      }
+                                      request.data.preparedDoc = preparedDoc;
 
-                                      if( request.remote ){
-                                        if( self.echoAfterPut ){
-                                          self.sendData( request, 'put', request.data.preparedDoc );
-                                        } else {
-                                          self.sendData( request, 'put', '' );
+                                      self.afterEverything( request, 'put', function( err ) {
+                                        if( err ) return self._sendError( request, 'put', next, err );
+
+                                        // Manipulate fullDoc: at this point, it's the WHOLE database record,
+                                        // whereas I only want returned paramIds AND the piggyField
+                                        if( request.options.field ){
+                                          for( var field in fullDocAfter ){
+                                            if( self.paramIds.indexOf( field ) == -1 && field != request.options.field ) delete fullDocAfter[ field ];
+                                          }
                                         }
-                                      } else {
-                                        next( null, request.data.preparedDoc, request );
-                                      }
+
+                                        if( request.remote ){
+                                          if( self.echoAfterPut ){
+                                            self.sendData( request, 'put', request.data.preparedDoc );
+                                          } else {
+                                            self.sendData( request, 'put', '' );
+                                          }
+                                        } else {
+                                          next( null, request.data.preparedDoc, request );
+                                        }
+                                      });
                                     });
                                   });
                                 });

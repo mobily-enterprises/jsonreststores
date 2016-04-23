@@ -894,6 +894,38 @@ For example HTTPMixin will create the following routes:
 
 Note that _all_ of the permissions checks and hooks will be called as per normal for `put` and `get` requests. If you need to differenciate in your code, you can simply check for the `request.options.field` property.
 
+# Unique fields
+
+You can add the `unique` attribute to a field in the schema; this will ensure that PUT and POST operations will never allow duplicate data within the same store.
+
+For example:
+
+    // Basic definition of the managers store
+    var Managers = declare( Store, {
+
+      schema: new Schema({
+        name   : { type: 'string', trim: 60, singleField: true },
+        surname: { type: 'string', searchable: true, trim: 60, singleField: true },
+        email  : { type: 'string', searchable: true, unique: 'true', trim: 60, singleField: true },
+      }),
+
+      storeName: 'managers',
+      publicURL: '/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+
+    var managers = new Managers();
+
+    JsonRestStores.init();
+    protocolListen( 'HTTP', { app: app } );
+
+In this case, JsonRestStores will ensure that `email` is unique. Note that you should also do this at index-level, and that JsonRestStores does a _soft_ check. This means that it won't handle race conditions where two concurrent calls might end up checking for the duplicate at the same time, and therefore allowing a duplicate record. So, generally speaking, if it's crucial that your app doesn't have a duplicate you will _need_ to enforce this at index-level.
+
 # Automatic lookup
 
 When you have a nested store, you would normally check if the _intermediate_ ID in the URL actually resolves to an existing record. It's also often important, when checking for store permissions, to access that record.
