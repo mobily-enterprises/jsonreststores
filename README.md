@@ -926,6 +926,8 @@ For example:
 
 In this case, JsonRestStores will ensure that `email` is unique. Note that you should also do this at index-level, and that JsonRestStores does a _soft_ check. This means that it won't handle race conditions where two concurrent calls might end up checking for the duplicate at the same time, and therefore allowing a duplicate record. So, generally speaking, if it's crucial that your app doesn't have a duplicate you will _need_ to enforce this at index-level.
 
+Remember that all fields marked as `unique` must also be declared as `searchable`.
+
 # Automatic lookup
 
 When you have a nested store, you would normally check if the _intermediate_ ID in the URL actually resolves to an existing record. It's also often important, when checking for store permissions, to access that record.
@@ -1948,55 +1950,187 @@ This also means that position grouping will depend on the _base_ constructor's `
 
 JsonRestStores offers the ablity to write estensive documentation about the stores created. The key to this feature is a documentation object that gets generated using the store's attributes as information source.
 
-## `main-doc` (source: the store's `main-doc` string)
+## Documenting
+
+Documenting a store is very straightforward: you simply need to add extra descriptive fields to the store itself; the text will be formatted as markdown.
+
+Here is an example of a fully documented store:
+
+
+    var Managers= declare( Store, {
+
+      'main-doc':`
+        This is the main `Managers` store, storing information about all of the managers.
+      `,
+
+      'schema-doc':`
+        The schema simply contains the name and the surname of the managers. Each record is
+        trimmed to 60 characters.
+      `,
+      schema: new Schema({
+        id         : { type: 'id', searchable: true },
+        workspaceId: { type: 'id', searchable: true },
+        name       : { type: 'string', trim: 60, doc: "The manager's name" },
+        surname    : { type: 'string', trim: 60, doc: "The manager's surname" },
+      }),
+      'schema-extras-doc': {
+        ranking: { type: 'number', doc: "Only in GET: Automatically calculated ranking" },
+      },
+
+      'item-doc':`
+        An item returned looks like this:
+            {
+               id: ObjectId( '827438242938748234'),
+               workspaceId: ObjectId('37423974234729748234'),
+               name: 'Tony',
+               surname: 'Mobily',
+               ranking: 1865
+            }
+      `,
+
+      `permissions-doc`:{
+        'put': `
+          The user needs to be logged in. Also, the manager's name cannot be "Tony".
+        `,
+        'post': `
+          The user needs to be logged in. Also, the manager's name cannot be "Tony".
+        `,
+      },
+      checkPermissions: function( request, method, cb ){
+        if( ! request.session || ! request.session.userId ) return cb( null, false, "User needs to be logged in");
+
+        if( method == 'put' || method == 'post' && request.body.name == 'Tony' ){
+          return cb( null, false, "Managers called 'Tony' are not allowed" );
+        }
+
+       return cb( null, true );
+
+      },
+
+      prepareBeforeSend: function( request, method, doc, cb ){
+        doc.ranking = Math.foor( Math.random() * 10000 );
+
+        cb( null, doc );
+      },
+
+      position: true,
+
+      storeName: 'managers',
+      publicURL: '/workspaces/:workspaceId/managers/:id',
+
+      handlePut: true,
+      handlePost: true,
+      handleGet: true,
+      handleGetQuery: true,
+      handleDelete: true,
+    });
+    var managers = new Managers();
+
+Note that:
+
+* This is an especially simple store
+* The contents of the doc fields is always in Markdown format
+* The description fields have a newline and then an indentation. This will keep your code neat. Remember that the initial newline and indentation, as well as any indentation of matching length, will be deleted from the documentation.
+* If you have `{{something}}` in fields ending with `-doc` (`main-doc`, `permissions-doc`, etc.), then  `{{something}}` will be changed with the contents of the firls matching property in the object's prototype. This means that you can use `this.inherited()` in your `permissions-doc.put` description, and write "This contraint needs to be satisfied: {{permssions-doc.put}}. Then, also this is checked...".
+
+Here is a detailed explanation of the documentation fields.
+
+### error-format-doc (Markdown text)
+
+The error as it's returned by JsonRestStores. YOu should rewrite this if you change your store's `formatErrorResponse()` function.
+
+### `main-doc` (Markdown text)
+
+The main documentation for the store: what it does, what it's for, how it fits in the API
+
+### schema-extras-doc (object, schema format)
+
+This is useful to add extra fields to the schema, as if they were defined in the schema directly.
+
+### `schema-doc` (Markdown text)
+
+Describes the schema in general: what data it contains, why specific fields, the rational behind it, etc.
+
+### `item-doc` (Markdown text)
+
+What an return item will look like. Include computer fields, and explain things
+
+### The `doc` field in schema fields (Markdown text)
+
+Describes the purpose of each field.
+
+### permissions-doc (object)
+
+An object where keys are `get`, `getQuery`, `put`, `post`, `delete` and their contents is Markdown text.
+Each one describes how permissions work for the specified method.
+
+## Gathering documentation information
+
+The section above explains how to add a stores' documentation to the store's structure itself. How can you then generate comprehensive documentation?
+
+The constructor function `docData = Store.document( store )` will do the trick, and will return _full_ documentation for the store `store`.
+
+You can also apply the function in bulk and run:
+
+    allDocsData = JsonRestStores.makeDocsData( JsonRestStores.getAllStores(), extraDocStores, ... );
+
+Which will run `Store.document()` on *every* store in the registry, as well as extra user-defined pseudo-stores.
+
+The variable `allDocsData` will contain the documentation information of all of the stores.
+
+This information includes the documentation information you defined in the store itself (formatted as Markdown), as well as extra information gathered from the store itself.
+
+Here is the full set of information:
+
+### `main-doc` (source: the store's `main-doc` string)
 
 The store's main documentation. Here you would put a general description of what the store is for, specific features you need to be aware of, etc.
 
-## `storeName` (source: the store's `storeName` string)
+### `storeName` (source: the store's `storeName` string)
 
 The store's name
 
-## `schema-doc` (source: the store's `schema-doc` string)
+### `schema-doc` (source: the store's `schema-doc` string)
 
 An general explanation of what the schema contains.
 
-## `schema` and `schemaExplanations` (source: the store's `schema` hash)
+### `schema` and `schemaExplanations` (source: the store's `schema` hash)
 
 * `schema` is a copy of the `schema` object, where in each object the `doc` part is taken out.
 * `schemaExplanations` is a hash with the same keys as `schema`, where each value is the respective `doc` value taken out of the original object
 
-## `backEnd` (source: the store's `layer` object )
+### `backEnd` (source: the store's `layer` object )
 
 If set, it means that the store uses a database backend, for which it will return:
 
 * `collectionName` -- the name of the database collection
 * `hardLimitOnQueries` -- the hard limit on `getQuery` queries
 
-## `parents` (source: the store's prototype chain)
+### `parents` (source: the store's prototype chain)
 
 An array with the list of `storeName`s the store is derived from. This assumes that every prototype has a `storeName` set.
 
-## `strictSchemaOnFetch` (source: the store's `strictSchemaOnFetch` flag)
+### `strictSchemaOnFetch` (source: the store's `strictSchemaOnFetch` flag)
 
 Set to `true` if the store will enforce schema-checking when fetching records, and `false` otherwise.
 
-## `singleFields` (source: the store's `_singleFields` hash)
+### `singleFields` (source: the store's `_singleFields` hash)
 
 A hash with the list of "single fields" for the store, where each key is an entry in the store's schema.
 
-## `nested` (source: the store's `nested` array)
+### `nested` (source: the store's `nested` array)
 
 An array of sentences, where each one describes how records in a nested store are fetched.
 
-## `position` (source: the store's `position` flag)
+### `position` (source: the store's `position` flag)
 
 Set to `true` if the store manages positioning, and `false` otherwise.
 
-## `item-doc` (source: the store's `item-doc` string)
+### `item-doc` (source: the store's `item-doc` string)
 
 What a returned item looks like, after a get/getQuery or after a put/post/delete
 
-## `error-format-doc` (source: the store's `error-format-doc` string)
+### `error-format-doc` (source: the store's `error-format-doc` string)
 
 Is a string representing what an error object looks like. You will normally change it in a store if yo uredefine the `formatErrorResponse()` method, which by default returns:
 
@@ -2004,11 +2138,11 @@ Is a string representing what an error object looks like. You will normally chan
 
 Note that this is a string.
 
-## `permissions-doc` (source: the store's `permissions-doc` hash)
+### `permissions-doc` (source: the store's `permissions-doc` hash)
 
 A hash where each key can be 'getQuery', 'get', 'put', 'post', 'delete'. Each key has a text explanation of what the store's permissions are for that specific method.
 
-## `methods`
+### `methods`
 
 A hash where each key is a supported method (for example 'getQuery', 'get', 'put', 'post', 'delete' ).
 
@@ -2023,44 +2157,99 @@ Each method object has the following attributes:
 
 * `url`. The URL for that method. Source: the `getFullPublicURL()` method
 
-* `permissions`. A string describing the permissions for that method. Source: The relevant key of the store's `permissions-doc` hash.
+* `permissions-doc`. A string describing the permissions for that method. Source: The relevant key of the store's `permissions5-doc` hash.
 
 * `incomingHeaders` and `outgoingHeaders` (array of objects). The headers: the incoming ones will affect how the method works, and the outgoing will provide extra information. For example PUT and POST methods will set the `Location` header. En entry could be:
    { 'Location': "Since this store implements `get`, this header will be set as the URL where the item can be retrieved" }`
 
 However, each method will then return a different set of responses.
 
-### `getQuery`
+#### `getQuery`
 
 * `onlineSearchSchema` and `onlineSearchSchemaExplanations`: they are created exacly like `schema`. However, it uses the store's `onlineSearchSchema` hash as starting point.
 * `search-doc`. An explanation on how the `onlineSearchSchema` works. Source: `store.getQuery['search-doc']`
 * `defaultSort`. The fields the store will use as default sort.  Source: the store's `defaultSort` attribute
 * `deleteAfterFetchRecords`. True if the store's `deleteAfterGetQuery` attribute it true, false otherwise.
+* `sortableFields`. The list of fields the store can be sorted by
 
-### `get`
+#### `get`
 
 * `onlySingleFields`: set to `true` if the store only allows `get` for single fields
 
-### `put`
+#### `put`
 
 * `onlySingleFields`: set to `true` if the store only allows `put` for single fields
 * `echo`: set to `true` if the store's `echoAfterPut` attribute is true, false otherwise.
 
-### `post`
+#### `post`
 
 * `echo`: set to `true` if the store's `echoAfterPost` attribute is true, false otherwise.
 
-### `delete`
+#### `delete`
 
 * `echo`: set to `true` if the store's `echoAfterDelete` attribute is true, false otherwise.
 
-## Final changes (source: the object's `changeDoc()` method)
+### Final changes (source: the object's `changeDoc()` method)
 
 The final changes to the documentation object are applied by running the `changeDoc(s)` method, which is called in a "constructor-like" fashion: starting from the first prototype in the chain to the last. This ensures that _all_ of the changes are applied.
 
 This method can be defined when you need to change the default settings of a store.
 
+## Actually rendering documentation
 
+Once you have a full data structure containing all of this info, creating an actual document _can_ be a little daunting. Fortunately, EJS comes to the rescue.
+
+You can use EJS to write sample documentation, for example:
+
+    // Minimal number of modules to get JsonRestStores going
+    var dummy
+      , hotplate = require('hotplate')
+      , JsonRestStores = require('jsonreststores')
+      , fs = require('fs')
+      , ejs = require('ejs')
+    ;
+
+    function formatObject( o ) {
+      var r = '', once = false;
+      Object.keys( o ).forEach( function( k ){
+        r = r + k + ': ';
+        r = r + JSON.stringify( o[ k ] ) + ', ';
+        once = true;
+      })
+      if( once ) r = r.substr( 0, r.length - 2 );
+
+      return  r;
+    }
+
+
+    // ...
+    // Run the code in your app that will declare stores
+    // ...
+
+    // Prepare the template
+    var data = JsonRestStores.makeDocsData( JsonRestStores.getAllStores() );
+    var str = fs.readFileSync( 'store.ejs');
+    var template = ejs.compile(str.toString(), { localsName: 's', rmWhitespace: false } );
+
+    // Make up the documentation
+    var r = '';
+    Object.keys( data ).forEach( function( sk ){
+      console.log("\n\nDocumenting: " + sk + "\n" );
+
+      // Prepare the data object
+      var s = data[ sk ];
+      s.obj = formatObject; // Used to format the schema entries
+
+      console.log("Which has keys: " + Object.keys( s ) + " and methods: " + Object.keys( s.methods )) ;
+
+      // Add the new bit of documentation
+      r = r + template( s );
+
+    });
+    fs.writeFileSync("gen-docs.html", r );
+
+You can also use the sample `store.ejs` file as a starting point for your stores' documentation.
+Note that you will need to _actually_ run the code to define your stores before using `JsonRestStores.makeDocsData`.
 
 # Data preparation hooks
 

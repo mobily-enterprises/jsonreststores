@@ -27,7 +27,20 @@ var
 , HTTPMixin = require('./HTTPMixin.js')
 , path = require( 'path')
 , DO = require("deepobject")
+, marked = require("marked")
 ;
+
+
+marked.setOptions({
+  gfm: true,
+  tables: true,
+  breaks: false,
+  pedantic: false,
+  sanitize: true,
+  smartLists: true,
+  smartypants: false
+});
+
 
 var Store = declare( Object,  {
 
@@ -139,11 +152,6 @@ var Store = declare( Object,  {
 
   // Run when JsonRestStores.init() is run
   init: function(){
-  },
-
-
-  'permissions-doc': {
-    put: `There are no permission checks for this store`,
   },
 
   // **************************************************************************
@@ -1725,6 +1733,9 @@ Store.document = function( s ) {
     var scope = this;
     var p;
     var key = path.split('.')[0];
+    var toMark = false;
+
+    if( key.slice( -4 ) == '-doc' ) toMark = true;
 
     // Step 1: find the scope DIRECTLY associated to the value
     // At the end of this, `p` is the right scope.
@@ -1738,7 +1749,8 @@ Store.document = function( s ) {
 
     // This shouldn't really happen
     if( ! p ){
-      return "[[Could not find '" + path + "' in current scope]]";
+      //return "[[Could not find '" + path + "' in current scope]]";
+      return '';
     }
 
     // Step 2: get the value from the path,  and work the string a little,
@@ -1746,13 +1758,17 @@ Store.document = function( s ) {
 
     // Get value from path
     var str = DO.get( p, path );
-    if( typeof( str) !== 'string' ) return "[[Index '" + key + "' exists, but '" + path + "' is not a string]]";
+    if( typeof( str ) === 'undefined' ) str = ''; // This is in case p[k] exist, but a sub-key was references
+    if( typeof( str) !== 'string' ) return `[[Index ${key} exists, but ${path} is not a string, it is ${to} ]]`;
 
     // Fix up string
     str = str.replace(/^[\n\r]/, '' );
     var spaces = str.match(/^\s*/m)
     var regexp = new RegExp( '^' + spaces, 'gm' );
     str = str.replace( regexp, '' );
+
+    // Turn to markdown
+    str = marked( str );
 
     // Step 3: Resolve {{something}} into the corresponding value in the parent's prototype
 
@@ -1837,7 +1853,8 @@ Store.document = function( s ) {
   }
 
   rn.position = !!s.position;
-  rn['item-doc'] = s[ 'item-doc'] || '';
+  //rn['item-doc'] = s[ 'item-doc'] || '';
+  if( s[ 'item-doc'] ) rn['item-doc'] = f.call( s, 'item-doc' );
   if( s[ 'schema-doc'] ) rn['schema-doc'] = f.call( s, 'schema-doc' );
 
   if( s.schema ) {
@@ -1890,21 +1907,23 @@ Store.document = function( s ) {
         }
 
         if( s[ 'search-doc'] ) rnm['search-doc'] = f.call( s, 'search-doc' );
-        if( s[ 'defaultSort'] ) rnm.defautSort = s[ 'defaultSort'];
+        if( s[ 'sortableFields'] ) rnm.sortableFields = s[ 'sortableFields'];
+        if( s[ 'defaultSort'] ) rnm.defaultSort = s[ 'defaultSort'];
         rnm.deleteFetchedRecords = !! s[ 'deleteAfterGetQuery' ];
 
         rnm.OKresponses = [
-          { name: 'OK', status: 200, data: '[ item1, item2 ]', doc: `where item1, item2 are the full items` }
+          { name: 'OK', status: 200, data: '[ item1, item2 ]', contentType: 'application/json', doc: `where item1, item2 are the full items` }
         ];
 
         rnm.errorResponses = [
-          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
-          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
-          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
-          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
+          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], contentType: 'text/html', doc: "The method requested isn't implemented" },
+          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], contentType: 'text/html', doc: "Access to the resource was forbidden" },
+          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], contentType: 'text/html', doc: "Some IDs in the URL are in the wrong format"},
+          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], contentType: 'text/html', doc:"An unexpected error happened"},
         ];
 
-        if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].getQuery) rnm.permissions = f.call( s, 'permissions-doc.getQuery' );
+        rnm.permissions = f.call( s, 'permissions-doc.getQuery' );
+
 
       break;
 
@@ -1916,17 +1935,18 @@ Store.document = function( s ) {
         if( s.publicURL ) rnm.url = s.getFullPublicURL();
         if( !s.handleGet ) rnm.onlySingleFields = true;
 
-        if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].get) rnm.permissions = f.call( s, 'permissions-doc.get' );
+        rnm.permissions = f.call( s, 'permissions-doc.get' );
 
         rnm.OKresponses = [
-          { name: 'OK', status: 200, data: '{ ...item... }', doc: 'The item returned' }
+          { name: 'OK', status: 200, data: '{ ...item... }', contentType: 'application/json',doc: 'The item returned' }
+
         ];
 
         rnm.errorResponses = [
-          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
-          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
-          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
-          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
+          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], contentType: 'text/html', doc: "The method requested isn't implemented" },
+          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], contentType: 'text/html', doc: "Access to the resource was forbidden" },
+          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], contentType: 'text/html', doc: "Some IDs in the URL are in the wrong format"},
+          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], contentType: 'text/html', doc:"An unexpected error happened"},
         ];
 
       break;
@@ -1939,25 +1959,25 @@ Store.document = function( s ) {
 
         if( s.publicURL ) rnm.url = s.getFullPublicURL();
 
-        if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].put) rnm.permissions = f.call( s, 'permissions-doc.put' );
+        rnm.permissions = f.call( s, 'permissions-doc.put' );
 
         rnm.echo = !! s.echoAfterPut;
         if( s.echoAfterPut ){
           rnm.OKresponses = [
-            { name: 'OK', status: 200, data: '{ ...item... }', 'Content-type': 'application/json', doc: 'the item returned' }
+            { name: 'OK', status: 200, data: '{ ...item... }', contentType: 'application/json', doc: 'the item returned' }
           ];
         } else {
           rnm.OKresponses = [
-            { name: 'OK', status: 200, data: '', 'Content-type': 'text/html' }
+            { name: 'OK', status: 200, data: '', contentType: 'text/html' }
           ];
         }
 
         rnm.errorResponses = [
-          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
-          { name: 'UnprocessableEntityError', status: 422, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "One of the parameters in the body has errors" },
-          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
-          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"Some IDs in the URL are in the wrong format"},
-          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
+          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], contentType: 'text/html', doc: "The method requested isn't implemented" },
+          { name: 'UnprocessableEntityError', status: 422, data: s['error-format-doc'], contentType: 'text/html', doc: "One of the parameters in the body has errors" },
+          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], contentType: 'text/html', doc: "Access to the resource was forbidden" },
+          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], contentType: 'text/html', doc:"Some IDs in the URL are in the wrong format"},
+          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], contentType: 'text/html', doc:"An unexpected error happened"},
         ];
 
       break;
@@ -1968,25 +1988,25 @@ Store.document = function( s ) {
 
         if( s.publicURL ) rnm.url = s.getFullPublicURL().replace( /\/:\w*$/, '');
 
-        if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].post) rnm.permissions = f.call( s, 'permissions-doc.post' );
+        rnm.permissions = f.call( s, 'permissions-doc.post' );
 
         rnm.echo = !! s.echoAfterPost;
         if( s.echoAfterPost ){
           rnm.OKresponses = [
-            { name: 'OK', status: 200, data: '{ ...item... }', 'Content-type': 'application/json', doc: 'the item returned' }
+            { name: 'OK', status: 200, data: '{ ...item... }', contentType: 'application/json', doc: 'the item returned' }
           ];
         } else {
           rnm.OKresponses = [
-            { name: 'OK', status: 200, data: '', 'Content-type': 'text/html' }
+            { name: 'OK', status: 200, data: '', contentType: 'text/html' }
           ];
         }
 
         rnm.errorResponses = [
-          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
-          { name: 'UnprocessableEntityError', status: 422, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "One of the parameters in the body has errors" },
-          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
-          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
-          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
+          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], contentType: 'text/html', doc: "The method requested isn't implemented" },
+          { name: 'UnprocessableEntityError', status: 422, data: s['error-format-doc'], contentType: 'text/html', doc: "One of the parameters in the body has errors" },
+          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], contentType: 'text/html', doc: "Access to the resource was forbidden" },
+          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], contentType: 'text/html', doc: "Some IDs in the URL are in the wrong format"},
+          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], contentType: 'text/html', doc:"An unexpected error happened"},
         ];
 
       break;
@@ -1997,24 +2017,24 @@ Store.document = function( s ) {
 
         if( s.publicURL ) rnm.url = s.getFullPublicURL();
 
-        if( s[ 'permissions-doc' ] &&  s[ 'permissions-doc' ].delete) rnm.permissions = f.call( s, 'permissions-doc.delete' );
+        rnm.permissions = f.call( s, 'permissions-doc.delete' );
 
         rnm.echo = !! s.echoAfterDelete;
         if( s.echoAfterDelete ){
           rnm.OKresponses = [
-            { name: 'OK', status: 200, data: '{ ...item... }', 'Content-type': 'application/json', doc: 'the item returned' }
+            { name: 'OK', status: 200, data: '{ ...item... }', contentType: 'application/json', doc: 'the item returned' }
           ];
         } else {
           rnm.OKresponses = [
-            { name: 'OK', status: 200, data: '', 'Content-type': 'text/html' }
+            { name: 'OK', status: 200, data: '', contentType: 'text/html' }
           ];
         }
 
         rnm.errorResponses = [
-          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "The method requested isn't implemented" },
-          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Access to the resource was forbidden" },
-          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], 'Content-type': 'text/html', doc: "Some IDs in the URL are in the wrong format"},
-          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], 'Content-type': 'text/html', doc:"An unexpected error happened"},
+          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], contentType: 'text/html', doc: "The method requested isn't implemented" },
+          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], contentType: 'text/html', doc: "Access to the resource was forbidden" },
+          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], contentType: 'text/html', doc: "Some IDs in the URL are in the wrong format"},
+          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], contentType: 'text/html', doc:"An unexpected error happened"},
         ];
 
       break;
@@ -2022,13 +2042,43 @@ Store.document = function( s ) {
     }
   })
 
-  /* TODO:
-    * Add markdown-compiling function, apply to everything called -doc BEFORE applying the template
-    * Document each of the store's methods
-  */
+
+  callAll( s, 'changeDoc', rn  );
 
   rn.hasMethods = !! Object.keys( rn.methods ).length;
-  callAll( s, 'changeDoc', rn  );
+
+  // Format with markDown the missing `doc:` fields (in schema, errorResponses and OKresponses)
+
+  // First of all, schemaExplanations which were taken out of "doc" in the schema
+  if( rn.schemaExplanations ){
+    Object.keys( rn.schemaExplanations ).forEach( ( key ) => {
+      rn.schemaExplanations[ key ] = marked( rn.schemaExplanations[ key ] );
+    });
+  }
+
+  if( rn.methods ){
+    // For each method, mark OKresponses and errorResponses
+    Object.keys( rn.methods ).forEach( (methodName) =>{
+      var rnm = rn.methods[ methodName ];
+      rnm.errorResponses.forEach( (response ) => {
+          if( response.doc ) response.doc = marked (response.doc );
+      });
+      rnm.OKresponses.forEach( (response ) => {
+          if( response.doc ) response.doc = marked (response.doc );
+      });
+      if( rnm.incomingHeaders ){
+        rnm.incomingHeaders.forEach( (header ) => {
+          if( header.doc ) header.doc = marked ( header.doc );
+        });
+      }
+      if( rnm.outgoingHeaders ){
+        rnm.outgoingHeaders.forEach( (header ) => {
+          if( header.doc ) header.doc = marked ( header.doc );
+        });
+      }
+
+    });
+  }
 
   return rn;
 };

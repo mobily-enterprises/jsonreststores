@@ -7,7 +7,7 @@
     "mongodb"
   ],
   "main": "JsonRestStores.js",
-  "version": "0.3.64",
+  "version": "0.3.65",
   "readmeFilename": "README.md",
   "private": false,
   "repository": {
@@ -26,7 +26,8 @@
     "simpleschema": "0.3.x",
     "async": "~1.5.2",
     "multer": "~1.1.x",
-    "deepobject": "~0.3.x"
+    "deepobject": "~0.3.x",
+    "marked": "~0.3.x"
   },
   "devDependencies": {
     "nodeunit": "~0.9.1",

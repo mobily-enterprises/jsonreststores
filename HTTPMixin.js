@@ -40,11 +40,11 @@ var HTTPMixin = declare( Object,  {
     if( rn.methods.getQuery ){
       rn.methods.getQuery.incomingHeaders =  rn.methods.getQuery.incomingHeaders || [];
       headers = rn.methods.getQuery.incomingHeaders;
-      headers.push( { Range: "Only request a subset of the items. For example: `Range: items=0-24`"})
+      headers.push( { name: 'Range', doc: "Only request a subset of the items. For example: `Range: items=0-24`"})
 
       rn.methods.getQuery.outgoingHeaders =  rn.methods.getQuery.outgoingHeaders || [];
       headers = rn.methods.getQuery.outgoingHeaders;
-      headers.push( { 'Content-Range': "Only set if `Range` was set in the request. It returns how many items are being returned and how many total items exist. For example: `Content-Range: items 0-24/66`" });
+      headers.push( { name: 'Content-Range', doc: "Only set if `Range` was set in the request. It returns how many items are being returned and how many total items exist. For example: `Content-Range: items 0-24/66`" });
     }
 
     [ 'post', 'put' ].forEach( function( m ){
@@ -52,7 +52,7 @@ var HTTPMixin = declare( Object,  {
         if( store.handleGet ){
           rn.methods[ m ].outGoingHeaders = rn.methods[ m ].outGoingHeaders || [];
           var headers = rn.methods[ m ].outgoingingHeaders;
-          headers.push( { 'Location': "Since this store implements `get`, this header will be set as the URL where the item can be retrieved" });
+          headers.push( { name: 'Location', doc: "Since this store implements `get`, this header will be set as the URL where the item can be retrieved" });
         }
       }
     })
@@ -60,16 +60,15 @@ var HTTPMixin = declare( Object,  {
     if( rn.put ){
       rn.methods.put.incomingHeaders =  rn.methods.put.incomingHeaders || [];
       var headers = rn.methods.put.incomingHeaders;
-      headers.push( { 'If-match': "If set to `*`, sets the `overwrite` option to `true`: the `put` will only ever overwrite an existing record. It will refuse to create a ne record."})
-      headers.push( { 'If-none-match': "If set to `*`, sets the `overwrite` option to `false`: the `put` will only ever create a new record. It will refuse to overwrite an existing record."})
+      headers.push( { name: 'If-match', doc: "If set to `*`, sets the `overwrite` option to `true`: the `put` will only ever overwrite an existing record. It will refuse to create a ne record." } )
+      headers.push( { name: 'If-none-match', doc: "If set to `*`, sets the `overwrite` option to `false`: the `put` will only ever create a new record. It will refuse to overwrite an existing record."})
 
       if( rn.position ){
         var positionHeaders = rn.methods.put.incomingHeaders;
-        headers.push( { 'Put-before': "If set, it will place the element before the one with the ID matching the one passed in the header."} );
-        headers.push( { 'Put-default-position': "It can be 'start' or 'end'. If set, it will place the element at the beginning or at the end. Only considered if `Put-before` is not set."} );
+        headers.push( { name: 'Put-before', doc: "If set, it will place the element before the one with the ID matching the one passed in the header."} );
+        headers.push( { name: 'Put-default-position', doc: "It can be 'start' or 'end'. If set, it will place the element at the beginning or at the end. Only considered if `Put-before` is not set."} );
       }
     }
-    // TODO: Add explanation for position headers
 
   },
 
