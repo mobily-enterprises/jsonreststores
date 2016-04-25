@@ -2043,7 +2043,7 @@ The error as it's returned by JsonRestStores. YOu should rewrite this if you cha
 
 The main documentation for the store: what it does, what it's for, how it fits in the API
 
-### schema-extras-doc (object, schema format)
+### `schema-extras-doc` (object, schema format)
 
 This is useful to add extra fields to the schema, as if they were defined in the schema directly.
 
@@ -2162,7 +2162,8 @@ Each method object has the following attributes:
 * `incomingHeaders` and `outgoingHeaders` (array of objects). The headers: the incoming ones will affect how the method works, and the outgoing will provide extra information. For example PUT and POST methods will set the `Location` header. En entry could be:
    { 'Location': "Since this store implements `get`, this header will be set as the URL where the item can be retrieved" }`
 
-However, each method will then return a different set of responses.
+However, each method will then return a different set of pieces of information, depending on what they do.
+For example:
 
 #### `getQuery`
 
@@ -2191,9 +2192,28 @@ However, each method will then return a different set of responses.
 
 ### Final changes (source: the object's `changeDoc()` method)
 
-The final changes to the documentation object are applied by running the `changeDoc(s)` method, which is called in a "constructor-like" fashion: starting from the first prototype in the chain to the last. This ensures that _all_ of the changes are applied.
+The final changes to the documentation object are applied by running the `changeDoc(s)` method, which is called in a "constructor-like" fashion: starting from the first prototype in the chain to the last. This ensures that _all_ of the changes are applied throughout the prototype chain of the object.
 
 This method can be defined when you need to change the default settings of a store.
+
+For example `HTTPMixin` in JsonRestStores does this:
+
+    changeDoc: function( store, rn ){
+      var headers;
+
+      // ...
+      if( rn.put ){
+        rn.methods.put.incomingHeaders =  rn.methods.put.incomingHeaders || [];
+        var headers = rn.methods.put.incomingHeaders;
+
+        headers.push( { name: 'If-match', doc: "If set to `*`, sets the `overwrite` option to `true`: the `put` will only ever overwrite an existing record. It will refuse to create a ne record." } )
+
+        headers.push( { name: 'If-none-match', doc: "If set to `*`, sets the `overwrite` option to `false`: the `put` will only ever create a new record. It will refuse to overwrite an existing record."})
+      // ...
+    }
+
+It basically adds incoming header options to the PUT method.
+
 
 ## Actually rendering documentation
 
