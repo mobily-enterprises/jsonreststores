@@ -483,6 +483,15 @@ var Store = declare( Object,  {
         }
       }
 
+      // Check o.ifNotDefined. If the corresponding element in conditionsHash
+      // is not defined, won't go there
+      // Note: ifNotDefined can be a list of comma-separated fields
+      if( o.ifNotDefined && typeof( o.ifNotDefined) === 'string' ){
+        if( ! o.ifNotDefined.split(',').every( function( s ){ return typeof conditionsHash[ s ] == 'undefined'; }) ){
+          return false;
+        }
+      }
+
       // If it's `and` or `or`, will go through o.args one after the other
       // and (possibly) add them to fc's args
       if( o.type === 'and' || o.type === 'or'){
