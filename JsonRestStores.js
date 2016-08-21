@@ -950,7 +950,8 @@ var Store = declare( Object,  {
         // Protected field are not allowed here
         // (Except the ones marked in `bodyProtected`)
         for( var field in request.body ){
-          if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined' ){
+          if( self.schema.structure[ field ] && self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined' ){
+
 
             // NOTE: Will only delete it if it wasn't marked as "computed" in the request.
             if( typeof( request.bodyComputed ) === 'object' && request.bodyComputed != null && !request.bodyComputed[ field ] ){
