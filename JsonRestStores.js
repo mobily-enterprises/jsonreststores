@@ -751,7 +751,7 @@ var Store = declare( Object,  {
           // It's not an HTTP error: make up a new one, and incapsulate original error in it
           if( typeof( e[ error.name ] ) === 'undefined'  ){
             error = new self.ServiceUnavailableError( { originalErr: error } );
-            error.stack = error.stack;
+            error.stack = error.originalErr.stack;
           }
 
           // Make up the response body based on the error, attach it to the error itself
