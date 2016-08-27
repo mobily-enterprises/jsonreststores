@@ -909,7 +909,7 @@ var Store = declare( Object,  {
           if( err ) return cb( err );
 
           // If it's a duplicate, enrich the `errors` array
-          if( !isUnique ) errors.push( { field: field, message: 'Field already in database'} );
+          if( !isUnique ) errors.push( { field: field, message: ( self.schema.structure[field].uniqueMessage || 'Field already in database' ) } );
 
           cb( null );
         })
