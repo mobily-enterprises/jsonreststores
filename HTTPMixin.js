@@ -222,10 +222,8 @@ var HTTPMixin = declare( Object,  {
       var upload = multer( options ).any();
       uploadMiddleware = function( req, res, next ){
         upload( req, res, function( err ){
-          if( err ){
-            self.uploadErrorProcessor( err, next );
+          if( err ) return self.uploadErrorProcessor( err, next );
 
-          }
           next( null );
         });
       }
