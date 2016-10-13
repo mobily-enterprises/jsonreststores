@@ -329,7 +329,7 @@ var Store = declare( Object,  {
             case 'lookup':
 
               // Not an object: not interested!
-              var o =processedDoc._children && processedDoc._children[ store.localField ];
+              var o =processedDoc._children && processedDoc._children[ n.localField ];
               if( typeof o === 'undefined' ) return cb( null );
 
               var requestCopy = self._co( request );
@@ -338,9 +338,10 @@ var Store = declare( Object,  {
               store[ funcName ] .call( store, requestCopy, method, o, function( err, o ){
                 if( err ) return cb( err );
 
-                processedDoc._children[ store.localField ] = o;
+                processedDoc._children[ n.localField ] = o;
                 cb( null );
               });
+
             break;
           }// End of switch
 
