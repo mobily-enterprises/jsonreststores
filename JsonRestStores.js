@@ -329,7 +329,7 @@ var Store = declare( Object,  {
             case 'lookup':
 
               // Not an object: not interested!
-              var o =processedDoc._children && processedDoc._children[ store.localField ];
+              var o =processedDoc._children && processedDoc._children[ n.localField ];
               if( typeof o === 'undefined' ) return cb( null );
 
               var requestCopy = self._co( request );
@@ -338,9 +338,10 @@ var Store = declare( Object,  {
               store[ funcName ] .call( store, requestCopy, method, o, function( err, o ){
                 if( err ) return cb( err );
 
-                processedDoc._children[ store.localField ] = o;
+                processedDoc._children[ n.localField ] = o;
                 cb( null );
               });
+
             break;
           }// End of switch
 
@@ -496,6 +497,15 @@ var Store = declare( Object,  {
       // Note: ifDefined can be a list of comma-separated fields
       if( o.ifDefined && typeof( o.ifDefined) === 'string' ){
         if( ! o.ifDefined.split(',').every( function( s ){ return typeof conditionsHash[ s ] != 'undefined'; }) ){
+          return false;
+        }
+      }
+
+      // Check o.ifNotDefined. If the corresponding element in conditionsHash
+      // is not defined, won't go there
+      // Note: ifNotDefined can be a list of comma-separated fields
+      if( o.ifNotDefined && typeof( o.ifNotDefined) === 'string' ){
+        if( ! o.ifNotDefined.split(',').every( function( s ){ return typeof conditionsHash[ s ] == 'undefined'; }) ){
           return false;
         }
       }
@@ -742,7 +752,7 @@ var Store = declare( Object,  {
           // It's not an HTTP error: make up a new one, and incapsulate original error in it
           if( typeof( e[ error.name ] ) === 'undefined'  ){
             error = new self.ServiceUnavailableError( { originalErr: error } );
-            error.stack = error.stack;
+            error.stack = error.originalErr.stack;
           }
 
           // Make up the response body based on the error, attach it to the error itself
@@ -900,7 +910,7 @@ var Store = declare( Object,  {
           if( err ) return cb( err );
 
           // If it's a duplicate, enrich the `errors` array
-          if( !isUnique ) errors.push( { field: field, message: 'Field already in database'} );
+          if( !isUnique ) errors.push( { field: field, message: ( self.schema.structure[field].uniqueMessage || 'Field already in database' ) } );
 
           cb( null );
         })
@@ -941,7 +951,8 @@ var Store = declare( Object,  {
         // Protected field are not allowed here
         // (Except the ones marked in `bodyProtected`)
         for( var field in request.body ){
-          if( self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined' ){
+          if( self.schema.structure[ field ] && self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined' ){
+
 
             // NOTE: Will only delete it if it wasn't marked as "computed" in the request.
             if( typeof( request.bodyComputed ) === 'object' && request.bodyComputed != null && !request.bodyComputed[ field ] ){

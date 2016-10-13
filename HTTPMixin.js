@@ -275,6 +275,9 @@ var HTTPMixin = declare( Object,  {
       var request = new Object();
       var finalAction;
 
+
+      Object.setPrototypeOf( req.body, Object.prototype );
+
       // Sets all of the required fields for a request
       request.remote = true;
       request.protocol = 'HTTP';

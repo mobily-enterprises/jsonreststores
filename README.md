@@ -1092,7 +1092,7 @@ For this store, HTTPMixin will do the following:
 
 * add a middleware in stores with `uploadFields`, adding the ability to parse `multipart/formdata` input from the client
 * save the files in the required location
-* set req.body as the file's path, and req.bodyComputed to true for all those fields. This will make sure that JsonRestStores will allow rewriting of those protected fields
+* set `req.body.fileName` as the file's path, and `req.bodyComputed.fileName` to true.
 
 JsonRestStores will simply see values in `req.body`, blissfully unaware of the work done to parse the requests' input and the work to automatically populate `req.body` with the form values as well as the file paths.
 
@@ -2553,7 +2553,7 @@ The module is in itself decoupled from the transport protocol. Each request is i
 * `protocol`: defaults to HTTP. It will define how data is sent and received.
 * `params`: the URL params -- For example, a request like this: `PUT /managers/10/cars/20` will have `params` set as `{ managerId: 10, id: 20 }`
 * `body`: the data sent by the users
-* `bodyComputed`: an associative array; for each key set to `true`, the `protected` attribute in the schema won't apply
+* `bodyComputed`: an associative array; for each key set to `true`, the `protected` attribute in the schema won't apply (since it's assumed to have been computed automatically -- this mechanism is used by file uploads)
 * `session`: the session variable
 * `options`: options that will determine how the request will be handled. Each method will expect different options.
 
