@@ -22,6 +22,7 @@ Rundown of features:
 
 JsonRestStores even comes with its own database layer mixin, SimpleDbLayerMixin, which will implement all of the important methods that will read, write and delete elements from a database. The mixin uses [simpledblayer](https://github.com/mercmobily/simpledblayer) to access the database. For now, only MongoDb is supported but more will surely come.
 
+
 # Introduction to (JSON) REST stores
 
 Here is an introduction on REST, JSON REST, and this module. If you are a veteran of REST stores, you can probably just skim through this.
@@ -691,6 +692,27 @@ Note that in `nested` objects the store names are passed as _strings_, rather th
 
 Fetching of nested data is achieved by SimpleDbLayerMixin by using [SimpleDbLayer's nesting abilities](https://github.com/mercmobily/simpledblayer#automatic-loading-of-children-joins), which you should check out. If you do check it out, you will see strong similarities between JsonRestStores' `nested` parameter and `SimpleDbLayer`. If you have used nested parameters in SimpleDbLayer, then you easily see that  JsonRestStores will simply make sure that the required attribute for `nested` entries are there; for each `nested` entry it will add a `layer` property (based on the store's own `collectionName`) and a `layerField` property (based on the store's own `idProperty`).
 
+You can change the name of the property in `_children` by adding a `prop` parameter to nested:
+
+    nested: [
+      {
+        type: 'lookup',
+        localField: 'userId',
+        store: 'usersPrivateInfo',
+        prop: 'usersPrivateInfo'
+      },
+
+      {
+        type: 'lookup',
+        localField: 'userId',
+        store: 'usersContactInfo',
+        prop: 'usersContactInfo'
+      }
+
+    ],
+
+This proves useful when there is a clash. In this case, the `userId` field is used twice: once to pull information from `usersPrivateInfo`  and again to pull information from `usersContactInfo`.
+
 # Naming conventions for stores
 
 It's important to be consistent in naming conventions while creating stores. In this case, code is clearer than a thousand bullet points:
@@ -930,7 +952,7 @@ Remember that all fields marked as `unique` must also be declared as `searchable
 
 # Automatic lookup
 
-When you have a nested store, you would normally check if the _intermediate_ ID in the URL actually resolves to an existing record. It's also often important, when checking for store permissions, to access that record.
+When you have a nested store, you would normally check if the _intermediate_ ID in the URL or in the body actually resolves to an existing record. It's also often important, when checking for store permissions, to access that record.
 
 Imagine that you have this store:
 
@@ -970,9 +992,9 @@ Note that the store has an extra `autoLookup` property, where:
 
 Note that:
 
-* The lookup is _always_ carried out using the looked up store's ID, which needs to correspond to the value in the URL param
+* The lookup is _always_ carried out using the looked up store's ID, which needs to correspond to the value in the URL param or body
 * If lookup failes, the store returns a NotFound error
-* If lookup is successful, the looked up store's data is available under `request.lookup.managerId`. To get the record, JsonRestStore uses the looked up store's `implementFetchOne()` method, so _none_ of the normal hooks are called. Basically, in `request.lookup.managerId` the record is fetched "as is".
+* If lookup is successful, the looked up store's data is available under `request.lookup.managerId`. To get the record, JsonRestStore uses the store's table primitives; so, _none_ of the normal hooks are called. Basically, in `request.lookup.managerId` the record is fetched "as is".
 
 A typical use case is to check, in a PUT for example, that only the logged in manager can change the car record:
 
@@ -1401,7 +1423,17 @@ For example, you could define `queryConditions` as:
 
 The strings `#surname#` and `#name#` are translated into their corresponding values in the query string. The `ifDefined` means that that whole section of the query will be ignored unless `surname` is passed to the query string. The comparison operators, which were `eq` in the generated `queryConditions`, are now much more useful `startsWith`.
 
-3) The immensely useful `each` statement
+3) `if` to filter out chunks with a function
+
+If `ifDefined` is't quite enough, you can use the more powerful `if`
+
+    queryConditions: {
+      { 'if': function( request ) { return !request.isAdmin }, type: 'eq', args: [ 'hidden', false ]},
+    }
+
+The condition will only apply if the statement returns a truly value. (It's up to the application to set `request.admin` beforehand). The scope of the function is the store itself.
+
+4) The immensely useful `each` statement
 
 You will often want to break down a string into words, and then use those individual words in your search criteria. This is what `each` is for. This will be a much more powerful implementation of `searchAll`:
 
@@ -2387,7 +2419,8 @@ The parameters are:
  * `doc`. The entry after fetching
  * `cb( err, doc ) `. The callback, which will need to be passed a `doc` object as its second parameter.
 
-Note that if the method is being called on nested data, `request.nested` will be set to `true`.
+Note that if the method is being called on nested data, `request.nested` will be set to `true`. In this case (and only in this case), if the result of `prepareBeforeSend()` is an empty object (where `Object.keys()` is `0`), then the record is _deleted_ from `_children`.
+
 
 ## Stage methods
 
