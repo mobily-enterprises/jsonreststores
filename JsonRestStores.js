@@ -291,7 +291,7 @@ var Store = declare( Object,  {
       if( self.nested.length === 0 ) return done( null, processedDoc );
 
       // For each nested table...
-      async.each(
+      async.eachSeries(
         self.nested,
         function( n, cb ){
 
@@ -301,8 +301,11 @@ var Store = declare( Object,  {
 
             case 'multiple':
 
+              // The key will depend on the store's table's name or prop
+              var k = n.prop || store.dbLayer.table;
+
               // Not an array: not interested!
-              var a = processedDoc._children && processedDoc._children[ store.storeName ];
+              var a = processedDoc._children && processedDoc._children[ k ];
               if( ! Array.isArray( a ) || ! a.length ) return cb( null );
 
               // For each element in the array...
@@ -318,7 +321,9 @@ var Store = declare( Object,  {
                     cb( null, item );
                   });
                 },
-                function( err ){
+                function( err, resultA ){
+                  //console.log("RESULT A:", resultA );
+                  processedDoc._children[ k ] = resultA.filter( (i) => { return Object.keys( i ).length != 0 } );
 
                   cb( null );
                 }
@@ -328,8 +333,11 @@ var Store = declare( Object,  {
 
             case 'lookup':
 
+              // The key will depend on the localField or `prop`
+              var k = n.prop || n.localField;
+
               // Not an object: not interested!
-              var o =processedDoc._children && processedDoc._children[ n.localField ];
+              var o =processedDoc._children && processedDoc._children[ k ];
               if( typeof o === 'undefined' ) return cb( null );
 
               var requestCopy = self._co( request );
@@ -337,13 +345,15 @@ var Store = declare( Object,  {
 
               store[ funcName ] .call( store, requestCopy, method, o, function( err, o ){
                 if( err ) return cb( err );
+                return cb( null );
 
-                processedDoc._children[ n.localField ] = o;
+                processedDoc._children[ k ] = o;
                 cb( null );
               });
 
             break;
           }// End of switch
+
 
         },
         function( err ){
@@ -367,18 +377,23 @@ var Store = declare( Object,  {
     request.lookup = {};
     async.each(
       Object.keys( self.autoLookup ),
-      function( paramId, cb ){
-        var storeName = self.autoLookup[ paramId ];
+      function( id, cb ){
+        var storeName = self.autoLookup[ id ];
         var store = Store.getStore( storeName );
 
-        // Make a new request object to be passed to the linked store
-        var newRequest = { params: {} }
-        newRequest.params[ store.idProperty ] = request.params[ paramId ];
-        store.implementFetchOne( newRequest, function( err, doc ){
-          if( ! doc ) return done( new self.NotFoundError("Not found: " + paramId ));
-          request.lookup[ paramId ] = doc;
-          done( null );
-        });
+        // The parameter is not in the request, nothing to do.
+        var v = request.params[ id ] || request.body[ id ];
+        if( !v ) return cb( null );
+
+        var q = {};
+        q[ store.idProperty ] = v;
+
+        store.dbLayer.selectByHash( q, function( err, docs, total ){
+          if( err ) return cb( err );
+          if( total == 0 ) return cb( new self.NotFoundError("Not found: " + id ));
+          request.lookup[ id ] = docs[ 0 ];
+          cb( null );
+        })
       },
       function( err ){
         if( err ) return done( err );
@@ -436,7 +451,9 @@ var Store = declare( Object,  {
   // This function is self-contained so that it can be easily checked
   // and debugged.
 
-  _resolveQueryConditions: function( queryConditions, conditionsHash, allowedFields ){
+  _resolveQueryConditions: function( queryConditions, conditionsHash, allowedFields, request ){
+
+    var self = this;
 
     // Copy over conditionsHash and allowedFields so that they don't get polluted
     // since things will possibly get added here
@@ -508,6 +525,13 @@ var Store = declare( Object,  {
         if( ! o.ifNotDefined.split(',').every( function( s ){ return typeof conditionsHash[ s ] == 'undefined'; }) ){
           return false;
         }
+      }
+
+      // Check o.if If the corresponding element in conditionsHash
+      // is not defined, won't go there
+      // Note: ifDefined can be a list of comma-separated fields
+      if( o.if && typeof( o.if ) === 'function' ){
+        if( !o.if.call( self, request ) ) return false;
       }
 
       // If it's `and` or `or`, will go through o.args one after the other
@@ -904,7 +928,7 @@ var Store = declare( Object,  {
       function( field, cb ) {
 
         // The field is not defined
-        if( typeof body[ field ] == 'undefined' ) return cb( null );
+        if( typeof body[ field ] == 'undefined' || body[ field ] == '' ) return cb( null );
 
         self._isFieldUnique( field, body[ field ], id, function( err, isUnique ){
           if( err ) return cb( err );
@@ -987,7 +1011,6 @@ var Store = declare( Object,  {
             request.body = validatedBody;
 
             if( errors.length ) return self._sendError( request, 'post', next, new self.UnprocessableEntityError( { errors: errors } ) );
-
             self.afterValidate( request, 'post', function( err ){
               if( err ) return self._sendError( request, 'post', next, err );
 
@@ -1361,11 +1384,11 @@ var Store = declare( Object,  {
               // Errors in casting: give up, run away
               if( errors.length ) return self._sendError( request, 'getQuery', next, new self.BadRequestError( { errors: errors } ));
 
+              // Actually assigning cast and validated conditions to `options`
+              request.options.conditionsHash = conditionsHash;
+
               self.afterValidate( request, 'getQuery', function( err ){
                 if( err ) return self._sendError( request, 'getQuery', next, err );
-
-                // Actually assigning cast and validated conditions to `options`
-                request.options.conditionsHash = conditionsHash;
 
                 var inn = function( o ) { return require('util').inspect( o, { depth: 10 } ) };
                 //console.log("CONDITION HASH:", inn( conditionsHash ) );
@@ -1376,7 +1399,8 @@ var Store = declare( Object,  {
                 request.options.resolvedQueryConditions = self._resolveQueryConditions(
                   self.queryConditions,
                   request.options.conditionsHash,
-                  self.onlineSearchSchema.structure
+                  self.onlineSearchSchema.structure,
+                  request
                 );
                 //console.log("RESOLVED QUERY CONDITIONS:", inn( request.options.resolvedQueryConditions ) );
 
