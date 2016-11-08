@@ -1370,10 +1370,10 @@ var Store = declare( Object,  {
       self._doAutoLookup( request, 'getQuery', function( err ){
         if( err ) return self._sendError( request, 'post', next, err );
 
-        self._checkPermissionsProxy( request, 'getQuery', function( err, granted ){
+        self._checkPermissionsProxy( request, 'getQuery', function( err, granted, message ){
           if( err ) return self._sendError( request, 'getQuery', next, err );
 
-          if( ! granted ) return self._sendError( request, 'getQuery', next, new self.ForbiddenError() );
+          if( ! granted ) return self._sendError( request, 'getQuery', next, new self.ForbiddenError( message ) );
 
           self.afterCheckPermissions( request, 'getQuery', function( err ){
             if( err ) return self._sendError( request, 'getQuery', next, err );
@@ -1571,7 +1571,7 @@ var Store = declare( Object,  {
           self.extrapolateDocProxy( request, 'delete', fullDoc, function( err, doc) {
             if( err ) return self._sendError( request, 'delete', next, err );
 
-            request.data.fullDoc = doc;
+            request.data.doc = doc;
 
             // Check the permissions
             self._checkPermissionsProxy( request, 'delete', function( err, granted, message ){
