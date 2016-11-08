@@ -339,6 +339,7 @@ var HTTPMixin = declare( Object,  {
 
     var options = {};
 
+
     // Set the 'overwrite' option if the right header
     // is there
     if( mn == 'Put' ){
@@ -374,10 +375,12 @@ var HTTPMixin = declare( Object,  {
 
         }
       }
+
     }
 
     // Set the 'SortBy', 'ranges' and 'conditions' in
     // the options, based on the passed headers
+
     if( mn == 'GetQuery' ){
       options.sort = self._parseSortBy( req );
       options.ranges = self._parseRangeHeaders( req );
@@ -385,8 +388,8 @@ var HTTPMixin = declare( Object,  {
     }
 
     // If the range wasn't provided, it will force it to be the one set by the
-    // store's hard limit, so that range headers will be returned anyway,
-    // otherwise the client has no way to know that they received an incomplete dataset
+    // store's limit, so that range headers will be returned anyway,
+    // otherwise the client
     if( ! options.ranges ) {
       options.ranges = { limit: this.hardLimitOnQueries };
     }
