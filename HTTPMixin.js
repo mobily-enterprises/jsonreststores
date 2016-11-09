@@ -48,16 +48,16 @@ var HTTPMixin = declare( Object,  {
     }
 
     [ 'post', 'put' ].forEach( function( m ){
-      if( rn[ m ] ){
+      if( rn.methods[ m ] ){
         if( store.handleGet ){
-          rn.methods[ m ].outGoingHeaders = rn.methods[ m ].outGoingHeaders || [];
-          var headers = rn.methods[ m ].outgoingingHeaders;
+          rn.methods[ m ].outgoingHeaders = rn.methods[ m ].outgoingHeaders || [];
+          var headers = rn.methods[ m ].outgoingHeaders;
           headers.push( { name: 'Location', doc: "Since this store implements `get`, this header will be set as the URL where the item can be retrieved" });
         }
       }
     })
 
-    if( rn.put ){
+    if( rn.methods.put ){
       rn.methods.put.incomingHeaders =  rn.methods.put.incomingHeaders || [];
       var headers = rn.methods.put.incomingHeaders;
       headers.push( { name: 'If-match', doc: "If set to `*`, sets the `overwrite` option to `true`: the `put` will only ever overwrite an existing record. It will refuse to create a ne record." } )
