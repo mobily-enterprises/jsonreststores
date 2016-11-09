@@ -1768,9 +1768,6 @@ Store.document = function( s ) {
     var scope = this;
     var p;
     var key = path.split('.')[0];
-    var toMark = false;
-
-    if( key.slice( -4 ) == '-doc' ) toMark = true;
 
     // Step 1: find the scope DIRECTLY associated to the value
     // At the end of this, `p` is the right scope.
@@ -1803,7 +1800,7 @@ Store.document = function( s ) {
     str = str.replace( regexp, '' );
 
     // Turn to markdown
-    str = marked( str );
+    //str = marked( str ); // MD DELETED
 
     // Step 3: Resolve {{something}} into the corresponding value in the parent's prototype
 
@@ -1841,7 +1838,6 @@ Store.document = function( s ) {
   if( s.dbLayer ){
     rn.backEnd.collectionName = s.collectionName;
     rn.backEnd.hardLimitOnQueries = s.hardLimitOnQueries;
-    //if( s.indexBase.length ) rn.indexBase = s.indexBase;
   }
 
   // Look for derivative stores
@@ -1888,7 +1884,6 @@ Store.document = function( s ) {
   }
 
   rn.position = !!s.position;
-  //rn['item-doc'] = s[ 'item-doc'] || '';
   if( s[ 'item-doc'] ) rn['item-doc'] = f.call( s, 'item-doc' );
   if( s[ 'schema-doc'] ) rn['schema-doc'] = f.call( s, 'schema-doc' );
 
@@ -1902,13 +1897,6 @@ Store.document = function( s ) {
       }
     }
 
-    rn.schemaExplanations = {};
-    Object.keys( rn.schema ).forEach( function( k ){
-      if( rn.schema[ k ].doc ){
-        rn.schemaExplanations[ k ] = rn.schema[ k ].doc;
-        delete rn.schema[ k ].doc;
-      }
-    })
   } else {
     rn.schema = {};
   }
@@ -1918,202 +1906,145 @@ Store.document = function( s ) {
   // Go through each method, document each one based on the store itself
   rn.methods = {};
 
+  rn.HTTPresponses = {
+    //OK                      : { status: 200, data: s['item-return-doc'], contentType: 'application/json', doc: `where item1, item2 are the full items` },
+    NotImplementedError     : { status: 501, data: s['error-format-doc'], contentType: 'application/json', doc: "The method requested isn't implemented" },
+    UnauthorizedError       : { status: 401, data: s['error-format-doc'], contentType: 'application/json', doc: "Authentication is necessary before accessing this resource" },
+    ForbiddenError          : { status: 403, data: s['error-format-doc'], contentType: 'application/json', doc: "Access to the resource was forbidden" },
+    BadRequestError         : { status: 400, data: s['error-format-doc'], contentType: 'application/json', doc: "Some IDs in the URL are in the wrong format" },
+    ServiceUnavailableError : { status: 503, data: s['error-format-doc'], contentType: 'application/json', doc:"An unexpected error happened"},
+    UnprocessableEntityError: { status: 422, data: s['error-format-doc'], contentType: 'application/json', doc: "One of the parameters in the body has errors" },
+  };
+
+
   [ 'getQuery', 'get', 'put', 'post', 'delete'].forEach( function( method ){
 
     switch( method ){
 
       case 'getQuery':
         if( ! s.handleGetQuery ) break;
-
         var rnm = rn.methods[ method ] = {};
-
         if( s.publicURL ) rnm.url = s.getFullPublicURL().replace( /\/:\w*$/, '');
-
         if( s.onlineSearchSchema ) {
-          // Copy over the search schema, taking out the docs parts
           rnm.onlineSearchSchema = s._co( s.onlineSearchSchema.structure );
-          rnm.onlineSearchSchemaExplanations = {};
-          Object.keys( rnm.onlineSearchSchema ).forEach( function( k ){
-            if( rnm.onlineSearchSchema[ k ].doc ){
-              rnm.onlineSearchSchemaExplanations[ k ] = rnm.onlineSearchSchema[ k ].doc;
-              delete rnm.onlineSearchSchema[ k ] .doc;
-            }
-          })
         }
-
         if( s[ 'search-doc'] ) rnm['search-doc'] = f.call( s, 'search-doc' );
         if( s[ 'sortableFields'] ) rnm.sortableFields = s[ 'sortableFields'];
         if( s[ 'defaultSort'] ) rnm.defaultSort = s[ 'defaultSort'];
         rnm.deleteFetchedRecords = !! s[ 'deleteAfterGetQuery' ];
-
-        rnm.OKresponses = [
-          { name: 'OK', status: 200, data: '[ item1, item2 ]', contentType: 'application/json', doc: `where item1, item2 are the full items` }
-        ];
-
-        rnm.errorResponses = [
-          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], contentType: 'text/html', doc: "The method requested isn't implemented" },
-          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], contentType: 'text/html', doc: "Access to the resource was forbidden" },
-          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], contentType: 'text/html', doc: "Some IDs in the URL are in the wrong format"},
-          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], contentType: 'text/html', doc:"An unexpected error happened"},
-        ];
-
         rnm.permissions = f.call( s, 'permissions-doc.getQuery' );
 
+        rnm.HTTPresponses = {
+          OK: { status: 200, data: '[ ...item... , ...item... ]', contentType: 'application/json', doc: 'The items as an array' },
+          ServiceUnavailableError: rn.HTTPresponses.ServiceUnavailableError,
+        };
+        if( !s[ 'disable-authresponses-doc']){
+          rnm.HTTPresponses.UnauthorizedError = rn.HTTPresponses.UnauthorizedError;
+          rnm.HTTPresponses.ForbiddenError= rn.HTTPresponses.ForbiddenError;
+        }
+        if( s.paramIds.length != 1 ){
+          rnm.HTTPresponses.BadRequestError = rn.HTTPresponses.BadRequestError;
+        }
 
       break;
 
       case 'get':
         if( ! s.handleGet && ( ! s._singleFields || !Object.keys( s._singleFields ).length )  ) break;
-
         var rnm = rn.methods[ method ] = {};
-
         if( s.publicURL ) rnm.url = s.getFullPublicURL();
         if( !s.handleGet ) rnm.onlySingleFields = true;
-
         rnm.permissions = f.call( s, 'permissions-doc.get' );
 
-        rnm.OKresponses = [
-          { name: 'OK', status: 200, data: '{ ...item... }', contentType: 'application/json',doc: 'The item returned' }
-
-        ];
-
-        rnm.errorResponses = [
-          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], contentType: 'text/html', doc: "The method requested isn't implemented" },
-          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], contentType: 'text/html', doc: "Access to the resource was forbidden" },
-          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], contentType: 'text/html', doc: "Some IDs in the URL are in the wrong format"},
-          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], contentType: 'text/html', doc:"An unexpected error happened"},
-        ];
+        rnm.HTTPresponses = {
+          OK: { status: 200, data: '{ ...item... }', contentType: 'application/json', doc: 'The item as stored on the server' },
+          ServiceUnavailableError: rn.HTTPresponses.ServiceUnavailableError,
+        };
+        if( !s[ 'disable-authresponses-doc']){
+          rnm.HTTPresponses.UnauthorizedError = rn.HTTPresponses.UnauthorizedError;
+          rnm.HTTPresponses.ForbiddenError= rn.HTTPresponses.ForbiddenError;
+        }
+        if( s.paramIds.length != 1 ){
+          rnm.HTTPresponses.BadRequestError = rn.HTTPresponses.BadRequestError;
+        }
 
       break;
 
       case 'put':
-
         if( ! s.handlePut && ( !s._singleFields || !Object.keys( s._singleFields ).length ) ) break;
         var rnm = rn.methods[ method ] = {};
         if( ! s.handlePut ) rnm.onlySingleFields = true;
-
         if( s.publicURL ) rnm.url = s.getFullPublicURL();
-
         rnm.permissions = f.call( s, 'permissions-doc.put' );
-
         rnm.echo = !! s.echoAfterPut;
-        if( s.echoAfterPut ){
-          rnm.OKresponses = [
-            { name: 'OK', status: 200, data: '{ ...item... }', contentType: 'application/json', doc: 'the item returned' }
-          ];
-        } else {
-          rnm.OKresponses = [
-            { name: 'OK', status: 200, data: '', contentType: 'text/html' }
-          ];
+
+        var i = s.echoAfterPut ? '{ ...item... }' : '';
+        var d = s.echoAfterPut ? 'The item as stored on the server' : 'Nothing (echo is off)';
+        rnm.HTTPresponses = {
+          OK: { status: 200, data: i, contentType: 'application/json', doc: d },
+          ServiceUnavailableError: rn.HTTPresponses.ServiceUnavailableError,
+        };
+        if( !s[ 'disable-authresponses-doc']){
+          rnm.HTTPresponses.UnauthorizedError = rn.HTTPresponses.UnauthorizedError;
+          rnm.HTTPresponses.ForbiddenError= rn.HTTPresponses.ForbiddenError;
+          rnm.HTTPresponses.UnprocessableEntityError = rn.HTTPresponses.UnprocessableEntityError;
+          rnm.HTTPresponses.BadRequestError = rn.HTTPresponses.BadRequestError;
         }
-
-        rnm.errorResponses = [
-          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], contentType: 'text/html', doc: "The method requested isn't implemented" },
-          { name: 'UnprocessableEntityError', status: 422, data: s['error-format-doc'], contentType: 'text/html', doc: "One of the parameters in the body has errors" },
-          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], contentType: 'text/html', doc: "Access to the resource was forbidden" },
-          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], contentType: 'text/html', doc:"Some IDs in the URL are in the wrong format"},
-          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], contentType: 'text/html', doc:"An unexpected error happened"},
-        ];
-
       break;
 
       case 'post':
         if( ! s.handlePost ) break;
         var rnm = rn.methods[ method ] = {};
-
         if( s.publicURL ) rnm.url = s.getFullPublicURL().replace( /\/:\w*$/, '');
-
         rnm.permissions = f.call( s, 'permissions-doc.post' );
-
         rnm.echo = !! s.echoAfterPost;
-        if( s.echoAfterPost ){
-          rnm.OKresponses = [
-            { name: 'OK', status: 200, data: '{ ...item... }', contentType: 'application/json', doc: 'the item returned' }
-          ];
-        } else {
-          rnm.OKresponses = [
-            { name: 'OK', status: 200, data: '', contentType: 'text/html' }
-          ];
+
+        var i = s.echoAfterPost ? '{ ...item... }' : '';
+        var d = s.echoAfterPost ? 'The item as stored on the server' : 'Nothing (echo is off)';
+        rnm.HTTPresponses = {
+          OK: { status: 200, data: i, contentType: 'application/json', doc: d },
+          ServiceUnavailableError: rn.HTTPresponses.ServiceUnavailableError,
+        };
+        if( !s[ 'disable-authresponses-doc']){
+          rnm.HTTPresponses.UnauthorizedError = rn.HTTPresponses.UnauthorizedError;
+          rnm.HTTPresponses.ForbiddenError= rn.HTTPresponses.ForbiddenError;
+          rnm.HTTPresponses.UnprocessableEntityError = rn.HTTPresponses.UnprocessableEntityError;
         }
-
-        rnm.errorResponses = [
-          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], contentType: 'text/html', doc: "The method requested isn't implemented" },
-          { name: 'UnprocessableEntityError', status: 422, data: s['error-format-doc'], contentType: 'text/html', doc: "One of the parameters in the body has errors" },
-          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], contentType: 'text/html', doc: "Access to the resource was forbidden" },
-          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], contentType: 'text/html', doc: "Some IDs in the URL are in the wrong format"},
-          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], contentType: 'text/html', doc:"An unexpected error happened"},
-        ];
-
+        if( s.paramIds.length != 1 ){
+          rnm.HTTPresponses.BadRequestError = rn.HTTPresponses.BadRequestError;
+        }
       break;
 
       case 'delete':
         if( ! s.handleDelete ) break;
         var rnm = rn.methods[ method ] = {};
-
         if( s.publicURL ) rnm.url = s.getFullPublicURL();
-
         rnm.permissions = f.call( s, 'permissions-doc.delete' );
-
         rnm.echo = !! s.echoAfterDelete;
-        if( s.echoAfterDelete ){
-          rnm.OKresponses = [
-            { name: 'OK', status: 200, data: '{ ...item... }', contentType: 'application/json', doc: 'the item returned' }
-          ];
-        } else {
-          rnm.OKresponses = [
-            { name: 'OK', status: 200, data: '', contentType: 'text/html' }
-          ];
+
+        var i = s.echoAfterDelete ? '{ ...item... }' : '';
+        var d = s.echoAfterDelete ? 'The item as stored on the server before deletion' : 'Nothing (echo is off)';
+        rnm.HTTPresponses = {
+          OK: { status: 200, data: i, contentType: 'application/json', doc: d },
+          ServiceUnavailableError: rn.HTTPresponses.ServiceUnavailableError,
+        };
+        if( !s[ 'disable-authresponses-doc']){
+          rnm.HTTPresponses.UnauthorizedError = rn.HTTPresponses.UnauthorizedError;
+          rnm.HTTPresponses.ForbiddenError= rn.HTTPresponses.ForbiddenError;
         }
-
-        rnm.errorResponses = [
-          { name: 'NotImplementedError', status: 501, data: s['error-format-doc'], contentType: 'text/html', doc: "The method requested isn't implemented" },
-          { name: 'ForbiddenError', status: 403, data: s['error-format-doc'], contentType: 'text/html', doc: "Access to the resource was forbidden" },
-          { name: 'BadRequestError', Status: 400, data: s['error-format-doc'], contentType: 'text/html', doc: "Some IDs in the URL are in the wrong format"},
-          { name: 'ServiceUnavailableError', Status: 503, data: s['error-format-doc'], contentType: 'text/html', doc:"An unexpected error happened"},
-        ];
-
+        if( s.paramIds.length != 1 ){
+          rnm.HTTPresponses.BadRequestError = rn.HTTPresponses.BadRequestError;
+        }
       break;
+
+
 
     }
   })
-
 
   callAll( s, 'changeDoc', rn  );
 
   rn.hasMethods = !! Object.keys( rn.methods ).length;
 
-  // Format with markDown the missing `doc:` fields (in schema, errorResponses and OKresponses)
-
-  // First of all, schemaExplanations which were taken out of "doc" in the schema
-  if( rn.schemaExplanations ){
-    Object.keys( rn.schemaExplanations ).forEach( ( key ) => {
-      rn.schemaExplanations[ key ] = marked( rn.schemaExplanations[ key ] );
-    });
-  }
-
-  if( rn.methods ){
-    // For each method, mark OKresponses and errorResponses
-    Object.keys( rn.methods ).forEach( (methodName) =>{
-      var rnm = rn.methods[ methodName ];
-      rnm.errorResponses.forEach( (response ) => {
-          if( response.doc ) response.doc = marked (response.doc );
-      });
-      rnm.OKresponses.forEach( (response ) => {
-          if( response.doc ) response.doc = marked (response.doc );
-      });
-      if( rnm.incomingHeaders ){
-        rnm.incomingHeaders.forEach( (header ) => {
-          if( header.doc ) header.doc = marked ( header.doc );
-        });
-      }
-      if( rnm.outgoingHeaders ){
-        rnm.outgoingHeaders.forEach( (header ) => {
-          if( header.doc ) header.doc = marked ( header.doc );
-        });
-      }
-
-    });
-  }
 
   return rn;
 };
