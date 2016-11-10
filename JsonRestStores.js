@@ -381,8 +381,8 @@ var Store = declare( Object,  {
         var storeName = self.autoLookup[ id ];
         var store = Store.getStore( storeName );
 
-        // The parameter is not in the request, nothing to do.
-        var v = request.params[ id ] || request.body[ id ];
+        // The parameter is not in the request (as in parameters, body or conditionsHash), nothing to do.
+        var v = request.params[ id ] || request.body[ id ] || ( request.options.conditionsHash && request.options.conditionsHash[ id ] );
         if( !v ) return cb( null );
 
         var q = {};
@@ -1886,6 +1886,8 @@ Store.document = function( s ) {
   rn.position = !!s.position;
   if( s[ 'item-doc'] ) rn['item-doc'] = f.call( s, 'item-doc' );
   if( s[ 'schema-doc'] ) rn['schema-doc'] = f.call( s, 'schema-doc' );
+
+  rn.paramIds = s.paramIds;
 
   if( s.schema ) {
     // Copy over the schema, taking out the docs parts
