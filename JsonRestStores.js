@@ -1311,11 +1311,11 @@ var Store = declare( Object,  {
 
                                         // Manipulate fullDoc: at this point, it's the WHOLE database record,
                                         // whereas I only want returned paramIds AND the piggyField
-                                        if( request.options.field ){
-                                          for( var field in fullDocAfter ){
-                                            if( self.paramIds.indexOf( field ) == -1 && field != request.options.field ) delete fullDocAfter[ field ];
-                                          }
-                                        }
+                                        //if( request.options.field ){
+                                        //  for( var field in fullDocAfter ){
+                                        //    if( self.paramIds.indexOf( field ) == -1 && field != request.options.field ) delete fullDocAfter[ field ];
+                                        //  }
+                                        //}
 
                                         if( request.remote ){
                                           if( self.echoAfterPut ){
@@ -1510,11 +1510,11 @@ var Store = declare( Object,  {
 
                       // Manipulate preparedDoc: at this point, it's the WHOLE database record,
                       // whereas I only want returned paramIds AND the piggyField
-                      if( request.options.field ){
-                        for( var field in preparedDoc ){
-                          if( ! self.paramIds[ field ] && field != request.options.field ) delete preparedDoc[ field ];
-                        }
-                      }
+                      //if( request.options.field ){
+                      //  for( var field in preparedDoc ){
+                      //    if( ! self.paramIds[ field ] && field != request.options.field ) delete preparedDoc[ field ];
+                      //  }
+                      //}
 
                       // Remote request: set headers, and send the doc back
                       if( request.remote ){
