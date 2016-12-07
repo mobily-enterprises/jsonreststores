@@ -105,7 +105,7 @@ exports = module.exports = declare( Object,  {
       };
       if( self.position ){
         layerOptions.positionField = '__position';
-        layerOptions.positionBase = self.paramIds.slice( 0, -1 );
+        layerOptions.positionBase = self.positionBase || self.paramIds.slice( 0, -1 );
       }
 
       layerOptions.table = self.collectionName;
