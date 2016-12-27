@@ -2723,7 +2723,7 @@ Please note that you can easily overload the specific methods in HTTPMixin if yo
 
 ## How `HTTPMixin` sends data via HTTP
 
-HTTPMixin implements `protocolSendHTTP()``, as described earlier in this guide.
+HTTPMixin implements `protocolSendHTTP()`, as described earlier in this guide.
 If the response is empty, it simply uses express' `res.send()`. If there is data, the data is expected to be JSON. So, it uses `res.json(...)` (which will set the corresponding `Content-type` header to `application/json`).
 
 Also:
