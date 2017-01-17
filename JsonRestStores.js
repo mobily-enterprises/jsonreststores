@@ -494,8 +494,12 @@ var Store = declare( Object,  {
 
             // Only one condition returned: get rid of logical operator, add the straight condition
           } else if( newQueryCondition.args.length === 1 ){
-              var actualQueryCondition = newQueryCondition.args[ 0 ];
-              fc.args.push( { type: actualQueryCondition.type, args: actualQueryCondition.args } );
+              var actualQueryCondition = {}
+              var $qc = newQueryCondition.args[ 0 ];
+              var $toPush = {};
+              for( var kk in $qc ) $toPush[ kk ] = $qc[ kk ];
+              fc.args.push( $toPush );
+              //fc.args.push( { type: actualQueryCondition.type, args: actualQueryCondition.args } );
 
             // Multiple queryConditions returned: the logical operator makes sense
             } else {
@@ -538,6 +542,9 @@ var Store = declare( Object,  {
       // and (possibly) add them to fc's args
       if( o.type === 'and' || o.type === 'or'){
 
+        for( var kk in o ) {
+          if( kk != 'args' && kk != 'type' ) { fc[ kk ] = o[ kk ]; }
+        }
         fc.type = o.type;
         fc.args = [];
 
@@ -547,6 +554,9 @@ var Store = declare( Object,  {
       // once for each word found in value (and split with the separator)
       } else if( o.type === 'each') {
 
+        for( var kk in o ) {
+          if( kk != 'args' && kk != 'type' ) fc[ kk ] = o[ kk ];
+        }
         fc.type = o.type;
         fc.args = [];
 
@@ -636,6 +646,7 @@ var Store = declare( Object,  {
       if( res.args.length === 0 ) return {};
       if( res.args.length === 1 ) return res.args[ 0 ];
     }
+    //console.log("RESULT:", require('util').inspect(res, { depth: 10 } ) );
     return res;
   },
 
