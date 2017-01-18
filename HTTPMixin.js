@@ -177,7 +177,7 @@ var HTTPMixin = declare( Object,  {
 
     // If there is a function defined as fileName, use it
     if( typeof( storeAttributes.fileName ) === 'function'){
-      return storeAttributes.fileName.apply( this, [].slice.call( arguments ) );
+      return cb( null, storeAttributes.fileName.apply( this, [].slice.call( arguments ) ) );
     // If not, just use the stock function that mixes the record ID with the fieldName in one string
     } else {
 
