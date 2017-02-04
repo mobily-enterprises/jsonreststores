@@ -1396,7 +1396,19 @@ Keep in mind that the syntax of JsonRestStore's `queryConditions` is identical t
 
 1) Value resolution
 
-In JsonRestStores, when a value is in the format `#something#`, that `something` will be replaced by the value in the corresponding value in the query string when making queries. _If `something` is not passed in the query string, that section of the query is ignored._
+In JsonRestStores, when a value is in the format `#something#`, that `something` will be replaced by the value in the corresponding value in the query string when making queries. _If `something` is not passed in the query string, that section of the query is ignored._.
+
+Also, if the second parameter is a function rather than a string, the query will be based on the value returned by that function. This is especially helpful when making queries using Date:
+
+    queryConditions: {
+      type: 'and',
+      args: [
+        { type: 'ge', args: [ 'expiry', function( a ){ return new Date() }  ] },
+        { type: 'eq', args: [ 'status', 'pending' ] },
+      ]
+    },
+
+Note that the function is passed "a" as a parameter.
 
 2) `ifDefined` to filter out chunks
 
