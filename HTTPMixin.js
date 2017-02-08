@@ -384,6 +384,9 @@ var HTTPMixin = declare( Object,  {
     if( mn == 'GetQuery' ){
       options.sort = self._parseSortBy( req );
       options.ranges = self._parseRangeHeaders( req );
+    }
+
+    if( mn == 'GetQuery' || mn == "Get" ){
       options.conditionsHash = self._parseConditions( req );
     }
 
