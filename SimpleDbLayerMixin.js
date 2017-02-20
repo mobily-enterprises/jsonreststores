@@ -231,7 +231,7 @@ exports = module.exports = declare( Object,  {
     }
 
     // Make the database call
-    self.dbLayer.select( conditions, { ranges: { limit: 1 }, children: true, request: request }, function( err, docs ){
+    self.dbLayer.select( conditions, { ranges: { limit: 1 }, children: true, request: request, fromJsonRestStores: true }, function( err, docs ){
       if( err ) return cb( err );
 
       if( docs.length === 0 ) return cb( null, null );
@@ -253,7 +253,7 @@ exports = module.exports = declare( Object,  {
     // that id
     if( forceId ) record[ self.idProperty ] = forceId;
 
-    self.dbLayer.insert( record, { skipValidation: true, children: true, request: request }, cb );
+    self.dbLayer.insert( record, { skipValidation: true, children: true, request: request, fromJsonRestStores: true }, cb );
   },
 
   implementUpdate: function( request, deleteUnsetFields, cb ){
@@ -277,7 +277,7 @@ exports = module.exports = declare( Object,  {
     updateObject = self._co( request.body );
     delete updateObject._children;
 
-    self.dbLayer.update( conditions, updateObject, { deleteUnsetFields: deleteUnsetFields, multi: false, skipValidation: true, request: request }, function( err, howMany, record ){
+    self.dbLayer.update( conditions, updateObject, { deleteUnsetFields: deleteUnsetFields, multi: false, skipValidation: true, request: request, fromJsonRestStores: true }, function( err, howMany, record ){
       if( err ) return cb( err );
 
       // There is no point in checking howMany: `record` will be null if record wasn't found anyway,
@@ -301,7 +301,7 @@ exports = module.exports = declare( Object,  {
       conditions = { type: 'eq', args: [ self.idProperty, request.params[ self.idProperty ]  ] };
     }
 
-    self.dbLayer.delete( conditions, { multi: false, skipValidation: true, request: request  }, function( err, howMany, record ){
+    self.dbLayer.delete( conditions, { multi: false, skipValidation: true, request: request, fromJsonRestStores: true  }, function( err, howMany, record ){
       if( err ) return cb( err );
 
       // There is no point in checking howMany: `record` will be null if record wasn't found anyway,
