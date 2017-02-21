@@ -980,23 +980,22 @@ var Store = declare( Object,  {
     self._checkParamIds( request, true, function( err ){
       if( err ) return self._sendError( request, 'post', next, err );
 
-      // Protect protected fields
-      if( request.remote){
 
-        // Protected field are not allowed here
-        // (Except the ones marked in `bodyProtected`)
-        for( var field in request.body ){
-          if( self.schema.structure[ field ] && self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined' ){
+      var protectedFields = [];
+      Object.keys( self.schema.structure ).forEach( ( field ) => {
+        if( self.schema.structure[ field ].protected ) protectedFields.push( field );
+      });
 
-
-            // NOTE: Will only delete it if it wasn't marked as "computed" in the request.
-            if( typeof( request.bodyComputed ) === 'object' && request.bodyComputed != null && !request.bodyComputed[ field ] ){
-              delete request.body[ field ];
-            }
-
+      // Protected field are not allowed here
+      // (Except the ones marked in `bodyComputed`)
+      protectedFields.forEach( (field) => {
+        if( typeof( request.body[ field ] ) !== 'undefined' ) {
+          // NOTE: Will only delete it if it wasn't marked as "computed" in the request.
+          if( typeof( request.bodyComputed ) === 'object' && request.bodyComputed != null && !request.bodyComputed[ field ] ){
+            delete request.body[ field ];
           }
         }
-      }
+      });
 
       self._doAutoLookup( request, 'post', function( err ){
         if( err ) return self._sendError( request, 'post', next, err );
@@ -1015,8 +1014,26 @@ var Store = declare( Object,  {
           // Delete _children which mustn't be here regardless
           delete request.body._children;
 
+          // Make up a hash of CHANGED body fields
+          // WHY would protected fields be defined?
+          // BECAUSE prepareBody might have done it, or a field might be bodyComputed (effectively exceptions to early deletion)
+          var changedBodyFields = {};
+          protectedFields.forEach( (field) => {
+            if( typeof( request.body[ field ] ) !== 'undefined' ) {
+              changedBodyFields[ field ] = true;
+            }
+          });
+
           self.schema.validate( request.body, { skipParams: skipParamsObject, skipCast: [ self.idProperty ]  }, function( err, validatedBody, errors ){
             if( err ) return self._sendError( request, 'post', next, err );
+
+            // Validation might have set some defaults on protected fields.
+            // Unless they were marked as changed, DELETE those.
+            protectedFields.forEach( (field) => {
+              if( !changedBodyFields[ field ] ){
+                delete validatedBody[ field ];
+              }
+            });
 
             request.bodyBeforeValidation = request.body;
             request.body = validatedBody;
@@ -1118,23 +1135,21 @@ var Store = declare( Object,  {
     self._checkParamIds( request, false, function( err ){
       if( err ) return self._sendError( request, 'put', next, err );
 
+      var protectedFields = [];
+      Object.keys( self.schema.structure ).forEach( ( field ) => {
+        if( self.schema.structure[ field ].protected ) protectedFields.push( field );
+      });
 
-      // Protect protected fields (only for remote calls)
-      if( request.remote ){ // /* COMMENTED OUT, will facilitate file uploads  */ && !request.options.field ){
-
-        // Protected field are not allowed here
-        // (Except the ones marked in `bodyProtected`)
-        for( var field in request.body ){
-          if( self.schema.structure[ field ] && self.schema.structure[ field ].protected && typeof( request.body[ field ] ) !== 'undefined' ){
-
-            // NOTE: Will only delete it if it wasn't marked as "computed" in the request.
-            if( typeof( request.bodyComputed ) === 'object' && request.bodyComputed != null && !request.bodyComputed[ field ] ){
-              delete request.body[ field ];
-            }
-
+      // Protected field are not allowed here
+      // (Except the ones marked in `bodyComputed`)
+      protectedFields.forEach( (field) => {
+        if( typeof( request.body[ field ] ) !== 'undefined' ) {
+          // NOTE: Will only delete it if it wasn't marked as "computed" in the request.
+          if( typeof( request.bodyComputed ) === 'object' && request.bodyComputed != null && !request.bodyComputed[ field ] ){
+            delete request.body[ field ];
           }
         }
-      }
+      });
 
       self._doAutoLookup( request, 'put', function(  err ){
         if( err ) return self._sendError( request, 'post', next, err );
@@ -1161,8 +1176,26 @@ var Store = declare( Object,  {
             if( errorsInPiggyField.length ) return self._sendError( request, 'put', next, new self.UnprocessableEntityError( { errors: errorsInPiggyField } ) );
           }
 
+          // Make up a hash of CHANGED body fields
+          // WHY would protected fields be defined?
+          // BECAUSE prepareBody might have done it, or a field might be bodyComputed (effectively exceptions to early deletion)
+          var changedBodyFields = {};
+          protectedFields.forEach( (field) => {
+            if( typeof( request.body[ field ] ) !== 'undefined' ) {
+              changedBodyFields[ field ] = true;
+            }
+          });
+
           self.schema.validate( request.body, { onlyObjectValues: !!request.options.field }, function( err, validatedBody, errors ) {
             if( err ) return self._sendError( request, 'put', next, err );
+
+            // Validation might have set some defaults on protected fields.
+            // Unless they were marked as changed, DELETE those.
+            protectedFields.forEach( (field) => {
+              if( !changedBodyFields[ field ] ){
+                delete validatedBody[ field ];
+              }
+            });
 
             request.bodyBeforeValidation = request.body;
             request.body = validatedBody;
@@ -1219,6 +1252,10 @@ var Store = declare( Object,  {
                           // Clean up body from things that are not to be submitted
                           // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
                           self.schema.cleanup( request.body, 'doNotSave' );
+
+                          // Since it's a new record, if there were any defaults from the
+                          // previous validation, assign it.
+                          // But ONLY if the field hasn't already been assigned by another hook before
 
                           self.implementInsert( request, null, function( err, fullDoc ){
                             if( err ) return self._sendError( request, 'put', next, err );
@@ -1292,6 +1329,13 @@ var Store = declare( Object,  {
                             // Clean up body from things that are not to be submitted
                             // if( self.schema ) self.schema.cleanup( body, 'doNotSave' );
                             self.schema.cleanup( request.body, 'doNotSave' );
+
+                            // Since it's a existing record, if body isn't assigned it and existing record has a value,
+                            // assign the existing value
+                            protectedFields.forEach( (field) => {
+                              if( typeof( request.body[ field ] ) == 'undefined' && typeof( request.data.doc[ field ] ) != 'undefined' )
+                                request.body[ field ] = request.data.doc[ field ];
+                            });
 
                             self.implementUpdate( request, !request.options.field, function( err, fullDocAfter ){
                               if( err ) return self._sendError( request, 'put', next, err );
