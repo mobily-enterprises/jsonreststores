@@ -249,7 +249,7 @@ exports = module.exports = declare( Object,  {
     // _children are not inserted
     delete record._children;
 
-    // If generatedId was passed, force the record to
+    // If forcedId was passed, force the record to
     // that id
     if( forceId ) record[ self.idProperty ] = forceId;
 
