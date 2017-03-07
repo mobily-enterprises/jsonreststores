@@ -429,13 +429,13 @@ var HTTPMixin = declare( Object,  {
 
       token = tokens[ i ];
 
-      tokenClean = token.replace( '+', '' ).replace( '-', '' ).replace( ' ', '');
+      tokenClean = token.replace( '+', '' ).replace( '-', '' ).replace( ' ', '').replace( '*', '' );
 
       if( self.sortableFields.indexOf( tokenClean ) === -1 ){
         throw( new Error("Field selected for sorting invalid: " + tokenClean) );
       }
 
-      if( tokens[ i ][ 0 ] === ' ' || tokens[ i ][ 0 ] === '+' || tokens[ i ][ 0 ] === '-' ){
+      if( tokens[ i ][ 0 ] === '*'  || tokens[ i ][ 0 ] === ' ' || tokens[ i ][ 0 ] === '+' || tokens[ i ][ 0 ] === '-' ){
         sortDirection = tokens[ i ][ 0 ] == '-' ? -1 : 1;
         sortField = tokenClean;
         sortObject[ sortField ] = sortDirection;
