@@ -1168,11 +1168,20 @@ var Store = declare( Object,  {
 
           if( request.options.field ){
             var errorsInPiggyField = [];
+
+            // Only the single field is allowed in body (and the paramId fields)
             for( var field in request.body ){
               if( self.paramIds.indexOf( field ) == -1 && field != request.options.field ){
                 errorsInPiggyField.push( { field: field, message: 'Field not allowed because not a paramId nor the single field: ' + field + ' in ' + self.storeName } );
               }
             }
+
+            // If it's a single field, then the single field's value MUST be set in body
+            if( typeof request.body[ request.options.field ] == 'undefined' ){
+              errorsInPiggyField.push( { field: request.options.field, message: 'When putting onto a field, that field must be in the payload' } );
+            }
+
+            // If there was an error, then quit it
             if( errorsInPiggyField.length ) return self._sendError( request, 'put', next, new self.UnprocessableEntityError( { errors: errorsInPiggyField } ) );
           }
 
