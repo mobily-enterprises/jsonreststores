@@ -1694,7 +1694,8 @@ var Store = declare( Object,  {
 
     request.remote = false;
     request.body = {};
-    request.params = options.apiParams || {};
+    if( options.apiParams ) request.params = options.apiParams;
+    request.session = options.session || {};
     request.options = this._co( options );
     request.options.delete = request.options.delete || !!this.deleteAfterGetQuery;
 
@@ -1714,8 +1715,9 @@ var Store = declare( Object,  {
     request.remote = false;
     request.options = options;
     request.body = {};
-    if( request.apiParams ) request.params = request.apiParams;
+    if( options.apiParams ) request.params = options.apiParams;
     else { request.params = {}; request.params[ this.idProperty ] = id; }
+    request.session = options.session || {};
 
     // Actually run the request
     this._makeGet( request, next );
@@ -1738,8 +1740,9 @@ var Store = declare( Object,  {
     request.remote = false;
     request.options = options;
     request.body = this._co( body );
-    if( request.apiParams ) request.params = request.apiParams;
+    if( options.apiParams ) request.params = options.apiParams;
     else { request.params = {}; request.params[ this.idProperty ] = body[ this.idProperty ]; }
+    request.session = options.session || {};
 
     delete request.body._children;
 
@@ -1757,7 +1760,8 @@ var Store = declare( Object,  {
     var request = new Object();
     request.remote = false;
     request.options = options;
-    request.params = request.apiParams || {};
+    request.params = options.apiParams || {};
+    request.session = options.session || {};
     request.body = this._co( body );
 
     delete request.body._children;
@@ -1777,8 +1781,9 @@ var Store = declare( Object,  {
     var request = new Object();
     request.body = {};
     request.options = options;
-    if( request.apiParams ) request.params = request.apiParams;
+    if( options.apiParams ) request.params = options.apiParams;
     else { request.params = {}; request.params[ this.idProperty ] = id; }
+    request.session = options.session || {};
 
     // Actually run the request
     this._makeDelete( request, next );
