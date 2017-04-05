@@ -1743,13 +1743,14 @@ Note that the field is marked as `protected`. This means that the user won't be 
 
 # Stores and collections when using SimpleDbLayerMixin
 
-When using SimpleDbLayerMixin (which is the most common case, unless you are [implementing data manipulation functions on your own](#naked-non-database-stores)), a SimpleDbLayer collection will be created using the following attributes passed to the store:
+When using SimpleDbLayerMixin (which is the most common case, unless you are [implementing data manipulation functions on your own](#naked-non-database-stores)), a SimpleDbLayer collection will be created using the following attributes passed to the db layer:
 
   * `idProperty`: the same as `store.idProperty`
   * `schema`: the same as `store.schema`
   * `nested`: the same as `store.nested`
   * `hardLimitOnQueries`: the same as `store.hardLimitOnQueries`
   * `strictSchemaOnFetch`: the same as `store.strictSchemaOnFetch`
+  * `extraIndexes`: the extra indexes to be created.
 
   * `schemaError`: set as `store.UnprocessableEntityError`, which is the same as `e.UnprocessableEntityError` (from the `allhttperrors` module)
   * `fetchChildrenByDefault`: set to true
