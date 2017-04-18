@@ -7,7 +7,7 @@
     "mongodb"
   ],
   "main": "JsonRestStores.js",
-  "version": "0.3.91",
+  "version": "0.3.92",
   "readmeFilename": "README.md",
   "private": false,
   "repository": {
