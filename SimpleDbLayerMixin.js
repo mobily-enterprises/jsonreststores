@@ -99,6 +99,7 @@ exports = module.exports = declare( Object,  {
         indexBase: self.indexBase,
         hardLimitOnQueries: self.hardLimitOnQueries,
         strictSchemaOnFetch: self.strictSchemaOnFetch,
+        extraIndexes: self.extraIndexes || [],
 
         SchemaError: self.UnprocessableEntityError,
         fetchChildrenByDefault: true,
