@@ -1695,6 +1695,8 @@ var Store = declare( Object,  {
     request.remote = false;
     request.body = {};
     if( options.apiParams ) request.params = options.apiParams;
+    else request.params = {};
+
     request.session = options.session || {};
     request.options = this._co( options );
     request.options.delete = request.options.delete || !!this.deleteAfterGetQuery;

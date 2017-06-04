@@ -42,6 +42,8 @@ exports = module.exports = declare( Object,  {
       throw( new Error("You must define a db driver in constructor class (creating " + self.storeName + ')' ));
     }
 
+  
+
     // If collectionName is not specified, it will deduct it from storeName
     self.collectionName = this.collectionName ? this.collectionName : this.storeName;
   },
