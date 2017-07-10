@@ -42,6 +42,13 @@ marked.setOptions({
 });
 
 
+var _co = function( o ){
+  var newO = {};
+  for( var k in o ) if( o.hasOwnProperty( k ) ) newO[ k ] = o[ k ];
+  return newO;
+};
+
+
 var Store = declare( Object,  {
 
   // ***********************************************************
@@ -270,12 +277,7 @@ var Store = declare( Object,  {
   // Simple function that shallow-copies an object. This should be used
   // every time  prepareBody, extrapolateDocProxy or prepareBeforeSendProxy are
   // overridden (in order to pass a copy of the object)
-  _co: function( o ){
-    var newO = {};
-    for( var k in o ) if( o.hasOwnProperty( k ) ) newO[ k ] = o[ k ];
-    return newO;
-  },
-
+  _co: _co,
 
   // This will call either `extrapolateDoc` or `prepareBeforeSend` (depending on
   // the `funcName` parameter) on the document itself, _and_ on any nested documents
@@ -1835,6 +1837,9 @@ Store.HTTPMixin = HTTPMixin;
 
 Store.document = function( s ) {
 
+  // This MUST be set
+  if( !s.getFullPublicURL ) s.getFullPublicURL = Store.prototype.getFullPublicURL;
+
   function f( path ){
     var scope = this;
     var p;
@@ -1962,7 +1967,7 @@ Store.document = function( s ) {
 
   if( s.schema ) {
     // Copy over the schema, taking out the docs parts
-    rn.schema = s._co( s.schema.structure );
+    rn.schema = _co( s.schema.structure );
     if( s['schema-extras-doc'] ){
       for( var k in s['schema-extras-doc'] ){
         rn.schema[ k ] = s['schema-extras-doc'][ k ];
@@ -2068,6 +2073,7 @@ Store.document = function( s ) {
         if( ! s.handlePost ) break;
         var rnm = rn.methods[ method ] = {};
         if( s.publicURL ) rnm.url = s.getFullPublicURL().replace( /\/:\w*$/, '');
+
         rnm.permissions = f.call( s, 'permissions-doc.post' );
         rnm.echo = !! s.echoAfterPost;
 
@@ -2082,7 +2088,7 @@ Store.document = function( s ) {
           rnm.HTTPresponses.ForbiddenError= rn.HTTPresponses.ForbiddenError;
           rnm.HTTPresponses.UnprocessableEntityError = rn.HTTPresponses.UnprocessableEntityError;
         }
-        if( s.paramIds.length != 1 ){
+        if( s.paramIds && s.paramIds.length != 1 ){
           rnm.HTTPresponses.BadRequestError = rn.HTTPresponses.BadRequestError;
         }
       break;
