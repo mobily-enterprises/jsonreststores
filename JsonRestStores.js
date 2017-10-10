@@ -347,7 +347,6 @@ var Store = declare( Object,  {
 
               store[ funcName ] .call( store, requestCopy, method, o, function( err, o ){
                 if( err ) return cb( err );
-                return cb( null );
 
                 processedDoc._children[ k ] = o;
                 cb( null );
