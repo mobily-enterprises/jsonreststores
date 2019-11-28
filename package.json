@@ -4,37 +4,29 @@
   "keywords": [
     "json",
     "REST",
-    "mongodb"
+    "API"
   ],
-  "main": "JsonRestStores.js",
-  "version": "0.3.97",
+  "main": "jsonreststores.js",
+  "version": "2.0.0",
   "readmeFilename": "README.md",
   "private": false,
   "repository": {
     "type": "git",
-    "url": "git://github.com/mercmobily/JsonRestStores.git"
+    "url": "git://github.com/mercmobily/jsonreststores.git"
   },
   "author": {
     "name": "Tony Mobily"
   },
   "scripts": {
-    "test": "nodeunit test-tingo.js"
+    "test": ""
   },
   "dependencies": {
-    "allhttperrors": "0.3.x",
-    "simpledeclare": "0.3.x",
-    "simpleschema": "0.3.x",
-    "async": "~1.5.2",
-    "multer": "~1.1.x",
-    "deepobject": "~0.3.x",
-    "marked": "~0.3.x"
+    "allhttperrors": "0.4.x",
+    "multer": "^1.1.0",
+    "simpleschema": "2.0.0"
   },
-  "devDependencies": {
-    "nodeunit": "~0.9.1",
-    "simpledblayer-tingo": "0.3.x",
-    "simpledblayer": "0.3.x"
-  },
+  "devDependencies": {},
   "bugs": {
-    "url": "https://github.com/mercmobily/JsonRestStores/issues"
+    "url": "https://github.com/mercmobily/jsonreststores/issues"
   }
 }
