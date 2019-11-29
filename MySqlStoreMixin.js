@@ -7,9 +7,9 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
-var promisify = require('util').promisify
+const promisify = require('util').promisify
 
-var MySqlStoreMixin = (superclass) => class extends superclass {
+const MySqlStoreMixin = (superclass) => class extends superclass {
   constructor () {
     super()
     this.connection = this.constructor.connection
@@ -31,13 +31,13 @@ var MySqlStoreMixin = (superclass) => class extends superclass {
   }
 
   _selectFields (prefix) {
-    var l = []
+    const l = []
 
     // Always return isProperty
     l.push(`${prefix}${this.idProperty}`)
 
     // Return all fields from the schema that are not marked as "silent"
-    for (var k in this.schema.structure) {
+    for (const k in this.schema.structure) {
       if (!this.schema.structure[k].silent) l.push(`${prefix}${k}`)
     }
 
@@ -61,13 +61,11 @@ var MySqlStoreMixin = (superclass) => class extends superclass {
   async implementFetch (request) {
     this._checkVars()
 
-    var fields = this._selectFields(`${this.table}.`)
+    const fields = this._selectFields(`${this.table}.`)
     return (await this.connection.queryP(`SELECT ${fields} FROM ${this.table} WHERE ${this.table}.${this.idProperty} = ?`, request.params[this.idProperty]))[0]
   }
 
-
   _positionFiltersFieldsSame (request) {
-
     // If there is no original request.doc, there is nothing to check
     if (!request.doc) return true
 
@@ -75,9 +73,9 @@ var MySqlStoreMixin = (superclass) => class extends superclass {
     // Note that it's a soft `!=` comparison since the way data is stored on the DB
     // might be different to what is passed. This assumes that DB and JS will have
     // compatible results
-    for (let k of this.positionFilter) {
+    for (const k of this.positionFilter) {
       if (typeof request.body[k] !== 'undefined' && typeof request.doc[k] !== 'undefined') {
-        if (request.body[k] != request.doc[k]) return false
+        if (request.body[k] != request.doc[k]) return false // eslint-disable-line
       }
     }
     return true
@@ -89,35 +87,34 @@ var MySqlStoreMixin = (superclass) => class extends superclass {
   // number       => valid record   => place it before that record, "making space"
   //              => INvalid record => place it last
   async _calculatePosition (request) {
-
     // No position field: exit right away
     if (typeof this.positionField === 'undefined') return
 
     // This function will be called a lot in case the record is to be placed last.
     // It has side-effects (it changes request.body AND it changes the DB)
-    var last = async () => {
+    const last = async () => {
       request.body[this.positionField] = (await this.connection.queryP(`SELECT max(${this.positionField}) as maxPosition FROM ${this.table} WHERE ${wherePositionFilter}`, positionQueryArgs))[0].maxPosition + 1
     }
 
     // Work really hard to find out what the previous position was
     // Note: request.doc might be empty even in case of update in case
     // of usage via API (implementUpdate() with dummy/incomplete request)
-    var prevPosition
+    let prevPosition
     if (request.doc) prevPosition = request.doc[this.positionField]
     else {
-      if (request.params && typeof request.params[this.idProperty] !== 'undefined'){
-        var r = (await this.connection.queryP(`SELECT ${this.positionField} FROM ${this.table} WHERE ${this.table}.${this.idProperty} = ?`, [ request.params[this.idProperty] ]))[0]
+      if (request.params && typeof request.params[this.idProperty] !== 'undefined') {
+        const r = (await this.connection.queryP(`SELECT ${this.positionField} FROM ${this.table} WHERE ${this.table}.${this.idProperty} = ?`, [request.params[this.idProperty]]))[0]
         if (r) prevPosition = r[this.positionField]
       }
     }
 
-    var positionQueryArgs = []
-    var wherePositionFilter
+    const positionQueryArgs = []
+    let wherePositionFilter
     if (this.positionFilter.length === 0) wherePositionFilter = '1 = 1'
     else {
-      let source = request.doc || request.body
-      let r = []
-      for (let k of this.positionFilter) {
+      const source = request.doc || request.body
+      const r = []
+      for (const k of this.positionFilter) {
         if (source[k] === null || typeof source[k] === 'undefined') {
           r.push(`(${k} is NULL)`)
         } else {
@@ -135,13 +132,13 @@ var MySqlStoreMixin = (superclass) => class extends superclass {
     // therefore changing positio fields would be strange.
     // On the other hand, if a field is soft-deleted, it will need to have its
     // place reset since its position makes no sense in the new "group"
-    if (!this._positionFiltersFieldsSame(request) ){
+    if (!this._positionFiltersFieldsSame(request)) {
       await last()
     }
 
     // undefined    => leave it where it was (if it had a position) or place it last (if it didn't have a position)
     else if (typeof request.beforeId === 'undefined') {
-      if (! prevPosition) await last()
+      if (!prevPosition) await last()
       else request.body[this.positionField] = prevPosition
 
     // null         => place it last
@@ -151,11 +148,11 @@ var MySqlStoreMixin = (superclass) => class extends superclass {
     // number       => valid record   => place it before that record, overwriting previous position
     //                 Invalid record => place it last
     } else {
-      var beforeIdItem = (await this.connection.queryP(`SELECT ${this.table}.${this.idProperty}, ${this.positionField} FROM ${this.table} WHERE ${this.table}.${this.idProperty} = ? AND ${wherePositionFilter}`, [ request.beforeId, ...positionQueryArgs ]))[0]
+      const beforeIdItem = (await this.connection.queryP(`SELECT ${this.table}.${this.idProperty}, ${this.positionField} FROM ${this.table} WHERE ${this.table}.${this.idProperty} = ? AND ${wherePositionFilter}`, [request.beforeId, ...positionQueryArgs]))[0]
 
       // number       => valid record   => place it before that record, "making space"
       if (beforeIdItem) {
-        await this.connection.queryP(`UPDATE ${this.table} SET ${this.positionField} = ${this.positionField} + 1 WHERE ${this.positionField} >= ?  AND ${wherePositionFilter} ORDER BY ${this.positionField} DESC`, [ beforeIdItem[this.positionField] || 0, ...positionQueryArgs ])
+        await this.connection.queryP(`UPDATE ${this.table} SET ${this.positionField} = ${this.positionField} + 1 WHERE ${this.positionField} >= ?  AND ${wherePositionFilter} ORDER BY ${this.positionField} DESC`, [beforeIdItem[this.positionField] || 0, ...positionQueryArgs])
         request.body[this.positionField] = beforeIdItem[this.positionField]
       //              => INvalid record => place it last
       } else {
@@ -172,8 +169,8 @@ var MySqlStoreMixin = (superclass) => class extends superclass {
     await this._calculatePosition(request)
 
     // var fields = this._selectFields(`${this.table}.`)
-    let insertResults = await this.connection.queryP(`INSERT INTO ${this.table} SET ?`, request.body)
-    var bogusRequest = { session: request.session, params: { [this.idProperty]: insertResults.insertId } }
+    const insertResults = await this.connection.queryP(`INSERT INTO ${this.table} SET ?`, request.body)
+    const bogusRequest = { session: request.session, params: { [this.idProperty]: insertResults.insertId } }
     return this.implementFetch(bogusRequest)
   }
 
@@ -191,7 +188,7 @@ var MySqlStoreMixin = (superclass) => class extends superclass {
     // var fields = this._selectFields(`${this.table}.`)
     await this.connection.queryP(`UPDATE ${this.table} SET ? WHERE ${this.idProperty} = ?`, [request.body, request.params[this.idProperty]])
 
-    var bogusRequest = { session: request.session, params: { [this.idProperty]: request.params.id } }
+    const bogusRequest = { session: request.session, params: { [this.idProperty]: request.params.id } }
     return this.implementFetch(bogusRequest)
     // return (await this.connection.queryP(`SELECT ${fields} FROM ${this.table} WHERE id = ?`, request.params.id))[0]
   }
@@ -201,30 +198,30 @@ var MySqlStoreMixin = (superclass) => class extends superclass {
   async implementDelete (request) {
     this._checkVars()
 
-    var fields = this._selectFields(`${this.table}.`)
+    const fields = this._selectFields(`${this.table}.`)
 
-    let record = (await this.connection.queryP(`SELECT ${fields} FROM ${this.table} WHERE ${this.idProperty} = ?`, request.params[this.idProperty]))[0]
+    const record = (await this.connection.queryP(`SELECT ${fields} FROM ${this.table} WHERE ${this.idProperty} = ?`, request.params[this.idProperty]))[0]
     await this.connection.queryP(`DELETE FROM ${this.table} WHERE ${this.idProperty} = ?`, [request.params[this.idProperty]])
     return record
   }
 
   defaultConditions (request, args, whereStr, prefix = '') {
-    var ch = request.options.conditionsHash
-    for (let k in ch) {
-      var kEscaped = `\`${k}\``
+    const ch = request.options.conditionsHash
+    for (const k in ch) {
+      const kEscaped = `\`${k}\``
       // Add fields that are in the searchSchema
       if (this.searchSchema.structure[k] && this.schema.structure[k] && String(ch[k]) !== '') {
-        if (ch[k] === null){
+        if (ch[k] === null) {
           whereStr = whereStr + ` AND ${prefix}${kEscaped} IS NULL`
-         } else {
+        } else {
           args.push(ch[k])
           whereStr = whereStr + ` AND ${prefix}${kEscaped} = ?`
         }
       }
     }
 
-    for (let k in request.params) {
-      var kEscaped = `\`${k}\``
+    for (const k in request.params) {
+      const kEscaped = `\`${k}\``
       if (this.schema.structure[k] && String(request.params[k]) !== '') {
         args.push(request.params[k])
         whereStr = whereStr + ` AND ${prefix}${kEscaped} = ?`
@@ -235,11 +232,11 @@ var MySqlStoreMixin = (superclass) => class extends superclass {
   }
 
   makeSortString (sort = {}) {
-    var sortStr = ''
+    let sortStr = ''
     if (Object.keys(sort).length) {
-      let l = []
+      const l = []
       sortStr = ' ORDER BY '
-      for (let k in sort) {
+      for (const k in sort) {
         l.push(k + ' ' + (Number(sort[k]) === 1 ? 'DESC' : 'ASC'))
       }
       sortStr = sortStr + l.join(',')
@@ -256,7 +253,7 @@ var MySqlStoreMixin = (superclass) => class extends superclass {
     request.options.ranges = request.options.ranges || { skip: 0, limit: this.defaultLimitOnQueries }
 
     let args = []
-    var whereStr = ' 1=1'
+    let whereStr = ' 1=1'
 
     // Make up default conditions
     ;({ args, whereStr } = this.defaultConditions(request, args, whereStr))
@@ -266,20 +263,20 @@ var MySqlStoreMixin = (superclass) => class extends superclass {
     args.push(request.options.ranges.limit)
 
     // Set up sort
-    var sortStr = this.makeSortString(request.options.sort)
+    const sortStr = this.makeSortString(request.options.sort)
 
     // Make up list of fields
-    var fields = this._selectFields(`${this.table}.`)
+    const fields = this._selectFields(`${this.table}.`)
 
-    var result = await this.connection.queryP(`SELECT ${fields} FROM ${this.table} WHERE ${whereStr} ${sortStr} LIMIT ?,?`, args)
-    var grandTotal = (await this.connection.queryP(`SELECT COUNT (*) as grandTotal FROM ${this.table} WHERE ${whereStr}`, args))[0].grandTotal
+    const result = await this.connection.queryP(`SELECT ${fields} FROM ${this.table} WHERE ${whereStr} ${sortStr} LIMIT ?,?`, args)
+    const grandTotal = (await this.connection.queryP(`SELECT COUNT (*) as grandTotal FROM ${this.table} WHERE ${whereStr}`, args))[0].grandTotal
 
     return { data: result, grandTotal: grandTotal }
   }
 
   cleanup (record) {
-    var r = Object.assign({}, record)
-    for (var k in r) {
+    const r = Object.assign({}, record)
+    for (const k in r) {
       if (typeof this.schema.structure[k] === 'undefined') delete r[k]
     }
     return r

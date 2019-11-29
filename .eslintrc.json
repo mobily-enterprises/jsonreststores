@@ -1,0 +1,20 @@
+{
+  "extends": ["eslint:recommended", "standard"],
+  "parserOptions": {
+    "ecmaVersion": 2020
+  },
+  "env": {
+    "node": true
+  },
+  "plugins": [
+  ],
+  "rules": {
+    "require-atomic-updates": "off",
+    "brace-style": "off",
+    "new-cap": ["error", { "capIsNewExceptions": [] }],
+    "no-var": "error",
+    "require-jsdoc": "off"
+  },
+  "globals": {
+  }
+}

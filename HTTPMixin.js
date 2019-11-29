@@ -8,12 +8,12 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-var url = require('url')
-var querystring = require('querystring')
-var multer = require('multer')
-var crypto = require('crypto')
+const url = require('url')
+const querystring = require('querystring')
+const multer = require('multer')
+const crypto = require('crypto')
 
-var HTTPMixin = (superclass) => class extends superclass {
+const HTTPMixin = (superclass) => class extends superclass {
   //
   // Which fields are to be considered "upload" ones
   static get uploadFields () { return {} }
@@ -38,11 +38,11 @@ var HTTPMixin = (superclass) => class extends superclass {
   // Sends the information out, for HTTP calls.
   // The medium is request._res, which is set in protocolListenHTTP
   protocolSendHTTP (request, method, data) {
-    var self = this
-    var from
-    var to
-    var responseBody
-    var status = 200
+    const self = this
+    let from
+    let to
+    let responseBody
+    let status = 200
 
     // If it's sending and error, `data` is the actual error. It will be
     // formatted using the object's formatErrorResponse method
@@ -53,7 +53,7 @@ var HTTPMixin = (superclass) => class extends superclass {
     switch (method) {
       case 'post':
         status = 201
-        if (self.handleGet) { request._res.setHeader('Location', request._req.originalUrl + data[ self.idProperty ]) }
+        if (self.handleGet) { request._res.setHeader('Location', request._req.originalUrl + data[self.idProperty]) }
         break
 
       case 'put':
@@ -76,12 +76,12 @@ var HTTPMixin = (superclass) => class extends superclass {
           // Working out from-to/of
           // Note that if no records were returned, the format should be 0-0/X
 
-          // Nice shorter variables
-          var skip = request.options.ranges.skip || 0
-          var total = request.total
+          // Nice shorter constiables
+          const skip = request.options.ranges.skip || 0
+          const total = request.total
 
           // Work out 'of': it will depend on the grandTotal, and that's it. It's an easy one.
-          var of = request.grandTotal
+          const of = request.grandTotal
 
           if (typeof request.grandTotal !== 'undefined') {
             // If nothing was returned, then the format 0-0/grandTotal is honoured
@@ -106,32 +106,32 @@ var HTTPMixin = (superclass) => class extends superclass {
   }
 
   protocolListenHTTP (params) {
-    var url = this.getFullPublicURL()
-    var app = params.app
-    var idName
+    let url = this.getFullPublicURL()
+    const app = params.app
+    let idName
 
-    var self = this
+    const self = this
 
     // Make up the upload middleware to parse the files correctly
     // The middleware will be empty if there are no upload fields
-    var uploadMiddleware
+    let uploadMiddleware
     if (!Object.keys(self.uploadFields).length) {
       uploadMiddleware = function (req, res, next) { next(null) }
     } else {
       // Make up the storage for multer
-      var storage = multer.diskStorage({
+      const storage = multer.diskStorage({
         destination: self._determineUploadDestinaton.bind(self),
         filename: self._determineUploadFileName.bind(self)
       })
 
       // Make up the iptions
-      var options = { storage: storage, fileFilter: self._multerFileFilter.bind(self) }
+      const options = { storage: storage, fileFilter: self._multerFileFilter.bind(self) }
       // Commeted out as it throws generic errors, which become 503s
       if (self.uploadLimits) options.limits = self.uploadLimits
 
       // Create the multer middleware. Errors are wrapped around HTTP error UnprocesableEntity
       // otherwise the server will generate 503 for big uploads
-      var upload = multer(options).any()
+      const upload = multer(options).any()
       uploadMiddleware = function (req, res, next) {
         upload(req, res, function (err) {
           if (err) return self._uploadErrorProcessor(err, next)
@@ -180,13 +180,13 @@ var HTTPMixin = (superclass) => class extends superclass {
 
   // Will make sure only fields marked as file uploads are accepted
   _multerFileFilter (req, file, cb) {
-    var self = this
+    const self = this
 
-    var storeAttributes = self.uploadFields[ file.fieldname ]
+    const storeAttributes = self.uploadFields[file.fieldname]
 
     // If it's not in uploadFields, then end of the story: not allowed
     if (!storeAttributes) {
-      var UnprocessableEntityError = this.constructor.UnprocessableEntityError
+      const UnprocessableEntityError = this.constructor.UnprocessableEntityError
       return cb(new UnprocessableEntityError('Unacceptable upload field: ' + file.fieldname), false)
 
     // There is no filter set by the store itself: allow it.
@@ -200,9 +200,9 @@ var HTTPMixin = (superclass) => class extends superclass {
   }
 
   _determineUploadDestinaton (req, file, cb) {
-    var self = this
+    const self = this
 
-    var storeAttributes = self.uploadFields[ file.fieldname ]
+    const storeAttributes = self.uploadFields[file.fieldname]
 
     if (typeof (storeAttributes.destination) === 'string') {
       return cb(null, storeAttributes.destination)
@@ -212,10 +212,11 @@ var HTTPMixin = (superclass) => class extends superclass {
       return cb(new Error('destination needs to be set as string or function for uploadField entries'))
     }
   }
-  _determineUploadFileName (req, file, cb) {
-    var self = this
 
-    var storeAttributes = self.uploadFields[ file.fieldname ]
+  _determineUploadFileName (req, file, cb) {
+    const self = this
+
+    const storeAttributes = self.uploadFields[file.fieldname]
 
     // If there is a function defined as fileName, use it
     if (typeof (storeAttributes.fileName) === 'function') {
@@ -224,7 +225,7 @@ var HTTPMixin = (superclass) => class extends superclass {
     } else {
       // If the ID is there (that's the case with a PUT), then use it. Otherwise,
       // simply generate a random string
-      var id = req.params[ this.idProperty ]
+      let id = req.params[this.idProperty]
       if (!id) id = crypto.randomBytes(20).toString('hex')
 
       // That's it
@@ -233,18 +234,18 @@ var HTTPMixin = (superclass) => class extends superclass {
   }
 
   _getRequestHandler (method, field) {
-    var self = this
+    const self = this
 
-    if ([ 'get', 'getQuery', 'put', 'post', 'delete', 'getField', 'putField' ].indexOf(method) === -1) {
+    if (['get', 'getQuery', 'put', 'post', 'delete', 'getField', 'putField'].indexOf(method) === -1) {
       throw (new Error('method can be get, getQuery, put, post, delete, fetField, putField'))
     }
 
     return async function (req, res, next) {
-      var request = {}
-      var funcName
+      const request = {}
+      let funcName
 
       try {
-        var _sleep = (ms) => { if (!ms) return; return new Promise(resolve => setTimeout(resolve, ms)) }
+        const _sleep = (ms) => { if (!ms) return; return new Promise(resolve => setTimeout(resolve, ms)) }
 
         Object.setPrototypeOf(req.body, Object.prototype)
 
@@ -260,7 +261,7 @@ var HTTPMixin = (superclass) => class extends superclass {
           request.options = self._initOptionsFromReq(method, req)
         } catch (e) { return next(e) }
 
-        // Sets the request's _req and _res variables, extra fields hooks might want to use
+        // Sets the request's _req and _res constiables, extra fields hooks might want to use
         // request._res will be used as a sending medium by protocolSendHTTP
         request._req = req
         request._res = res
@@ -281,14 +282,14 @@ var HTTPMixin = (superclass) => class extends superclass {
         await _sleep(self.constructor.artificialDelay)
 
         try {
-          var data = await self['_make' + funcName](request)
+          const data = await self['_make' + funcName](request)
           self.protocolSendHTTP(request, method, data)
         } catch (error) {
           // Let the store log the error
           self.logError(request, error)
 
           // See what to do with the error
-          var chainErrors = self.constructor.chainErrors
+          const chainErrors = self.constructor.chainErrors
 
           // Case #1: All errors are to be chained: chain
           if (chainErrors === 'all') return next(error)
@@ -310,17 +311,17 @@ var HTTPMixin = (superclass) => class extends superclass {
   }
 
   _initOptionsFromReq (method, req) {
-    var self = this
+    const self = this
 
-    var options = {}
+    const options = {}
 
     // Set the 'overwrite' option if the right header
     // is there
     if (method === 'put') {
-      if (req.headers[ 'if-match' ] === '*') {
+      if (req.headers['if-match'] === '*') {
         options.overwrite = true
       }
-      if (req.headers[ 'if-none-match' ] === '*') {
+      if (req.headers['if-none-match'] === '*') {
         options.overwrite = false
       }
     }
@@ -334,11 +335,11 @@ var HTTPMixin = (superclass) => class extends superclass {
     // options.putBefore and options.putDefaultPosition
     if (method === 'put' || method === 'post') {
       // positioning can be 'after', 'start' or 'end'
-      if (typeof (req.headers[ 'placement' ]) !== 'undefined') {
-        options.placement = req.headers[ 'placement' ]
+      if (typeof (req.headers.placement) !== 'undefined') {
+        options.placement = req.headers.placement
 
         if (options.placement === 'after') {
-          options.placementAfter = req.headers[ 'placement-after' ]
+          options.placementAfter = req.headers['placement-after']
         }
       }
     }
@@ -374,23 +375,23 @@ var HTTPMixin = (superclass) => class extends superclass {
   }
 
   _parseSortBy (req) {
-    var urlParts = url.parse(req.url, false)
-    var q = urlParts.query || ''
-    var sortObject = {}
-    var sortBy, tokens, token, tokenClean
-    var sortDirection, sortField
+    const urlParts = url.parse(req.url, false)
+    const q = urlParts.query || ''
+    const sortObject = {}
+    let token, tokenClean
+    let sortDirection, sortField
 
-    var self = this
+    const self = this
 
-    var result = querystring.decode(q)
-    sortBy = result.sortBy
+    const result = querystring.decode(q)
+    const sortBy = result.sortBy
 
     // No sort options: return an empty object
     if (!sortBy) return {}
 
-    tokens = sortBy.split(',')
-    for (var i = 0; i < tokens.length; i++) {
-      token = tokens[ i ]
+    const tokens = sortBy.split(',')
+    for (let i = 0; i < tokens.length; i++) {
+      token = tokens[i]
 
       tokenClean = token.replace('+', '').replace('-', '').replace(' ', '').replace('*', '')
 
@@ -398,23 +399,23 @@ var HTTPMixin = (superclass) => class extends superclass {
         throw (new Error('Field selected for sorting invalid: ' + tokenClean))
       }
 
-      if (tokens[ i ][ 0 ] === '*' || tokens[ i ][ 0 ] === ' ' || tokens[ i ][ 0 ] === '+' || tokens[ i ][ 0 ] === '-') {
-        sortDirection = tokens[ i ][ 0 ] === '-' ? -1 : 1
+      if (tokens[i][0] === '*' || tokens[i][0] === ' ' || tokens[i][0] === '+' || tokens[i][0] === '-') {
+        sortDirection = tokens[i][0] === '-' ? -1 : 1
         sortField = tokenClean
-        sortObject[ sortField ] = sortDirection
+        sortObject[sortField] = sortDirection
       }
     }
     return sortObject
   }
 
   _parseRangeHeaders (req) {
-    var tokens
-    var rangeFrom, rangeTo, limit
-    var hr
+    let tokens
+    let rangeFrom, rangeTo, limit
+    let hr
 
     // If there was a range request, then set the range to the
     // query and return the count
-    if ((hr = req.headers['range']) && (tokens = hr.match(/items=([0-9]+)-(([0-9]+)||(Infinity))$/))) {
+    if ((hr = req.headers.range) && (tokens = hr.match(/items=([0-9]+)-(([0-9]+)||(Infinity))$/))) {
       rangeFrom = tokens[1] - 0
       rangeTo = tokens[2] - 0
       if (rangeTo === 'Infinity') {
@@ -436,11 +437,10 @@ var HTTPMixin = (superclass) => class extends superclass {
   }
 
   _parseConditions (req) {
-    var urlParts = url.parse(req.url, false)
-    var q = urlParts.query || ''
-    var result
+    const urlParts = url.parse(req.url, false)
+    const q = urlParts.query || ''
 
-    result = querystring.decode(q)
+    const result = querystring.decode(q)
     delete result.sortBy
 
     return result
@@ -448,8 +448,8 @@ var HTTPMixin = (superclass) => class extends superclass {
 
   // Turns an error into an UnprocessableEntityError
   _uploadErrorProcessor (err, next) {
-    var UnprocessableEntityError = this.constructor.UnprocessableEntityError
-    var ReturnedError = new UnprocessableEntityError(err.message)
+    const UnprocessableEntityError = this.constructor.UnprocessableEntityError
+    const ReturnedError = new UnprocessableEntityError(err.message)
     ReturnedError.OriginalError = err
     return next(ReturnedError)
   }
