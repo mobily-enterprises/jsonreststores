@@ -8,8 +8,6 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-const url = require('url')
-const querystring = require('querystring')
 const multer = require('multer')
 const crypto = require('crypto')
 
@@ -375,16 +373,13 @@ const HTTPMixin = (superclass) => class extends superclass {
   }
 
   _parseSortBy (req) {
-    const urlParts = url.parse(req.url, false)
-    const q = urlParts.query || ''
     const sortObject = {}
     let token, tokenClean
     let sortDirection, sortField
 
     const self = this
 
-    const result = querystring.decode(q)
-    const sortBy = result.sortBy
+    const sortBy = new URL(req.url).searchParams.get('sortBy') || ''
 
     // No sort options: return an empty object
     if (!sortBy) return {}
@@ -416,8 +411,8 @@ const HTTPMixin = (superclass) => class extends superclass {
     // If there was a range request, then set the range to the
     // query and return the count
     if ((hr = req.headers.range) && (tokens = hr.match(/items=([0-9]+)-(([0-9]+)||(Infinity))$/))) {
-      rangeFrom = tokens[1] - 0
-      rangeTo = tokens[2] - 0
+      rangeFrom = Number(tokens[1])
+      rangeTo = Number(tokens[2])
       if (rangeTo === 'Infinity') {
         return ({
           skip: rangeFrom
@@ -437,13 +432,13 @@ const HTTPMixin = (superclass) => class extends superclass {
   }
 
   _parseConditions (req) {
-    const urlParts = url.parse(req.url, false)
-    const q = urlParts.query || ''
+    const searchParams = new URL(req.url).searchParams
+    const r = {}
 
-    const result = querystring.decode(q)
-    delete result.sortBy
-
-    return result
+    for (const [key, value] of searchParams) {
+      if (key !== 'sortBy') r[key] = value
+    }
+    return r
   }
 
   // Turns an error into an UnprocessableEntityError
