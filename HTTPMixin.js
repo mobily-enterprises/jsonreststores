@@ -11,7 +11,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 const multer = require('multer')
 const crypto = require('crypto')
 
-const HTTPMixin = (superclass) => class extends superclass {
+const HTTPMixin = (base) => class extends base {
   //
   // Which fields are to be considered "upload" ones
   static get uploadFields () { return {} }
@@ -103,8 +103,8 @@ const HTTPMixin = (superclass) => class extends superclass {
     request._res.status(status).json(responseBody)
   }
 
-  protocolListenHTTP (params) {
-    let url = this.getFullPublicURL()
+  listen (params) {
+    let url = this.fullPublicURL()
     const app = params.app
     let idName
 
@@ -146,7 +146,7 @@ const HTTPMixin = (superclass) => class extends superclass {
 
     // Public URL must be set
     if (!url) {
-      throw (new Error('protocolListenHTTP must be called on a store with a public URL'))
+      throw (new Error('listen() must be called on a store with a public URL'))
     }
 
     // First, look for the last /some/:word in the URL
@@ -166,6 +166,7 @@ const HTTPMixin = (superclass) => class extends superclass {
     app.get(url + idName, this._getRequestHandler('get'))
     app.get(url, this._getRequestHandler('getQuery'))
     app.put(url + idName, uploadMiddleware, this._getRequestHandler('put'))
+    // console.log('LISTENING:', url + idName)
     app.post(url, uploadMiddleware, this._getRequestHandler('post'))
     app.delete(url + idName, this._getRequestHandler('delete'))
 

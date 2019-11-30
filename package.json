@@ -22,7 +22,8 @@
   },
   "dependencies": {
     "allhttperrors": "0.4.x",
-    "multer": "^1.1.0"
+    "multer": "^1.1.0",
+    "semver": "^6.3.0"
   },
   "devDependencies": {
     "eslint": "^6.3.0",

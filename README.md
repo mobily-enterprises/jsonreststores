@@ -445,7 +445,7 @@ It's important to be consistent in naming conventions while creating stores. In 
         // ...
       });
 
-      publicUrl: '/managers/:id',
+      publicURL: '/managers/:id',
 
       storeName: `managers`
       // ...
@@ -458,7 +458,7 @@ It's important to be consistent in naming conventions while creating stores. In 
         // ...
       });
 
-      publicUrl: '/people/:id',
+      publicURL: '/people/:id',
 
       storeName: `people`
       // ...

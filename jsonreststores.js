@@ -18,17 +18,22 @@ NOTE. When creating a store, you can take the following shortcuts:
 
 const e = require('allhttperrors')
 const path = require('path')
+const fs = require('fs')
+const semver = require('semver')
 
-let registry = {}
+const registryByName = {}
+const registryByVersion = {}
 
 const Store = exports = module.exports = class {
   // ****************************************************
   // *** ATTRIBUTES THAT CAN TO BE DEFINED IN PROTOTYPE
   // ****************************************************
 
-  static get sortableFields () { return [] }
   static get publicURLprefix () { return null }
+  static get version () { return null }
   static get publicURL () { return null } // Not mandatory (if you want your store to be API-only for some reason)
+
+  static get sortableFields () { return [] }
 
   static get schema () { return null }
   static get idProperty () { return null } // If not set, taken as last item of paramIds)
@@ -71,11 +76,58 @@ const Store = exports = module.exports = class {
 
   // Static getter/setter which will actually manipulate the one `registry` variable
 
-  static get registry () { return registry }
-  static set registry (r) { registry = r }
-  static getStore (storeName) { return registry[storeName] }
-  static deleteStore (storeName) { delete registry[storeName] }
-  static getAllStores () { return registry }
+  register () {
+    // const self = this
+    const name = this.storeName
+    const version = this.version
+
+    registryByName[name] = registryByName[name] || {}
+    registryByVersion[version] = registryByVersion[version] || {}
+
+    if (registryByName[name][version]) {
+      throw new Error('Store already register: ' + name + ' version ' + version)
+    }
+
+    registryByName[name][version] = registryByVersion[version][name] = this
+  }
+
+  get stores () {
+    const thisVersion = this.version
+    return new Proxy({}, {
+      get: function (obj, prop) {
+        // Store is not defined: do not return anything
+        if (!registryByName[prop]) return undefined
+
+        // Exact version available: return it
+        if (registryByName[prop][thisVersion]) {
+          return registryByName[prop][thisVersion]
+        }
+
+        // Look for the highest version below the one of the
+        // calling store
+        const rightVersion = Object.keys(registryByName[prop])
+          .filter(el => semver.satisfies(registryByName[prop][el].version, `<${thisVersion}`))
+          .sort((a, b) => semver.compare(a, b))
+          .shift()
+
+        // Return what was found, if was found
+        if (rightVersion) {
+          return registryByName[prop][rightVersion]
+        } else {
+          return undefined
+        }
+      }
+    })
+  }
+
+  static requireStoresFromPath (p, app) {
+    fs.readdirSync(p).forEach((storeFile) => {
+      if (!storeFile.endsWith('.js')) return
+      const store = require(path.join(p, storeFile))
+      if (app) store.listen({ app })
+      console.log('EH', store.stores.jobs)
+    })
+  }
 
   // Methods that MUST be implemented for the store to be functional
 
@@ -191,6 +243,7 @@ const Store = exports = module.exports = class {
     this.defaultSort = Constructor.defaultSort
     this.defaultLimitOnQueries = Constructor.defaultLimitOnQueries
     this.partial = Constructor.partial
+    this.version = Constructor.version
 
     this.beforeIdField = this.constructor.beforeIdField
     this.positionField = this.constructor.positionField
@@ -204,9 +257,14 @@ const Store = exports = module.exports = class {
       throw (new Error('You must define a store name for a store in constructor class'))
     }
 
-    if (typeof (registry[this.storeName]) !== 'undefined') {
-      throw new Error('Cannot instantiate two stores with the same name: ' + this.storeName)
+    // The store name must be defined
+    if (this.version === null) {
+      throw (new Error('You must define a store version in constructor class'))
     }
+
+    // if (typeof (registry[this.storeName]) !== 'undefined') {
+    //   throw new Error('Cannot instantiate two stores with the same name: ' + this.storeName)
+    // }
 
     // The schema must be defined
     if (this.schema == null) {
@@ -260,17 +318,15 @@ const Store = exports = module.exports = class {
       }
     }
 
-    Constructor.registry[this.storeName] = this
+    this.register()
   }
 
   // Simple function that shallow-copies an object.
   _co (o) { return Object.assign({}, o) }
 
-  getFullPublicURL () {
-    // No prefix: return the publicURL straight
-    if (!this.publicURLPrefix) return this.publicURL
-
-    return path.join(this.publicURLPrefix, this.publicURL)
+  fullPublicURL () {
+    if (!this.publicURL) return null
+    return path.join(this.publicURLprefix || '', this.version, this.publicURL)
   }
 
   _lastParamId () {
