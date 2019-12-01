@@ -1,5 +1,11 @@
 ✔ Make sure it works by changing URL in client v2 @done(2019-12-01 07:35)
 ☐ Add hook support to make queries in MySqlMixin
+  ☐ Add default "where" clause depending on conditionsHash
+  ☐ Add hook for sort
+  ☐ Make sure sort and ranges have default stuff
+  ☐ Make buildQuery function that will build a query with the right select, join, sort, where/args
+  ☐ Add hooks before/after running queryMaker calls, before/after running SQL queries
+  ☐ Make sure stores can make up queries from scratch (but running hooks by hand)
 ☐ Port jobs queries to new mixin, make sure it still works
 ☐ Work on the rest of the JsonRestStores TODO for Compas
   ☐ Allow validation hook to ADD errors to the errors array
