@@ -1,0 +1,10 @@
+✔ Make sure it works by changing URL in client v2 @done(2019-12-01 07:35)
+☐ Add hook support to make queries in MySqlMixin
+☐ Port jobs queries to new mixin, make sure it still works
+☐ Work on the rest of the JsonRestStores TODO for Compas
+  ☐ Allow validation hook to ADD errors to the errors array
+  ☐ Add a 'request.fullBody' field which, in case of singleFields, will be populated by request.doc (This is to simplify code in hooks, which right now need to deal with exceptions for single field writes)
+  ☐ Multer: Use async functions, maybe using async multer
+  ☐ Multer: ability to assign names based on record IDs
+☐ SimpleSchema: have an async version; or, maybe turn it into a 100% async module
+☐ SimpleSchema: final check on 'canBeNull', etc.
