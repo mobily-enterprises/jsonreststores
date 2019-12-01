@@ -244,6 +244,41 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     return sortStr
   }
 
+  async queryMaker (op, param, request) {
+    switch (op) {
+      case 'get':
+        return
+
+      case 'query':
+
+        switch (param) {
+
+          case 'selectAndArgs':
+            return {
+              select: '*',
+              args: []
+            }
+
+          case 'join':
+            return []
+
+          case 'where':
+
+            return []
+        }
+        return
+
+      case 'update':
+        return
+
+      case 'insert':
+        return
+
+      case 'delete':
+        return
+    }
+  }
+
   // Input: request.params, request.options.[conditionsHash,ranges.[skip,limit],sort]
   // Output: { dataArray, total, grandTotal }
   async implementQuery (request) {
@@ -252,7 +287,12 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     request.options.sort = request.options.sort || this.defaultSort || {}
     request.options.ranges = request.options.ranges || { skip: 0, limit: this.defaultLimitOnQueries }
 
-    let args = []
+
+    // Get different select and different args if available
+    const { select, args } = await this.queryMaker('query', 'selectAndArgs', request)
+    const join = await this.queryMaker('query', 'join', request)
+    const where = await this.queryMaker('query', 'where', request)
+
     let whereStr = ' 1=1'
 
     // Make up default conditions
