@@ -10,6 +10,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 const multer = require('multer')
 const crypto = require('crypto')
+const URL = require('url').URL
 
 const HTTPMixin = (base) => class extends base {
   //
@@ -166,7 +167,6 @@ const HTTPMixin = (base) => class extends base {
     app.get(url + idName, this._getRequestHandler('get'))
     app.get(url, this._getRequestHandler('getQuery'))
     app.put(url + idName, uploadMiddleware, this._getRequestHandler('put'))
-    // console.log('LISTENING:', url + idName)
     app.post(url, uploadMiddleware, this._getRequestHandler('post'))
     app.delete(url + idName, this._getRequestHandler('delete'))
 
@@ -380,7 +380,7 @@ const HTTPMixin = (base) => class extends base {
 
     const self = this
 
-    const sortBy = new URL(req.url).searchParams.get('sortBy') || ''
+    const sortBy = new URL(req.url, 'http://localhost/').searchParams.get('sortBy') || ''
 
     // No sort options: return an empty object
     if (!sortBy) return {}
@@ -433,7 +433,7 @@ const HTTPMixin = (base) => class extends base {
   }
 
   _parseConditions (req) {
-    const searchParams = new URL(req.url).searchParams
+    const searchParams = new URL(req.url, 'http://localhost/').searchParams
     const r = {}
 
     for (const [key, value] of searchParams) {
