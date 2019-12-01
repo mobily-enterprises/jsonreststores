@@ -125,7 +125,6 @@ const Store = exports = module.exports = class {
       if (!storeFile.endsWith('.js')) return
       const store = require(path.join(p, storeFile))
       if (app) store.listen({ app })
-      console.log('EH', store.stores.jobs)
     })
   }
 
@@ -326,7 +325,7 @@ const Store = exports = module.exports = class {
 
   fullPublicURL () {
     if (!this.publicURL) return null
-    return path.join(this.publicURLprefix || '', this.version, this.publicURL)
+    return path.join('/', this.publicURLprefix || '', this.version, this.publicURL)
   }
 
   _lastParamId () {
