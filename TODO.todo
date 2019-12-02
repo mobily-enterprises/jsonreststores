@@ -1,12 +1,14 @@
 ✔ Make sure it works by changing URL in client v2 @done(2019-12-01 07:35)
 ☐ Add hook support to make queries in MySqlMixin
-  ☐ Add default "where" clause depending on conditionsHash
-  ☐ Add hook for sort
-  ☐ Make sure sort and ranges have default stuff
-  ☐ Make buildQuery function that will build a query with the right select, join, sort, where/args
+  ✔ Add default "where" clause depending on conditionsHash @done(2019-12-02 06:15)
+  ✔ Add hook for sort @done(2019-12-02 06:22)
+  ✔ Make buildQuery function that will build a query with the right select, join, sort, where/args @done(2019-12-02 06:50)
   ☐ Add hooks before/after running queryMaker calls, before/after running SQL queries
-  ☐ Make sure stores can make up queries from scratch (but running hooks by hand)
-☐ Port jobs queries to new mixin, make sure it still works
+  ☐ Make sure sort and ranges have default stuff in JsonRestStores
+✔ Port jobs queries to new mixin, make sure it still works @done(2019-12-02 22:35)
+☐ Also add hooks for delete, update, put, post, get
+☐
+
 ☐ Work on the rest of the JsonRestStores TODO for Compas
   ☐ Allow validation hook to ADD errors to the errors array
   ☐ Add a 'request.fullBody' field which, in case of singleFields, will be populated by request.doc (This is to simplify code in hooks, which right now need to deal with exceptions for single field writes)

@@ -62,7 +62,7 @@ const Store = exports = module.exports = class {
   static get defaultSort () { return null } // If set, it will be applied to all getQuery calls
   static get defaultLimitOnQueries () { return 50 } //  Max number of records returned by default
 
-  static get partial () { return false } //  A write will only affects the passed fields, not the whole record
+  static get partial () { return true } //  A write will only affects the passed fields, not the whole record
 
   // Default error objects which might be used by this module.
   static get BadRequestError () { return e.BadRequestError }

@@ -205,77 +205,107 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     return record
   }
 
-  defaultConditions (request, args, whereStr, prefix = '') {
+  async _optionsConditionsAndArgs (request) {
+    const conditions = []
+    const args = []
+
     const ch = request.options.conditionsHash
+
     for (const k in ch) {
-      const kEscaped = `\`${k}\``
+      const kEsc = `\`${k}\``
       // Add fields that are in the searchSchema
       if (this.searchSchema.structure[k] && this.schema.structure[k] && String(ch[k]) !== '') {
         if (ch[k] === null) {
-          whereStr = whereStr + ` AND ${prefix}${kEscaped} IS NULL`
+          conditions.push(`${this.table}.${kEsc} IS NULL`)
         } else {
+          conditions.push(`${this.table}.${kEsc} = ?`)
           args.push(ch[k])
-          whereStr = whereStr + ` AND ${prefix}${kEscaped} = ?`
         }
       }
     }
 
     for (const k in request.params) {
-      const kEscaped = `\`${k}\``
+      const kEsc = `\`${k}\``
       if (this.schema.structure[k] && String(request.params[k]) !== '') {
+        conditions.push(`${this.table}.${kEsc} = ?`)
         args.push(request.params[k])
-        whereStr = whereStr + ` AND ${prefix}${kEscaped} = ?`
       }
     }
-
-    return { args, whereStr }
+    return { conditions, args }
   }
 
-  makeSortString (sort = {}) {
-    let sortStr = ''
-    if (Object.keys(sort).length) {
-      const l = []
-      sortStr = ' ORDER BY '
-      for (const k in sort) {
-        l.push(k + ' ' + (Number(sort[k]) === 1 ? 'DESC' : 'ASC'))
+  _optionsSort (request) {
+    const optionsSort = request.options.sort
+    const sort = []
+    if (Object.keys(optionsSort).length) {
+      for (const k in optionsSort) {
+        sort.push(`${this.table}.${k} ${Number(optionsSort[k]) === 1 ? 'DESC' : 'ASC'}`)
       }
-      sortStr = sortStr + l.join(',')
     }
-    return sortStr
+    return sort
   }
 
   async queryMaker (op, param, request) {
     switch (op) {
+      //
+      // GET
       case 'get':
-        return
-
-      case 'query':
-
         switch (param) {
-
-          case 'selectAndArgs':
+          case 'fieldsAndJoins':
             return {
-              select: '*',
-              args: []
+              fields: [`${this.table}.*`],
+              joins: []
             }
-
-          case 'join':
-            return []
-
-          case 'where':
-
-            return []
         }
-        return
+        break
 
+      // QUERY
+      case 'query':
+        switch (param) {
+          case 'fieldsAndJoins':
+            return {
+              fields: [`${this.table}.*`],
+              joins: []
+            }
+          case 'conditionsAndArgs':
+            return this._optionsConditionsAndArgs(request)
+        }
+        break
+
+      // UPDATE
       case 'update':
         return
 
+      // INSERT
       case 'insert':
         return
 
+      // DELETE
       case 'delete':
         return
+
+      // DELETE
+      case 'sort':
+        return this._optionsSort(request)
+    }
+  }
+
+  buildQuery (fields, joins, conditions, args, sort) {
+    const selectString = `SELECT ${fields.join(',')} FROM ${this.table}`
+    const joinString = joins.join(' ')
+    const whereString = conditions.length
+      ? `WHERE ${conditions.join(' AND ')}`
+      : ''
+
+    const sortString = sort.length
+      ? `ORDER BY ${sort.join(',')}`
+      : ''
+
+    const rangeString = 'LIMIT ?, ?'
+
+    return {
+      fullQuery: `${selectString} ${joinString} ${whereString} ${sortString} ${rangeString}`,
+      countQuery: `SELECT count(*) AS grandTotal  FROM ${this.table} ${joinString} ${whereString} ${sortString}`
     }
   }
 
@@ -284,32 +314,22 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
   async implementQuery (request) {
     this._checkVars()
 
+    // TODO: move this to JsonRestStores
     request.options.sort = request.options.sort || this.defaultSort || {}
     request.options.ranges = request.options.ranges || { skip: 0, limit: this.defaultLimitOnQueries }
 
-
     // Get different select and different args if available
-    const { select, args } = await this.queryMaker('query', 'selectAndArgs', request)
-    const join = await this.queryMaker('query', 'join', request)
-    const where = await this.queryMaker('query', 'where', request)
+    const { fields, joins } = await this.queryMaker('query', 'fieldsAndJoins', request)
+    const { conditions, args } = await this.queryMaker('query', 'conditionsAndArgs', request)
+    const sort = await this.queryMaker('sort', null, request)
 
-    let whereStr = ' 1=1'
+    const { fullQuery, countQuery } = await this.buildQuery(fields, joins, conditions, args, sort)
 
-    // Make up default conditions
-    ;({ args, whereStr } = this.defaultConditions(request, args, whereStr))
+    // Add skip and limit to args
+    const argsWithLimits = [...args, request.options.ranges.skip, request.options.ranges.limit]
 
-    // Add ranges
-    args.push(request.options.ranges.skip)
-    args.push(request.options.ranges.limit)
-
-    // Set up sort
-    const sortStr = this.makeSortString(request.options.sort)
-
-    // Make up list of fields
-    const fields = this._selectFields(`${this.table}.`)
-
-    const result = await this.connection.queryP(`SELECT ${fields} FROM ${this.table} WHERE ${whereStr} ${sortStr} LIMIT ?,?`, args)
-    const grandTotal = (await this.connection.queryP(`SELECT COUNT (*) as grandTotal FROM ${this.table} WHERE ${whereStr}`, args))[0].grandTotal
+    const result = await this.connection.queryP(fullQuery, argsWithLimits)
+    const grandTotal = (await this.connection.queryP(countQuery, args))[0].grandTotal
 
     return { data: result, grandTotal: grandTotal }
   }
