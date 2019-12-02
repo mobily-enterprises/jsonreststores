@@ -1,18 +1,24 @@
-✔ Make sure it works by changing URL in client v2 @done(2019-12-01 07:35)
-☐ Add hook support to make queries in MySqlMixin
-  ✔ Add default "where" clause depending on conditionsHash @done(2019-12-02 06:15)
-  ✔ Add hook for sort @done(2019-12-02 06:22)
-  ✔ Make buildQuery function that will build a query with the right select, join, sort, where/args @done(2019-12-02 06:50)
-  ☐ Add hooks before/after running queryMaker calls, before/after running SQL queries
-  ☐ Make sure sort and ranges have default stuff in JsonRestStores
-✔ Port jobs queries to new mixin, make sure it still works @done(2019-12-02 22:35)
-☐ Also add hooks for delete, update, put, post, get
-☐
 
-☐ Work on the rest of the JsonRestStores TODO for Compas
-  ☐ Allow validation hook to ADD errors to the errors array
-  ☐ Add a 'request.fullBody' field which, in case of singleFields, will be populated by request.doc (This is to simplify code in hooks, which right now need to deal with exceptions for single field writes)
+✔ Make sure it works by changing URL in client v2 @done(2019-12-01 07:35)
+✔ Add hook support to make queries in MySqlMixin @done(2019-12-02 23:26)
+✔ Add default "where" clause depending on conditionsHash @done(2019-12-02 06:15)
+✔ Add hook for sort @done(2019-12-02 06:22)
+✔ Make buildQuery function that will build a query with the right select, join, sort, where/args @done(2019-12-02 06:50)
+✔ Port jobs queries to new mixin, make sure it still works @done(2019-12-02 23:26)
+☐ Make sure sort and ranges have default stuff in JsonRestStores
+☐ Also add queryMaker hooks for get, delete, update, put, post (if they make sense)
+☐ Move query code out in lib, keeping DB stuff separate
+☐ Add hooks before/after running queryMaker calls, before/after running SQL queries
+☐ Improve Jobs 2.0, so that anything that is about database is handled by DB hooks without using afterDbOperation
+☐ Allow validation hook to ADD errors to the errors array
+☐ Add a 'request.fullBody' field which, in case of singleFields, will be populated by request.doc (This is to simplify code in hooks, which right now need to deal with exceptions for single field writes)
+☐ Improve Jobs 2.0 to use new validation hooks
+☐ Add JobsMain's functionality to Jobs
+☐ Add others (JobsTimes, etc.) to Jobs
+
+AFTER PORT:
+☐ SimpleSchema: final check on 'canBeNull', etc.
+☐ SimpleSchema: have an async version; or, maybe turn it into a 100% async module
+☐ Add store that allows file upload
   ☐ Multer: Use async functions, maybe using async multer
   ☐ Multer: ability to assign names based on record IDs
-☐ SimpleSchema: have an async version; or, maybe turn it into a 100% async module
-☐ SimpleSchema: final check on 'canBeNull', etc.
