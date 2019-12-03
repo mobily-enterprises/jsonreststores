@@ -560,6 +560,11 @@ const Store = exports = module.exports = class {
     // Check that the method is implemented
     if (!this.handleGetQuery && request.remote) throw new Store.NotImplementedError()
 
+    // Sanitise request.options.sort and request.options.ranges,
+    // which are set to options or store-wide defaults
+    request.options.sort = request.options.sort || this.defaultSort || {}
+    request.options.ranges = request.options.ranges || { skip: 0, limit: this.defaultLimitOnQueries }
+
     // Check the IDs
     await this.beforeCheckParamIds(request, 'getQquery')
     await this._checkParamIds(request, true)

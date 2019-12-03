@@ -56,15 +56,6 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     return super.beforeValidate(request, method)
   }
 
-  // Input: request.params
-  // Output: an object
-  async implementFetch (request) {
-    this._checkVars()
-
-    const fields = this._selectFields(`${this.table}.`)
-    return (await this.connection.queryP(`SELECT ${fields} FROM ${this.table} WHERE ${this.table}.${this.idProperty} = ?`, request.params[this.idProperty]))[0]
-  }
-
   _positionFiltersFieldsSame (request) {
     // If there is no original request.doc, there is nothing to check
     if (!request.doc) return true
@@ -185,12 +176,10 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
 
     await this._calculatePosition(request)
 
-    // var fields = this._selectFields(`${this.table}.`)
     await this.connection.queryP(`UPDATE ${this.table} SET ? WHERE ${this.idProperty} = ?`, [request.body, request.params[this.idProperty]])
 
     const bogusRequest = { session: request.session, params: { [this.idProperty]: request.params.id } }
     return this.implementFetch(bogusRequest)
-    // return (await this.connection.queryP(`SELECT ${fields} FROM ${this.table} WHERE id = ?`, request.params.id))[0]
   }
 
   // Input: request.params
@@ -249,12 +238,17 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     switch (op) {
       //
       // GET
-      case 'get':
+      case 'fetch':
         switch (param) {
           case 'fieldsAndJoins':
             return {
               fields: [`${this.table}.*`],
               joins: []
+            }
+          case 'conditionsAndArgs':
+            return {
+              conditions: [],
+              args: []
             }
         }
         break
@@ -290,7 +284,7 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     }
   }
 
-  buildQuery (fields, joins, conditions, args, sort) {
+  buildQuery (fields, joins, conditions, sort) {
     const selectString = `SELECT ${fields.join(',')} FROM ${this.table}`
     const joinString = joins.join(' ')
     const whereString = conditions.length
@@ -314,16 +308,12 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
   async implementQuery (request) {
     this._checkVars()
 
-    // TODO: move this to JsonRestStores
-    request.options.sort = request.options.sort || this.defaultSort || {}
-    request.options.ranges = request.options.ranges || { skip: 0, limit: this.defaultLimitOnQueries }
-
     // Get different select and different args if available
     const { fields, joins } = await this.queryMaker('query', 'fieldsAndJoins', request)
     const { conditions, args } = await this.queryMaker('query', 'conditionsAndArgs', request)
     const sort = await this.queryMaker('sort', null, request)
 
-    const { fullQuery, countQuery } = await this.buildQuery(fields, joins, conditions, args, sort)
+    const { fullQuery, countQuery } = await this.buildQuery(fields, joins, conditions, sort)
 
     // Add skip and limit to args
     const argsWithLimits = [...args, request.options.ranges.skip, request.options.ranges.limit]
@@ -332,6 +322,45 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     const grandTotal = (await this.connection.queryP(countQuery, args))[0].grandTotal
 
     return { data: result, grandTotal: grandTotal }
+  }
+
+  buildFetch (fields, joins, conditions) {
+    const selectString = `SELECT ${fields.join(',')} FROM ${this.table}`
+    const joinString = joins.join(' ')
+
+    // Force the ID asa condition
+    conditions = conditions.concat()
+
+    const whereString = conditions.length
+      ? `WHERE ${conditions.join(' AND ')}`
+      : ''
+
+    return `${selectString} ${joinString} ${whereString} `
+  }
+
+  // Input: request.params (with key this.idProperty set)
+  // Output: an object
+  async implementFetch (request) {
+    this._checkVars()
+
+    const id = request.params[this.idProperty]
+    if (!id) throw new Error('request.params needs to contain idProperty for implementFetch')
+
+    // Get different select and different args if available
+    const { fields, joins } = await this.queryMaker('fetch', 'fieldsAndJoins', request)
+    const { conditions, args } = await this.queryMaker('fetch', 'conditionsAndArgs', request)
+
+    // MANDATORY: idproperty condition and argument
+    conditions.push(`${this.table}.${this.idProperty} = ?`)
+    args.push(id)
+
+    const query = await this.buildFetch(fields, joins, conditions)
+
+    // Get the result
+    const result = await this.connection.queryP(query, args)
+
+    // Return the first result
+    return result[0]
   }
 
   cleanup (record) {
