@@ -234,6 +234,10 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     return sort
   }
 
+  async transformResult (request, op, fromOp, data) {
+    return null
+  }
+
   async queryMaker (op, param, request) {
     switch (op) {
       //
@@ -285,7 +289,9 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
   }
 
   buildQuery (fields, joins, conditions, sort) {
-    const selectString = `SELECT ${fields.join(',')} FROM ${this.table}`
+    // fields = fields.map(field => `\`${field}\``)
+
+    const selectString = `SELECT ${fields.join(',')} FROM \`${this.table}\``
     const joinString = joins.join(' ')
     const whereString = conditions.length
       ? `WHERE ${conditions.join(' AND ')}`
@@ -318,14 +324,34 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     // Add skip and limit to args
     const argsWithLimits = [...args, request.options.ranges.skip, request.options.ranges.limit]
 
-    const result = await this.connection.queryP(fullQuery, argsWithLimits)
+    let result = await this.connection.queryP(fullQuery, argsWithLimits)
     const grandTotal = (await this.connection.queryP(countQuery, args))[0].grandTotal
+
+    // Transform the result it if necessary
+    let transformed
+    if (result.length) {
+      transformed = await this.transformResult(request, 'query', 'query', result)
+    }
+    if (transformed) result = transformed
 
     return { data: result, grandTotal: grandTotal }
   }
 
+  _paramsConditions (request) {
+    const paramsConditions = []
+    const paramsArgs = []
+
+    for (const param in request.params) {
+      paramsConditions.push(`\`${this.table}\`.\`${param}\` = ?`)
+      paramsArgs.push(request.params[param])
+    }
+
+    return { paramsConditions, paramsArgs }
+  }
+
   buildFetch (fields, joins, conditions) {
-    const selectString = `SELECT ${fields.join(',')} FROM ${this.table}`
+    // fields = fields.map(field => `\`${field}\``)
+    const selectString = `SELECT ${fields.join(',')} FROM \`${this.table}\``
     const joinString = joins.join(' ')
 
     // Force the ID asa condition
@@ -348,19 +374,28 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
 
     // Get different select and different args if available
     const { fields, joins } = await this.queryMaker('fetch', 'fieldsAndJoins', request)
-    const { conditions, args } = await this.queryMaker('fetch', 'conditionsAndArgs', request)
+    let { conditions, args } = await this.queryMaker('fetch', 'conditionsAndArgs', request)
 
-    // MANDATORY: idproperty condition and argument
-    conditions.push(`${this.table}.${this.idProperty} = ?`)
-    args.push(id)
+    const { paramsConditions, paramsArgs } = this._paramsConditions(request)
+
+    // Add mandatory conditions dictated by the passed params
+    conditions = conditions.concat(paramsConditions)
+    args = args.concat(paramsArgs)
 
     const query = await this.buildFetch(fields, joins, conditions)
 
     // Get the result
     const result = await this.connection.queryP(query, args)
 
-    // Return the first result
-    return result[0]
+    // Get the record
+    let record = result[0]
+
+    // Transform the record if necessary
+    let transformed
+    if (record) transformed = await this.transformResult(request, 'fetch', 'fetch', record)
+    if (transformed) record = transformed
+
+    return record
   }
 
   cleanup (record) {
