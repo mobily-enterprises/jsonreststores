@@ -152,16 +152,34 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     }
   }
 
-  // Input: request.body, request.options.[placement,placementAfter]
+  implementInsertSql (joins) {
+    const updateString = 'INSERT INTO'
+    return `${updateString} \`${this.table}\` SET ?`
+  }
+
+  // Input:
+  // - request.body
+  // - request.options.[placement,placementAfter] (for record placement)
   // Output: an object (saved record)
   async implementInsert (request) {
     this._checkVars()
 
+    // This uses request.options.[placement,placementAfter]
     await this._calculatePosition(request)
 
-    // var fields = this._selectFields(`${this.table}.`)
-    const insertResults = await this.connection.queryP(`INSERT INTO ${this.table} SET ?`, request.body)
-    const bogusRequest = { session: request.session, params: { [this.idProperty]: insertResults.insertId } }
+    const insertObject = await this.queryBuilder(request, 'insert', 'insertObject')
+
+    // Run the query
+    const query = await this.implementInsertSql()
+
+    // Perform the update
+    // The ID will be in insertResult.insertId
+    const insertResult = await this.connection.queryP(query, [insertObject])
+
+    // Make up a bogus request (just with request.params using insertId)
+    // to re-fetch the record and return it
+    // NOTE: request.params is all implementFetch uses
+    const bogusRequest = { options: {}, session: request.session, params: { [this.idProperty]: insertResult.insertId } }
     return this.implementFetch(bogusRequest)
   }
 
@@ -177,8 +195,7 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
   // Input:
   // - request.params (query)
   // - request.body (data)
-  // - request.options.field (field name if it's a one-field update)
-  // - request.options.[placement,placementAfter] (for record placement)
+  // - request.options.[placement, placementAfter] (for record placement)
   // Output: an object (updated record)
   async implementUpdate (request) {
     this._checkVars()
@@ -187,7 +204,7 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     await this._calculatePosition(request)
 
     const id = request.params[this.idProperty]
-    if (!id) throw new Error('request.params needs to contain idProperty for implementFetch')
+    if (!id) throw new Error('request.params needs to contain idProperty for implementUpdate')
 
     const updateObject = await this.queryBuilder(request, 'update', 'updateObject')
     const joins = await this.queryBuilder(request, 'update', 'joins')
@@ -227,7 +244,7 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     this._checkVars()
 
     const id = request.params[this.idProperty]
-    if (!id) throw new Error('request.params needs to contain idProperty for implementFetch')
+    if (!id) throw new Error('request.params needs to contain idProperty for implementDelete')
 
     // Get different select and different args if available
     const { tables, joins } = await this.queryBuilder(request, 'delete', 'tablesAndJoins')
@@ -369,9 +386,12 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
 
       // INSERT
       case 'insert':
-        return
-
-      // DELETE
+        switch (param) {
+          case 'insertObject':
+            return request.body
+        }
+        break
+      // SORT
       case 'sort':
         return this._optionsSort(request)
     }
