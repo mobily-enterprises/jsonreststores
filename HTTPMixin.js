@@ -235,7 +235,6 @@ const HTTPMixin = (base) => class extends base {
   _getRequestHandler (method, field) {
     const self = this
 
-
     if (['get', 'getQuery', 'put', 'post', 'delete', 'getField', 'putField'].indexOf(method) === -1) {
       throw (new Error('method can be get, getQuery, put, post, delete, fetField, putField'))
     }
