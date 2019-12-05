@@ -165,6 +165,15 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     return this.implementFetch(bogusRequest)
   }
 
+  implementUpdateSql (joins, conditions) {
+    const updateString = 'UPDATE'
+    const whereString = conditions.length
+      ? `WHERE ${conditions.join(' AND ')}`
+      : ''
+
+    return `${updateString} \`${this.table}\` SET ? ${whereString} `
+  }
+
   // Input:
   // - request.params (query)
   // - request.body (data)
@@ -174,24 +183,66 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
   async implementUpdate (request) {
     this._checkVars()
 
+    // This uses request.options.[placement,placementAfter]
     await this._calculatePosition(request)
 
-    await this.connection.queryP(`UPDATE ${this.table} SET ? WHERE ${this.idProperty} = ?`, [request.body, request.params[this.idProperty]])
+    const id = request.params[this.idProperty]
+    if (!id) throw new Error('request.params needs to contain idProperty for implementFetch')
 
-    const bogusRequest = { session: request.session, params: { [this.idProperty]: request.params.id } }
-    return this.implementFetch(bogusRequest)
+    const updateObject = await this.queryBuilder(request, 'update', 'updateObject')
+    const joins = await this.queryBuilder(request, 'update', 'joins')
+    let { conditions, args } = await this.queryBuilder(request, 'update', 'conditionsAndArgs')
+
+    const { paramsConditions, paramsArgs } = this._paramsConditions(request)
+
+    // Add mandatory conditions dictated by the passed params
+    conditions = conditions.concat(paramsConditions)
+    args = args.concat(paramsArgs)
+
+    // Run the query
+    const query = await this.implementUpdateSql(joins, conditions)
+
+    // Perform the update
+    await this.connection.queryP(query, [updateObject, ...args])
+
+    // Re-fetch the record and return it
+    // NOTE: request.params is all implementFetch uses
+    return this.implementFetch(request)
   }
 
-  // Input: request.params
-  // Output: an object (deleted record)
+  implementDeleteSql (tables, joins, conditions) {
+    const deleteString = 'DELETE'
+    const tablesString = tables.join(',')
+    const joinString = joins.join(' ')
+    const whereString = conditions.length
+      ? `WHERE ${conditions.join(' AND ')}`
+      : ''
+
+    return `${deleteString} ${tablesString} FROM \`${this.table}\` ${joinString} ${whereString} `
+  }
+
+  // Input: request.params (with key this.idProperty set)
+  // Output: nothing
   async implementDelete (request) {
     this._checkVars()
 
-    const fields = this._selectFields(`${this.table}.`)
+    const id = request.params[this.idProperty]
+    if (!id) throw new Error('request.params needs to contain idProperty for implementFetch')
 
-    const record = (await this.connection.queryP(`SELECT ${fields} FROM ${this.table} WHERE ${this.idProperty} = ?`, request.params[this.idProperty]))[0]
-    await this.connection.queryP(`DELETE FROM ${this.table} WHERE ${this.idProperty} = ?`, [request.params[this.idProperty]])
-    return record
+    // Get different select and different args if available
+    const { tables, joins } = await this.queryBuilder(request, 'delete', 'tablesAndJoins')
+    let { conditions, args } = await this.queryBuilder(request, 'delete', 'conditionsAndArgs')
+
+    const { paramsConditions, paramsArgs } = this._paramsConditions(request)
+
+    // Add mandatory conditions dictated by the passed params
+    conditions = conditions.concat(paramsConditions)
+    args = args.concat(paramsArgs)
+
+    const query = await this.implementDeleteSql(tables, joins, conditions)
+
+    // Perform the deletion
+    await this.connection.queryP(query, args)
   }
 
   async _optionsConditionsAndArgs (request) {
@@ -234,11 +285,25 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     return sort
   }
 
-  async transformResult (request, op, fromOp, data) {
+  async transformResult (request, op, data) {
     return null
   }
 
-  async queryMaker (op, param, request) {
+  schemaFields () {
+    const l = []
+
+    // Return all fields from the schema that are not marked as "silent"
+    for (const k in this.schema.structure) {
+      // Skip fields marked as "silent" in schema
+      if (this.schema.structure[k].silent) continue
+
+      // Add field with table name, and correct escaping
+      l.push(`\`${this.table}\`.\`${k}\``)
+    }
+    return l
+  }
+
+  async queryBuilder (request, op, param) {
     switch (op) {
       //
       // GET
@@ -246,7 +311,24 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
         switch (param) {
           case 'fieldsAndJoins':
             return {
-              fields: [`${this.table}.*`],
+              fields: this.schemaFields(),
+              joins: []
+            }
+          case 'conditionsAndArgs':
+            return {
+              conditions: [],
+              args: []
+            }
+        }
+        break
+
+      //
+      // DELETE
+      case 'delete':
+        switch (param) {
+          case 'tablesAndJoins':
+            return {
+              tables: [this.table],
               joins: []
             }
           case 'conditionsAndArgs':
@@ -262,7 +344,7 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
         switch (param) {
           case 'fieldsAndJoins':
             return {
-              fields: [`${this.table}.*`],
+              fields: this.schemaFields(),
               joins: []
             }
           case 'conditionsAndArgs':
@@ -272,14 +354,21 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
 
       // UPDATE
       case 'update':
-        return
+        switch (param) {
+          case 'updateObject':
+            return request.body
+          case 'joins':
+            return []
+          case 'conditionsAndArgs':
+            return {
+              conditions: [],
+              args: []
+            }
+        }
+        break
 
       // INSERT
       case 'insert':
-        return
-
-      // DELETE
-      case 'delete':
         return
 
       // DELETE
@@ -288,24 +377,21 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     }
   }
 
-  buildQuery (fields, joins, conditions, sort) {
-    // fields = fields.map(field => `\`${field}\``)
-
-    const selectString = `SELECT ${fields.join(',')} FROM \`${this.table}\``
+  implementQuerySql (fields, joins, conditions, sort) {
+    const selectString = 'SELECT'
+    const fieldsString = fields.join(',')
     const joinString = joins.join(' ')
     const whereString = conditions.length
       ? `WHERE ${conditions.join(' AND ')}`
       : ''
-
     const sortString = sort.length
       ? `ORDER BY ${sort.join(',')}`
       : ''
-
     const rangeString = 'LIMIT ?, ?'
 
     return {
-      fullQuery: `${selectString} ${joinString} ${whereString} ${sortString} ${rangeString}`,
-      countQuery: `SELECT count(*) AS grandTotal  FROM ${this.table} ${joinString} ${whereString} ${sortString}`
+      fullQuery: `${selectString} ${fieldsString} FROM \`${this.table}\` ${joinString} ${whereString} ${sortString} ${rangeString}`,
+      countQuery: `SELECT COUNT(*) AS grandTotal FROM \`${this.table}\` ${joinString} ${whereString} ${sortString}`
     }
   }
 
@@ -315,11 +401,11 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     this._checkVars()
 
     // Get different select and different args if available
-    const { fields, joins } = await this.queryMaker('query', 'fieldsAndJoins', request)
-    const { conditions, args } = await this.queryMaker('query', 'conditionsAndArgs', request)
-    const sort = await this.queryMaker('sort', null, request)
+    const { fields, joins } = await this.queryBuilder(request, 'query', 'fieldsAndJoins')
+    const { conditions, args } = await this.queryBuilder(request, 'query', 'conditionsAndArgs')
+    const sort = await this.queryBuilder(request, 'sort', null)
 
-    const { fullQuery, countQuery } = await this.buildQuery(fields, joins, conditions, sort)
+    const { fullQuery, countQuery } = await this.implementQuerySql(fields, joins, conditions, sort)
 
     // Add skip and limit to args
     const argsWithLimits = [...args, request.options.ranges.skip, request.options.ranges.limit]
@@ -330,7 +416,7 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     // Transform the result it if necessary
     let transformed
     if (result.length) {
-      transformed = await this.transformResult(request, 'query', 'query', result)
+      transformed = await this.transformResult(request, 'query', result)
     }
     if (transformed) result = transformed
 
@@ -349,19 +435,15 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     return { paramsConditions, paramsArgs }
   }
 
-  buildFetch (fields, joins, conditions) {
-    // fields = fields.map(field => `\`${field}\``)
-    const selectString = `SELECT ${fields.join(',')} FROM \`${this.table}\``
+  implementFetchSql (fields, joins, conditions) {
+    const selectString = 'SELECT'
+    const fieldsString = fields.join(',')
     const joinString = joins.join(' ')
-
-    // Force the ID asa condition
-    conditions = conditions.concat()
-
     const whereString = conditions.length
       ? `WHERE ${conditions.join(' AND ')}`
       : ''
 
-    return `${selectString} ${joinString} ${whereString} `
+    return `${selectString} ${fieldsString} FROM \`${this.table}\` ${joinString} ${whereString} `
   }
 
   // Input: request.params (with key this.idProperty set)
@@ -373,8 +455,8 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     if (!id) throw new Error('request.params needs to contain idProperty for implementFetch')
 
     // Get different select and different args if available
-    const { fields, joins } = await this.queryMaker('fetch', 'fieldsAndJoins', request)
-    let { conditions, args } = await this.queryMaker('fetch', 'conditionsAndArgs', request)
+    const { fields, joins } = await this.queryBuilder(request, 'fetch', 'fieldsAndJoins')
+    let { conditions, args } = await this.queryBuilder(request, 'fetch', 'conditionsAndArgs')
 
     const { paramsConditions, paramsArgs } = this._paramsConditions(request)
 
@@ -382,7 +464,7 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     conditions = conditions.concat(paramsConditions)
     args = args.concat(paramsArgs)
 
-    const query = await this.buildFetch(fields, joins, conditions)
+    const query = await this.implementFetchSql(fields, joins, conditions)
 
     // Get the result
     const result = await this.connection.queryP(query, args)
@@ -392,7 +474,7 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
 
     // Transform the record if necessary
     let transformed
-    if (record) transformed = await this.transformResult(request, 'fetch', 'fetch', record)
+    if (record) transformed = await this.transformResult(request, 'fetch', record)
     if (transformed) record = transformed
 
     return record

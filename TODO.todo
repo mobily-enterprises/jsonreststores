@@ -8,21 +8,20 @@
 ✔ Make sure sort and ranges have default stuff in JsonRestStores @done(2019-12-03 07:30)
 ✔ Rewrite implementFetch with new design @done(2019-12-04 10:04)
 ✔ Add ALL params conditions to implementFetch as it should be @done(2019-12-04 10:04)
-☐ Put "request" as first parameter in queryMaker
-☐ Right now we have queryMaker and buildQuery -- harmonise names
-☐ Complete Job's implementFetch so that it loads the extra info
-☐ Replicate work in implementFetch for implementDelete, implementUpdate
-☐ Move query code out in lib, keeping DB stuff separate
-
-☐ Add hooks before/after running queryMaker calls, before/after running SQL queries
-☐ Improve Jobs 2.0, so that anything that is about database is handled by DB hooks without using afterDbOperation
-☐ Allow validation hook to ADD errors to the errors array
+✔ Put "request" as first parameter in queryMaker @done(2019-12-05 05:26)
+✔ Right now we have queryMaker and buildQuery -- harmonise names @done(2019-12-05 06:08)
+✔ Only fetch data in schema, not *, as schema should be god @done(2019-12-05 06:34)
+✔ Replicate work in implementFetch for implementDelete @done(2019-12-05 07:21)
+✔ Replicate work in implementFetch for implementUpdate @done(2019-12-05 08:58)
+☐ Replicate work in implementFetch for implementInsert
+☐ Tidy up code in MySqlMixin
 ☐ Add a 'request.fullBody' field which, in case of singleFields, will be populated by request.doc (This is to simplify code in hooks, which right now need to deal with exceptions for single field writes)
+☐ Allow validation hook to ADD errors to the errors array
+☐ Improve Jobs 2.0, so that anything that is about database is handled by DB hooks without using afterDbOperation
 ☐ Improve Jobs 2.0 to use new validation hooks
+☐ Tidy up code in Jobs.js
 ☐ Add JobsMain's functionality to Jobs
 ☐ Add others (JobsTimes, etc.) to Jobs
-
-AFTER PORT:
 ☐ SimpleSchema: final check on 'canBeNull', etc.
 ☐ SimpleSchema: have an async version; or, maybe turn it into a 100% async module
 ☐ Add store that allows file upload
