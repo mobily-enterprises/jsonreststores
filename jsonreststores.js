@@ -145,7 +145,6 @@ const Store = exports = module.exports = class {
   // Input:
   // - request.params (query)
   // - request.body (data)
-  // - request.options.field (field name if it's a one-field update)
   // - request.options.[placement,placementAfter] (for record placement)
   // Output: an object (updated record)
   async implementUpdate (request, deleteUnsetFields) {
