@@ -169,12 +169,6 @@ const HTTPMixin = (base) => class extends base {
     app.put(url + idName, uploadMiddleware, this._getRequestHandler('put'))
     app.post(url, uploadMiddleware, this._getRequestHandler('post'))
     app.delete(url + idName, this._getRequestHandler('delete'))
-
-    // Add store entries for single fields
-    Object.keys(this._singleFields).forEach(function (key) {
-      app.get(url + idName + '/' + key, uploadMiddleware, self._getRequestHandler('getField', key))
-      app.put(url + idName + '/' + key, uploadMiddleware, self._getRequestHandler('putField', key))
-    })
   }
 
   // Will make sure only fields marked as file uploads are accepted
@@ -264,18 +258,6 @@ const HTTPMixin = (base) => class extends base {
         // request._res will be used as a sending medium by protocolSendHTTP
         request._req = req
         request._res = res
-
-        // GetField and PutField are pseudo-request that will be translated back
-        // into `Put` and `Get` (with `field` set in option)
-        if (method === 'getField') {
-          funcName = 'Get'
-          request.options.field = field
-        } else if (method === 'putField') {
-          funcName = 'Put'
-          request.options.field = field
-        } else {
-          funcName = method[0].toUpperCase() + method.slice(1)
-        }
 
         // I dreamed of being able to do this in node for _years_
         await _sleep(self.constructor.artificialDelay)

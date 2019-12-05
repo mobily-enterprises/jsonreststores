@@ -192,6 +192,16 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     return `${updateString} \`${this.table}\` SET ? ${whereString} `
   }
 
+  _enrichBodyWithParamIds (request) {
+    if (request.remote) {
+      this.paramIds.forEach((paramId) => {
+        if (typeof (request.params[paramId]) !== 'undefined') {
+          request.body[paramId] = request.params[paramId]
+        }
+      })
+    }
+  }
+
   // Input:
   // - request.params (query)
   // - request.body (data)
@@ -206,6 +216,34 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     const id = request.params[this.idProperty]
     if (!id) throw new Error('request.params needs to contain idProperty for implementUpdate')
 
+    // Add paramIds to body
+    this._enrichBodyWithParamIds(request)
+
+    // Load the record, if it is not yet present in request.doc
+    let existingDoc
+    if (request.prefetchedDoc) {
+      existingDoc = request.prefetchedDoc
+    } else {
+      // Fetch the record
+      existingDoc = await this.implementFetch(request, 'put') || null
+    }
+
+    // Validate input. This is light validation.
+    const { validatedObject, errors } = await this.schema.validate(request.body, {
+      emptyAsNull: request.options.emptyAsNull || this.emptyAsNull,
+      onlyObjectValues: !request.options.fullRecordWrites || !this.fullRecordWrites
+    })
+
+    // Check for permissions
+    const { granted, message } = await this.checkPermissions(request, 'put', validatedObject, existingDoc)
+    if (!granted) throw new this.constructor.ForbiddenError(message)
+
+    // Call the validate hook. This will carry more expensive validation once
+    // permissions are granted
+    const allErrors = { ...errors, ...await this.validate(request) }
+    if (allErrors.length) throw new this.constructor.UnprocessableEntityError({ errors: allErrors })
+
+    // Make up the crucial variables for the update: object, joins, and conditions/args
     const updateObject = await this.queryBuilder(request, 'update', 'updateObject')
     const joins = await this.queryBuilder(request, 'update', 'joins')
     let { conditions, args } = await this.queryBuilder(request, 'update', 'conditionsAndArgs')

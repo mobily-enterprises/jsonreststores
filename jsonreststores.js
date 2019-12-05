@@ -1,4 +1,4 @@
-/*
+enrichBodyWithParamIds/*
 Copyright (C) 2019 Tony Mobily
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
@@ -41,7 +41,6 @@ const Store = exports = module.exports = class {
   static get searchSchema () { return null } // If not set, worked out from `schema` by constructor
 
   static get storeName () { return null }
-  static get _singleFields () { return {} } // Fields that can be updated singularly
   static get emptyAsNull () { return true } // Fields that can be updated singularly
 
   static get artificialDelay () { return 0 } // Artificial delay
@@ -62,7 +61,7 @@ const Store = exports = module.exports = class {
   static get defaultSort () { return null } // If set, it will be applied to all getQuery calls
   static get defaultLimitOnQueries () { return 50 } //  Max number of records returned by default
 
-  static get partial () { return true } //  A write will only affects the passed fields, not the whole record
+  static get fullRecordWrites () { return true } //  A write will only affects the passed fields, not the whole record
 
   // Default error objects which might be used by this module.
   static get BadRequestError () { return e.BadRequestError }
@@ -240,15 +239,12 @@ const Store = exports = module.exports = class {
     this.handleDelete = Constructor.handleDelete
     this.defaultSort = Constructor.defaultSort
     this.defaultLimitOnQueries = Constructor.defaultLimitOnQueries
-    this.partial = Constructor.partial
+    this.fullRecordWrites = Constructor.fullRecordWrites
     this.version = Constructor.version
 
     this.beforeIdField = this.constructor.beforeIdField
     this.positionField = this.constructor.positionField
     this.positionFilter = this.constructor.positionFilter
-
-    // This will contain the single fields
-    this._singleFields = {}
 
     // The store name must be defined
     if (this.storeName === null) {
@@ -307,13 +303,6 @@ const Store = exports = module.exports = class {
         }
       }
       this.searchSchema = new this.schema.constructor(searchSchemaStructure)
-    }
-
-    // Make up a hash of single fields
-    for (k in this.schema.structure) {
-      if (this.schema.structure[k].singleField) {
-        this._singleFields[k] = this.schema.structure[k]
-      }
     }
 
     this.register()
@@ -379,16 +368,6 @@ const Store = exports = module.exports = class {
     request.params = validatedObject
   }
 
-  _enrichBodyWithParamIdsIfRemote (request) {
-    if (request.remote) {
-      this.paramIds.forEach((paramId) => {
-        if (typeof (request.params[paramId]) !== 'undefined') {
-          request.body[paramId] = request.params[paramId]
-        }
-      })
-    }
-  }
-
   async _makePost (request) {
     // Default request.doc to null; it will only have a real value
     // very late in the game, after the insert
@@ -440,83 +419,33 @@ const Store = exports = module.exports = class {
     // Check that the method is implemented
     if (!this.handlePut && !request.options.field && request.remote) throw new Store.NotImplementedError()
 
-    // Default request.doc to null; it will only have a real value once
-    // a record is loaded (if it is)
-    if (request.putNew) request.doc = null
-
     // Check the IDs
-    await this.beforeCheckParamIds(request, 'put')
     await this._checkParamIds(request)
-    await this.afterCheckParamIds(request, 'put')
-
-    // Add paramIds to body
-    this._enrichBodyWithParamIdsIfRemote(request)
-
-    // Run validation, throw an error if it fails
-    await this.beforeValidate(request, 'put')
-    const { validatedObject, errors } = await this.schema.validate(request.body, {
-      emptyAsNull: this.emptyAsNull,
-      onlyObjectValues: request.options.field || request.options.partial || this.partial
-    })
-    request.bodyBeforeValidation = request.body
-    request.body = validatedObject
-    if (errors.length) throw new Store.UnprocessableEntityError({ errors: errors })
-    await this.afterValidate(request, 'put')
 
     // Fetch the record
-    await this.beforeDbOperationFetchOne(request, 'put')
-    request.doc = await this.implementFetch(request, 'put') || null
-    await this.afterDbOperationFetchOne(request, 'put')
+    // The fact that it's assigned to request.doc means that
+    // implementFetch will use it without re-fetching
+    request.prefetchedDoc = await this.implementFetch(request) || null
 
-    request.putNew = !request.doc
-    request.putExisting = !!request.doc
-
-    // Check permissions
-    if (request.remote) {
-      await this.beforeCheckPermissions(request, 'put')
-      const { granted, message } = await this.checkPermissions(request, 'put')
-      if (!granted) throw new Store.ForbiddenError(message)
-      await this.afterCheckPermissions(request, 'put')
-    }
+    request.putNew = !request.prefetchedDoc
+    request.putExisting = !!request.prefetchedDoc
 
     // Check the 'overwrite' option, throw if fail
     if (typeof request.options.overwrite !== 'undefined') {
-      if (request.doc && !request.options.overwrite) {
+      if (request.prefetchedDoc && !request.options.overwrite) {
         throw new this.PreconditionFailedError()
-      } else if (!request.doc && request.options.overwrite) {
+      } else if (!request.prefetchedDoc && request.options.overwrite) {
         throw new this.PreconditionFailedError()
       }
     }
-
-    // Run the generic "beforeDbOperationWrite" hook
-    await this.beforeDbOperationWrite(request, 'put')
 
     if (request.putNew) {
-      //
-      // It cannot be a new doc and have "single field" set, since
-      // the single-field put is supposed to only ever be used on existing
-      // records
-      if (request.options.field) {
-        throw new Store.UnprocessableEntityError('Field update only allowed on existing records')
-      }
-
       // Execute actual DB operation
-      await this.beforeDbOperationInsert(request, 'put')
-      request.doc = await this.implementInsert(request, 'put') || null
-      await this.afterDbOperationInsert(request, 'put')
+      return await this.implementInsert(request, 'put') || null
     } else {
       // Execute actual DB operation
-      await this.beforeDbOperationUpdate(request, 'put')
-      request.doc = await this.implementUpdate(request, 'put') || null
-      await this.afterDbOperationUpdate(request, 'put')
+      return await this.implementUpdate(request, 'put') || null
     }
-
-    // Run the generic "afterDbOperationWrite" hook
-    await this.afterDbOperationWrite(request, 'put')
-
-    // Send over to the client
-    await this.beforeReturn(request, 'put')
-    return request.doc
   }
 
   async _makeGet (request) {
