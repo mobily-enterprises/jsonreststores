@@ -13,16 +13,17 @@
 ✔ Only fetch data in schema, not *, as schema should be god @done(2019-12-05 06:34)
 ✔ Replicate work in implementFetch for implementDelete @done(2019-12-05 07:21)
 ✔ Replicate work in implementFetch for implementUpdate @done(2019-12-05 08:58)
-☐ Replicate work in implementFetch for implementInsert
-☐ Actually test implementDelete with SOF
+✔ Replicate work in implementFetch for implementInsert @done(2019-12-05 15:08)
+✔ Actually test implementDelete with SOF @done(2019-12-05 15:20)
+
+☐ Delete any of the original hooks from Jobs.js 2.0
 ☐ Tidy up code in MySqlMixin
 ☐ Add a 'request.fullBody' field which, in case of singleFields, will be populated by request.doc (This is to simplify code in hooks, which right now need to deal with exceptions for single field writes)
 ☐ Allow validation hook to ADD errors to the errors array
-☐ Improve Jobs 2.0, so that anything that is about database is handled by DB hooks without using afterDbOperation
 ☐ Improve Jobs 2.0 to use new validation hooks
+☐ Improve Jobs 2.0, so that anything that is about database is handled by DB hooks without using afterDbOperation
 ☐ Tidy up code in Jobs.js
-☐ Add JobsMain's functionality to Jobs
-☐ Add others (JobsTimes, etc.) to Jobs
+
 ☐ SimpleSchema: final check on 'canBeNull', etc.
 ☐ SimpleSchema: have an async version; or, maybe turn it into a 100% async module
 ☐ Add store that allows file upload
