@@ -14,6 +14,7 @@
 ✔ Replicate work in implementFetch for implementDelete @done(2019-12-05 07:21)
 ✔ Replicate work in implementFetch for implementUpdate @done(2019-12-05 08:58)
 ☐ Replicate work in implementFetch for implementInsert
+☐ Actually test implementDelete with SOF
 ☐ Tidy up code in MySqlMixin
 ☐ Add a 'request.fullBody' field which, in case of singleFields, will be populated by request.doc (This is to simplify code in hooks, which right now need to deal with exceptions for single field writes)
 ☐ Allow validation hook to ADD errors to the errors array
