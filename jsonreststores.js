@@ -33,20 +33,11 @@ const Store = exports = module.exports = class {
   static get version () { return null }
   static get publicURL () { return null } // Not mandatory (if you want your store to be API-only for some reason)
 
-  static get sortableFields () { return [] }
-
-  static get schema () { return null }
   static get idProperty () { return null } // If not set, taken as last item of paramIds)
   static get paramIds () { return [] } // Only allowed if publicURL is not set
-  static get searchSchema () { return null } // If not set, worked out from `schema` by constructor
 
   static get storeName () { return null }
-  static get emptyAsNull () { return true } // Fields that can be updated singularly
-
   static get artificialDelay () { return 0 } // Artificial delay
-
-  static get beforeIdField () { return 'beforeId' } // Virtual field to place elements
-  static get positionFilter () { return [] } // List of fields that will determine the subset
 
   // ****************************************************
   // *** ATTRIBUTES THAT DEFINE STORE'S BEHAVIOUR
@@ -57,11 +48,7 @@ const Store = exports = module.exports = class {
   static get handleGet () { return false }
   static get handleGetQuery () { return false }
   static get handleDelete () { return false }
-
-  static get defaultSort () { return null } // If set, it will be applied to all getQuery calls
   static get defaultLimitOnQueries () { return 50 } //  Max number of records returned by default
-
-  static get fullRecordWrites () { return true } //  A write will only affects the passed fields, not the whole record
 
   // Default error objects which might be used by this module.
   static get BadRequestError () { return e.BadRequestError }
@@ -84,7 +71,7 @@ const Store = exports = module.exports = class {
     registryByVersion[version] = registryByVersion[version] || {}
 
     if (registryByName[name][version]) {
-      throw new Error('Store already register: ' + name + ' version ' + version)
+      throw new Error('Store already registered: ' + name + ' version ' + version)
     }
 
     registryByName[name][version] = registryByVersion[version][name] = this
@@ -146,7 +133,7 @@ const Store = exports = module.exports = class {
   // - request.body (data)
   // - request.options.[placement,placementAfter] (for record placement)
   // Output: an object (updated record)
-  async implementUpdate (request, deleteUnsetFields) {
+  async implementUpdate (request) {
     throw (new Error('implementUpdate not implemented, store is not functional'))
   }
 
@@ -162,41 +149,7 @@ const Store = exports = module.exports = class {
     throw (new Error('implementQuery not implemented, store is not functional'))
   }
 
-  // ****************************************************
-  // *** BEFORE AND AFTER HOOKS
-  // ****************************************************
-
-  async beforeCheckParamIds (request, method) { }
-  async afterCheckParamIds (request, method) { }
-
-  async beforeCheckPermissions (request, method) { }
-  async afterCheckPermissions (request, method) { }
-
-  async beforeValidate (request, method) { }
-  async afterValidate (request, method) { }
-
-  async beforeDbOperationWrite (request, method) { }
-  async afterDbOperationWrite (request, method) { }
-
-  async beforeDbOperationFetchOne (request, method) { }
-  async beforeDbOperationQuery (request, method) { }
-  async beforeDbOperationInsert (request, method) { }
-  async beforeDbOperationUpdate (request, method) { }
-  async beforeDbOperationDelete (request, method) { }
-
-  async afterDbOperationFetchOne (request, method) { }
-  async afterDbOperationQuery (request, method) { }
-  async afterDbOperationInsert (request, method) { }
-  async afterDbOperationUpdate (request, method) { }
-  async afterDbOperationDelete (request, method) { }
-
-  async beforeReturn (request, method) { }
-
-  // ****************************************************
-  // *** IMPORTANT IMPLEMENTATION HOOKS
-  // ****************************************************
-
-  async checkPermissions (request, method) { return { granted: true } }
+  async checkNetworkPermissions (request) {}
 
   // ****************************************************
   // *** ERROR-MANAGING HELPER FUNCTIONS
@@ -219,32 +172,21 @@ const Store = exports = module.exports = class {
 
   constructor () {
     const Constructor = this.constructor
-    let k
 
     // Copy values over from the class' static values
-    this.sortableFields = Constructor.sortableFields
     this.publicURLprefix = Constructor.publicURLprefix
     this.publicURL = Constructor.publicURL
-    this.schema = Constructor.schema
     this.idProperty = Constructor.idProperty
     this.paramIds = Constructor.paramIds
-    this.searchSchema = Constructor.searchSchema
     this.storeName = Constructor.storeName
-    this.emptyAsNull = Constructor.emptyAsNull
 
     this.handlePost = Constructor.handlePost
     this.handlePut = Constructor.handlePut
     this.handleGet = Constructor.handleGet
     this.handleGetQuery = Constructor.handleGetQuery
     this.handleDelete = Constructor.handleDelete
-    this.defaultSort = Constructor.defaultSort
     this.defaultLimitOnQueries = Constructor.defaultLimitOnQueries
-    this.fullRecordWrites = Constructor.fullRecordWrites
     this.version = Constructor.version
-
-    this.beforeIdField = this.constructor.beforeIdField
-    this.positionField = this.constructor.positionField
-    this.positionFilter = this.constructor.positionFilter
 
     // The store name must be defined
     if (this.storeName === null) {
@@ -254,15 +196,6 @@ const Store = exports = module.exports = class {
     // The store name must be defined
     if (this.version === null) {
       throw (new Error('You must define a store version in constructor class'))
-    }
-
-    // if (typeof (registry[this.storeName]) !== 'undefined') {
-    //   throw new Error('Cannot instantiate two stores with the same name: ' + this.storeName)
-    // }
-
-    // The schema must be defined
-    if (this.schema == null) {
-      throw (new Error('You must define a schema'))
     }
 
     // If paramId is not specified, takes it from publicURL
@@ -284,32 +217,8 @@ const Store = exports = module.exports = class {
       this.idProperty = this._lastParamId()
     }
 
-    // By default, paramIds are set in schema as { type: 'id' } so that developers
-    // can be lazy when defining their schemas
-    for (let i = 0, l = this.paramIds.length; i < l; i++) {
-      k = this.paramIds[i]
-      if (typeof (this.schema.structure[k]) === 'undefined') {
-        this.schema.structure[k] = { type: 'id' }
-      }
-    }
-
-    // If onlineSearchSchema wasn't defined, then set it as a copy of the schema where
-    // fields are `searchable`, EXCLUDING the paramIds fields.
-    if (this.searchSchema == null) {
-      const searchSchemaStructure = { }
-      for (k in this.schema.structure) {
-        if (this.schema.structure[k].searchable && this.paramIds.indexOf(k) === -1) {
-          searchSchemaStructure[k] = this.schema.structure[k]
-        }
-      }
-      this.searchSchema = new this.schema.constructor(searchSchemaStructure)
-    }
-
     this.register()
   }
-
-  // Simple function that shallow-copies an object.
-  _co (o) { return Object.assign({}, o) }
 
   fullPublicURL () {
     if (!this.publicURL) return null
@@ -324,111 +233,21 @@ const Store = exports = module.exports = class {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
 
-  // Check that paramsId are actually legal IDs using
-  // paramsSchema.
-  async _checkParamIds (request, skipIdProperty) {
-    const fieldErrors = []
-
-    // Params is empty: nothing to do, optimise a little
-    if (request.params.length === 0) return
-
-    // Check that ALL paramIds do belong to the schema
-    this.paramIds.forEach((k) => {
-      if (typeof (this.schema.structure[k]) === 'undefined') {
-        throw new Error('This paramId must be in schema: ' + k)
-      }
-    })
-
-    // If it's a remote request, check that _all_ paramIds are in params
-    // (Local API requests can avoid passing paramIds)
-    if (request.remote) {
-      this.paramIds.forEach((k) => {
-        // "continue" if id property is to be skipped
-        if (skipIdProperty && k === this.idProperty) return
-
-        // Required paramId not there: puke!
-        if (typeof (request.params[k]) === 'undefined') {
-          fieldErrors.push({ field: k, message: 'Field required in the URL: ' + k })
-        }
-      })
-      // If one of the key fields was missing, puke back
-      if (fieldErrors.length) throw new Store.BadRequestError({ errors: fieldErrors })
-    }
-
-    // Prepare skipParams and skipCast, depending on skipIdProperty
-    const skipFields = []
-    if (skipIdProperty) {
-      skipFields.push(this.idProperty)
-    }
-
-    // Validate request.params
-    const { validatedObject, errors } = await this.schema.validate(request.params, { onlyObjectValues: true, skipFields })
-    if (errors.length) throw new Store.BadRequestError({ errors: errors })
-
-    request.params = validatedObject
-  }
-
   async _makePost (request) {
-    // Default request.doc to null; it will only have a real value
-    // very late in the game, after the insert
-    request.doc = null
-
     // Check that the method is implemented
     if (!this.handlePost && request.remote) throw new Store.NotImplementedError()
 
-    // Check the IDs
-    await this.beforeCheckParamIds(request, 'post')
-    await this._checkParamIds(request, true)
-    await this.afterCheckParamIds(request, 'post')
-
-    // Add paramIds to body
-    this._enrichBodyWithParamIdsIfRemote(request)
-
-    // Run validation, throw an error if it fails
-    await this.beforeValidate(request, 'post')
-    const { validatedObject, errors } = await this.schema.validate(request.body, { emptyAsNull: !!this.emptyAsNull, skipFields: [this.idProperty] })
-    request.bodyBeforeValidation = request.body
-    request.body = validatedObject
-    if (errors.length) throw new Store.UnprocessableEntityError({ errors: errors })
-    await this.afterValidate(request, 'post')
-
-    // Check permissions
-    if (request.remote) {
-      await this.beforeCheckPermissions(request, 'post')
-      const { granted, message } = await this.checkPermissions(request, 'post')
-      if (!granted) throw new Store.ForbiddenError(message)
-      await this.afterCheckPermissions(request, 'post')
-    }
-
-    await this.beforeDbOperationWrite(request, 'post')
-
-    // Execute actual DB operation
-    await this.beforeDbOperationInsert(request, 'post')
-    request.doc = await this.implementInsert(request, 'post') || null
-    await this.afterDbOperationInsert(request, 'post')
-
-    // Run the generic "afterDbOperationWrite" hook
-    await this.afterDbOperationWrite(request, 'post')
-
-    // Send over to the client
-    await this.beforeReturn(request, 'post')
-    return request.doc
+    return await this.implementInsert(request) || null
   }
 
   async _makePut (request) {
     // Check that the method is implemented
-    if (!this.handlePut && !request.options.field && request.remote) throw new Store.NotImplementedError()
-
-    // Check the IDs
-    await this._checkParamIds(request)
+    if (!this.handlePut && request.remote) throw new Store.NotImplementedError()
 
     // Fetch the record
     // The fact that it's assigned to request.doc means that
     // implementFetch will use it without re-fetching
     request.prefetchedDoc = await this.implementFetch(request) || null
-
-    request.putNew = !request.prefetchedDoc
-    request.putExisting = !!request.prefetchedDoc
 
     // Check the 'overwrite' option, throw if fail
     if (typeof request.options.overwrite !== 'undefined') {
@@ -439,7 +258,7 @@ const Store = exports = module.exports = class {
       }
     }
 
-    if (request.putNew) {
+    if (!request.prefetchedDoc) {
       // Execute actual DB operation
       return await this.implementInsert(request, 'put') || null
     } else {
@@ -449,123 +268,43 @@ const Store = exports = module.exports = class {
   }
 
   async _makeGet (request) {
-    // This is the 'doc' as such
-    request.doc = null
-
     // Check that the method is implemented
     if (!this.handleGet && request.remote) throw new Store.NotImplementedError()
 
-    // Check the IDs
-    await this.beforeCheckParamIds(request, 'get')
-    await this._checkParamIds(request, true)
-    await this.afterCheckParamIds(request, 'get')
-
-    // Execute actual DB operation
-    await this.beforeDbOperationFetchOne(request, 'get')
-    request.doc = await this.implementFetch(request, 'get') || null
-    await this.afterDbOperationFetchOne(request, 'get')
+    const record = await this.implementFetch(request) || null
 
     // Record not there: not found error!
-    if (!request.doc) throw new Store.NotFoundError()
+    if (!record) throw new Store.NotFoundError()
 
-    // Check permissions
-    if (request.remote) {
-      await this.beforeCheckPermissions(request, 'get')
-      const { granted, message } = await this.checkPermissions(request, 'get')
-      if (!granted) throw new Store.ForbiddenError(message)
-      await this.afterCheckPermissions(request, 'get')
-    }
-
-    // Send over to the client
-    await this.beforeReturn(request, 'get')
-    return request.doc
+    return record
   }
 
   async _makeGetQuery (request) {
-    // This is the 'doc' as such
-    request.docs = null
-
     // Check that the method is implemented
     if (!this.handleGetQuery && request.remote) throw new Store.NotImplementedError()
 
-    // Sanitise request.options.sort and request.options.ranges,
-    // which are set to options or store-wide defaults
-    request.options.sort = request.options.sort || this.defaultSort || {}
-    request.options.ranges = request.options.ranges || { skip: 0, limit: this.defaultLimitOnQueries }
-
-    // Check the IDs
-    await this.beforeCheckParamIds(request, 'getQquery')
-    await this._checkParamIds(request, true)
-    await this.beforeCheckParamIds(request, 'getQuery')
-
-    // Validate the search schema
-    const { validatedObject, errors } = await this.searchSchema.validate(request.options.conditionsHash, { onlyObjectValues: true })
-    if (errors.length) throw new Store.BadRequestError({ errors: errors })
-
-    request.options.conditionsHash = validatedObject
-
-    // Check permissions
-    if (request.remote) {
-      await this.beforeCheckPermissions(request, 'getQuery')
-      const { granted, message } = await this.checkPermissions(request, 'getQuery')
-      if (!granted) throw new Store.ForbiddenError(message)
-      await this.afterCheckPermissions(request, 'getQuery')
-    }
-
     // Execute actual DB operation
-    await this.beforeDbOperationQuery(request, 'getQuery')
-    const { data, grandTotal } = await this.implementQuery(request, 'getQuery') || { data: [], grandTotal: 0 }
-    request.docs = data || []
+    const { data, grandTotal } = await this.implementQuery(request)
+
+    // Sets request.total and request.grandTotal, which will be used
+    // by HTTPMixin to write out headers
     request.total = data.length
     if (typeof grandTotal !== 'undefined') request.grandTotal = grandTotal
-    await this.afterDbOperationQuery(request, 'getQuery')
 
-    // Send over to the client
-    await this.beforeReturn(request, 'getQuery')
-    return request.docs
+    return data
   }
 
   async _makeDelete (request) {
-    // This is the 'doc' as such
-    request.doc = null
-
     // Check that the method is implemented
     if (!this.handleDelete && request.remote) throw new Store.NotImplementedError()
 
-    // Check the IDs
-    await this.beforeCheckParamIds(request, 'delete')
-    await this._checkParamIds(request, true)
-    await this.beforeCheckParamIds(request, 'delete')
-
-    // Fetch the record
-    await this.beforeDbOperationFetchOne(request, 'delete')
-    request.doc = await this.implementFetch(request, 'delete') || null
-    await this.afterDbOperationFetchOne(request, 'delete')
+    const record = await this.implementFetch(request, 'delete') || null
 
     // Record not there: not found error!
-    if (!request.doc) throw new Store.NotFoundError()
+    if (!record) throw new Store.NotFoundError()
 
-    // Check permissions
-    if (request.remote) {
-      await this.beforeCheckPermissions(request, 'delete')
-      const { granted, message } = await this.checkPermissions(request, 'delete')
-      if (!granted) throw new Store.ForbiddenError(message)
-      await this.afterCheckPermissions(request, 'delete')
-    }
-
-    await this.beforeDbOperationWrite(request, 'put')
-
-    // Execute actual DB operation
-    await this.beforeDbOperationDelete(request, 'delete')
-    await this.implementDelete(request, 'delete')
-    await this.afterDbOperationDelete(request, 'delete')
-
-    // Run the generic "afterDbOperationWrite" hook
-    await this.afterDbOperationWrite(request, 'delete')
-
-    // Send over to the client
-    await this.beforeReturn(request, 'delete')
-    return request.doc
+    await this.implementDelete(request)
+    return record
   }
 
   apiGetQuery (options) {
@@ -579,7 +318,7 @@ const Store = exports = module.exports = class {
     else request.params = {}
 
     request.session = options.session || {}
-    request.options = this._co(options)
+    request.options = { ...options }
 
     this._makeGetQuery(request)
   }
@@ -590,7 +329,7 @@ const Store = exports = module.exports = class {
     // Make up the request
     const request = {}
     request.remote = false
-    request.options = options
+    request.options = { ...options }
     request.body = {}
     if (options.apiParams) request.params = options.apiParams
     else { request.params = {}; request.params[this.idProperty] = id }
@@ -611,8 +350,8 @@ const Store = exports = module.exports = class {
     // Make up the request
     const request = {}
     request.remote = false
-    request.options = options
-    request.body = this._co(body)
+    request.options = { ...options }
+    request.body = { ...body }
     if (options.apiParams) request.params = options.apiParams
     else { request.params = {}; request.params[this.idProperty] = body[this.idProperty] }
     request.session = options.session || {}
@@ -627,10 +366,10 @@ const Store = exports = module.exports = class {
     // Make up the request
     const request = {}
     request.remote = false
-    request.options = options
+    request.options = { ...options }
     request.params = options.apiParams || {}
     request.session = options.session || {}
-    request.body = this._co(body)
+    request.body = { ...body }
 
     // Actually run the request
     this._makePost(request)
@@ -642,7 +381,7 @@ const Store = exports = module.exports = class {
     // Make up the request
     const request = {}
     request.body = {}
-    request.options = options
+    request.options = { ...options }
     if (options.apiParams) request.params = options.apiParams
     else { request.params = {}; request.params[this.idProperty] = id }
     request.session = options.session || {}

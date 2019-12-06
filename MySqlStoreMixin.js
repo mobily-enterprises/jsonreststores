@@ -10,11 +10,98 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 const promisify = require('util').promisify
 
 const MySqlStoreMixin = (superclass) => class extends superclass {
+  //
+
+  async checkPermissions (request) { return { granted: true } }
+
+  static get sortableFields () { return [] }
+  static get schema () { return null }
+  static get searchSchema () { return null } // If not set, worked out from `schema` by constructor
+  static get emptyAsNull () { return true } // Fields that can be updated singularly
+  static get beforeIdField () { return 'beforeId' } // Virtual field to place elements
+  static get positionFilter () { return [] } // List of fields that will determine the subset
+  static get defaultSort () { return null } // If set, it will be applied to all getQuery calls
+  static get fullRecordWrites () { return true } //  A write will only affects the passed fields, not the whole record
+
+  // Check that paramsId are actually legal IDs using
+  // paramsSchema.
+  async _validateParams (request, skipIdProperty) {
+    const fieldErrors = []
+
+    // Params is empty: nothing to do, optimise a little
+    if (request.params.length === 0) return
+
+    // Check that _all_ paramIds are in params
+    // (Direct requests don't use URL, so check)
+    this.paramIds.forEach((k) => {
+      // "continue" if id property is to be skipped
+      if (skipIdProperty && k === this.idProperty) return
+
+      // Required paramId not there: puke!
+      if (typeof (request.params[k]) === 'undefined') {
+        fieldErrors.push({ field: k, message: 'Field required in the URL/param: ' + k })
+      }
+    })
+    // If one of the key fields was missing, puke back
+    if (fieldErrors.length) throw new this.constructor.BadRequestError({ errors: fieldErrors })
+
+    // Prepare skipFields, depending on skipIdProperty
+    const skipFields = []
+    if (skipIdProperty) {
+      skipFields.push(this.idProperty)
+    }
+
+    // Validate request.params
+    const { validatedObject, errors } = await this.schema.validate(request.params, { onlyObjectValues: true, skipFields })
+    if (errors.length) throw new this.constructor.BadRequestError({ errors: errors })
+
+    return validatedObject
+  }
+
   constructor () {
     super()
+    const Constructor = this.constructor
+
+    this.sortableFields = Constructor.sortableFields
+    this.schema = Constructor.schema
+    this.searchSchema = Constructor.searchSchema
+    this.emptyAsNull = Constructor.emptyAsNull
+    this.defaultSort = Constructor.defaultSort
+    this.fullRecordWrites = Constructor.fullRecordWrites
+    this.beforeIdField = this.constructor.beforeIdField
+    this.positionField = this.constructor.positionField
+    this.positionFilter = this.constructor.positionFilter
+
     this.connection = this.constructor.connection
     this.connection.queryP = promisify(this.connection.query)
     this.table = this.constructor.table
+
+    // The schema must be defined
+    if (this.schema == null) {
+      throw (new Error('You must define a schema'))
+    }
+
+    // By default, paramIds are set in schema as { type: 'id' } so that developers
+    // can be lazy when defining their schemas
+    let k
+    for (let i = 0, l = this.paramIds.length; i < l; i++) {
+      k = this.paramIds[i]
+      if (typeof (this.schema.structure[k]) === 'undefined') {
+        this.schema.structure[k] = { type: 'id' }
+      }
+    }
+
+    // If onlineSearchSchema wasn't defined, then set it as a copy of the schema where
+    // fields are `searchable`, EXCLUDING the paramIds fields.
+    if (this.searchSchema == null) {
+      const searchSchemaStructure = { }
+      for (k in this.schema.structure) {
+        if (this.schema.structure[k].searchable && this.paramIds.indexOf(k) === -1) {
+          searchSchemaStructure[k] = this.schema.structure[k]
+        }
+      }
+      this.searchSchema = new this.schema.constructor(searchSchemaStructure)
+    }
   }
 
   static get connection () {
@@ -45,17 +132,6 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     return l.join(',')
   }
 
-  // If a positionField is set, then delete body.beforeId -- before saving it
-  // in this.data, so that it can be used for positioning
-  async beforeValidate (request, method) {
-    if (this.positionField) {
-      request.beforeId = request.body[this.beforeIdField]
-      delete request.body[this.beforeIdField]
-    }
-
-    return super.beforeValidate(request, method)
-  }
-
   _positionFiltersFieldsSame (request) {
     // If there is no original request.doc, there is nothing to check
     if (!request.doc) return true
@@ -70,6 +146,14 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
       }
     }
     return true
+  }
+
+  _enrichBodyWithParamIds (request) {
+    this.paramIds.forEach((paramId) => {
+      if (typeof (request.params[paramId]) !== 'undefined') {
+        request.body[paramId] = request.params[paramId]
+      }
+    })
   }
 
   // Make sure the positionField is updated depending on beforeID passed:
@@ -164,9 +248,36 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
   async implementInsert (request) {
     this._checkVars()
 
+    if (this.positionField) {
+      request.beforeId = request.body[this.beforeIdField]
+      delete request.body[this.beforeIdField]
+    }
+
     // This uses request.options.[placement,placementAfter]
     await this._calculatePosition(request)
 
+    // validateParam
+    request.params = this._validateParams()
+
+    // Add paramIds to body
+    this._enrichBodyWithParamIds(request)
+
+    // Validate input. This is light validation.
+    const { validatedObject, errors } = await this.schema.validate(request.body, {
+      emptyAsNull: request.options.emptyAsNull || this.emptyAsNull,
+      onlyObjectValues: !request.options.fullRecordWrites || !this.fullRecordWrites
+    })
+
+    // Check for permissions
+    const { granted, message } = await this.checkPermissions(request, validatedObject, {})
+    if (!granted) throw new this.constructor.ForbiddenError(message)
+
+    // Call the validate hook. This will carry more expensive validation once
+    // permissions are granted
+    const allErrors = { ...errors, ...await this.validate(request) }
+    if (allErrors.length) throw new this.constructor.UnprocessableEntityError({ errors: allErrors })
+
+    // Work out the insert object
     const insertObject = await this.queryBuilder(request, 'insert', 'insertObject')
 
     // Run the query
@@ -192,16 +303,6 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     return `${updateString} \`${this.table}\` SET ? ${whereString} `
   }
 
-  _enrichBodyWithParamIds (request) {
-    if (request.remote) {
-      this.paramIds.forEach((paramId) => {
-        if (typeof (request.params[paramId]) !== 'undefined') {
-          request.body[paramId] = request.params[paramId]
-        }
-      })
-    }
-  }
-
   // Input:
   // - request.params (query)
   // - request.body (data)
@@ -210,8 +311,16 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
   async implementUpdate (request) {
     this._checkVars()
 
+    if (this.positionField) {
+      request.beforeId = request.body[this.beforeIdField]
+      delete request.body[this.beforeIdField]
+    }
+
     // This uses request.options.[placement,placementAfter]
     await this._calculatePosition(request)
+
+    // validateParam
+    request.params = this._validateParams()
 
     const id = request.params[this.idProperty]
     if (!id) throw new Error('request.params needs to contain idProperty for implementUpdate')
@@ -231,11 +340,12 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     // Validate input. This is light validation.
     const { validatedObject, errors } = await this.schema.validate(request.body, {
       emptyAsNull: request.options.emptyAsNull || this.emptyAsNull,
-      onlyObjectValues: !request.options.fullRecordWrites || !this.fullRecordWrites
+      onlyObjectValues: !request.options.fullRecordWrites || !this.fullRecordWrites,
+      fullRecord: existingDoc
     })
 
     // Check for permissions
-    const { granted, message } = await this.checkPermissions(request, 'put', validatedObject, existingDoc)
+    const { granted, message } = await this.checkPermissions(request, validatedObject, existingDoc)
     if (!granted) throw new this.constructor.ForbiddenError(message)
 
     // Call the validate hook. This will carry more expensive validation once
@@ -283,6 +393,10 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
 
     const id = request.params[this.idProperty]
     if (!id) throw new Error('request.params needs to contain idProperty for implementDelete')
+
+    // Check for permissions
+    const { granted, message } = await this.checkPermissions(request)
+    if (!granted) throw new this.constructor.ForbiddenError(message)
 
     // Get different select and different args if available
     const { tables, joins } = await this.queryBuilder(request, 'delete', 'tablesAndJoins')
@@ -458,6 +572,22 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
   async implementQuery (request) {
     this._checkVars()
 
+    request.options = { ...request.options }
+
+    // Sanitise request.options.sort and request.options.ranges,
+    // which are set to options or store-wide defaults
+    request.options.sort = request.options.sort || this.defaultSort || {}
+    request.options.ranges = request.options.ranges || { skip: 0, limit: this.defaultLimitOnQueries }
+
+    // Validate the search schema
+    const { validatedObject, errors } = await this.searchSchema.validate(request.options.conditionsHash, { onlyObjectValues: true })
+    if (errors.length) throw new this.constructor.BadRequestError({ errors: errors })
+    request.options.conditionsHash = validatedObject
+
+    // Check for permissions
+    const { granted, message } = await this.checkPermissions(request, validatedObject)
+    if (!granted) throw new this.constructor.ForbiddenError(message)
+
     // Get different select and different args if available
     const { fields, joins } = await this.queryBuilder(request, 'query', 'fieldsAndJoins')
     const { conditions, args } = await this.queryBuilder(request, 'query', 'conditionsAndArgs')
@@ -525,10 +655,14 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     const query = await this.implementFetchSql(fields, joins, conditions)
 
     // Get the result
-    const result = await this.connection.queryP(query, args)
+    const records = await this.connection.queryP(query, args)
 
     // Get the record
-    let record = result[0]
+    let record = records[0]
+
+    // Check for permissions
+    const { granted, message } = await this.checkPermissions(request, record)
+    if (!granted) throw new this.constructor.ForbiddenError(message)
 
     // Transform the record if necessary
     let transformed
