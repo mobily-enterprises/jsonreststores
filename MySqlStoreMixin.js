@@ -12,6 +12,10 @@ const promisify = require('util').promisify
 const MySqlStoreMixin = (superclass) => class extends superclass {
   //
 
+  async beforeValidate (request) { }
+  async afterUpdate (request, record) { return record }
+  async afterInsert (request, record) { return record }
+  async validate (request) { return [] }
   async checkPermissions (request) { return { granted: true } }
 
   static get sortableFields () { return [] }
@@ -257,7 +261,7 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     await this._calculatePosition(request)
 
     // validateParam
-    request.params = this._validateParams()
+    request.params = await this._validateParams(request)
 
     // Add paramIds to body
     this._enrichBodyWithParamIds(request)
@@ -291,7 +295,11 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     // to re-fetch the record and return it
     // NOTE: request.params is all implementFetch uses
     const bogusRequest = { options: {}, session: request.session, params: { [this.idProperty]: insertResult.insertId } }
-    return this.implementFetch(bogusRequest)
+    let record = await this.implementFetch(bogusRequest)
+
+    // Run the afterInsert hook, which might also change the record itself
+    record = await this.afterInsert(request, record)
+    return record
   }
 
   implementUpdateSql (joins, conditions) {
@@ -320,7 +328,7 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     await this._calculatePosition(request)
 
     // validateParam
-    request.params = this._validateParams()
+    request.params = await this._validateParams(request)
 
     const id = request.params[this.idProperty]
     if (!id) throw new Error('request.params needs to contain idProperty for implementUpdate')
@@ -328,14 +336,19 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     // Add paramIds to body
     this._enrichBodyWithParamIds(request)
 
-    // Load the record, if it is not yet present in request.doc
+    // Load the record, if it is not yet present in request as `prefetchedDoc`
     let existingDoc
     if (request.prefetchedDoc) {
       existingDoc = request.prefetchedDoc
     } else {
       // Fetch the record
-      existingDoc = await this.implementFetch(request, 'put') || null
+      existingDoc = await this.implementFetch(request) || null
     }
+
+    // This is an important hook as developers might want to
+    // manipulate request.body before validation (e.g. non-schema custom fields)
+    // or manipulate the request itself
+    await this.beforeValidate(request)
 
     // Validate input. This is light validation.
     const { validatedObject, errors } = await this.schema.validate(request.body, {
@@ -372,7 +385,11 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
 
     // Re-fetch the record and return it
     // NOTE: request.params is all implementFetch uses
-    return this.implementFetch(request)
+    let record = await this.implementFetch(request)
+
+    record = await this.afterUpdate(request, record)
+
+    return record
   }
 
   implementDeleteSql (tables, joins, conditions) {
@@ -394,8 +411,17 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
     const id = request.params[this.idProperty]
     if (!id) throw new Error('request.params needs to contain idProperty for implementDelete')
 
+    // Load the record, if it is not yet present in request as `prefetchedDoc`
+    let existingDoc
+    if (request.prefetchedDoc) {
+      existingDoc = request.prefetchedDoc
+    } else {
+      // Fetch the record
+      existingDoc = await this.implementFetch(request) || null
+    }
+
     // Check for permissions
-    const { granted, message } = await this.checkPermissions(request)
+    const { granted, message } = await this.checkPermissions(request, existingDoc)
     if (!granted) throw new this.constructor.ForbiddenError(message)
 
     // Get different select and different args if available
@@ -412,6 +438,7 @@ const MySqlStoreMixin = (superclass) => class extends superclass {
 
     // Perform the deletion
     await this.connection.queryP(query, args)
+    await this.afterDelete(request, existingDoc)
   }
 
   async _optionsConditionsAndArgs (request) {

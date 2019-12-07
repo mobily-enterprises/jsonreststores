@@ -299,10 +299,10 @@ const Store = exports = module.exports = class {
     if (!this.handleDelete && request.remote) throw new Store.NotImplementedError()
 
     const record = await this.implementFetch(request, 'delete') || null
-
     // Record not there: not found error!
     if (!record) throw new Store.NotFoundError()
 
+    request.prefetchedDoc = record
     await this.implementDelete(request)
     return record
   }

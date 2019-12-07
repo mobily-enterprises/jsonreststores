@@ -99,7 +99,6 @@ const HTTPMixin = (base) => class extends base {
         }
         break
     }
-
     // Send the response using HTTP
     request._res.status(status).json(responseBody)
   }
@@ -235,7 +234,8 @@ const HTTPMixin = (base) => class extends base {
 
     return async function (req, res, next) {
       const request = {}
-      let funcName
+
+      const funcName = method[0].toUpperCase() + method.slice(1)
 
       try {
         const _sleep = (ms) => { if (!ms) return; return new Promise(resolve => setTimeout(resolve, ms)) }
@@ -245,8 +245,8 @@ const HTTPMixin = (base) => class extends base {
         // Sets all of the required fields for a request
         request.remote = true
         request.protocol = 'HTTP'
-        request.params = self._co(req.params) // NOTE: this is a copy
-        request.body = self._co(req.body) // NOTE: this is a copy
+        request.params = { ...req.params }
+        request.body = { ...req.body }
         request.session = req.session
         request.options = {}
 

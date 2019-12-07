@@ -15,13 +15,12 @@
 ✔ Replicate work in implementFetch for implementUpdate @done(2019-12-05 08:58)
 ✔ Replicate work in implementFetch for implementInsert @done(2019-12-05 15:08)
 ✔ Actually test implementDelete with SOF @done(2019-12-05 15:20)
-
-☐ TOTAL REFACTORING
-  ☐ Finalise put/implementUpdate
-    ☐ Get rid of the "partial" thing, make it the other way around
-    ☐ Get rid of single fields which have become pointless
-    ☐ 
-
+✔ TOTAL REFACTORING @done(2019-12-07 07:08)
+  ✔ Finalise put/implementUpdate @done(2019-12-07 07:07)
+    ✔ Get rid of the "partial" thing, make it the other way around @done(2019-12-07 07:07)
+    ✔ Get rid of single fields which have become pointless @done(2019-12-07 07:07)
+    ✔ Separate db/validation/permissions concerns away from jsonreststores and into MySqlMixin  @done(2019-12-07 07:08)
+    ☐ Take out all of the "doc" and "docs", replace with "record", "records"
 ☐ Delete any of the original hooks from Jobs.js 2.0
 ☐ Tidy up code in MySqlMixin
 ☐ Add a 'request.fullBody' field which, in case of singleFields, will be populated by request.doc (This is to simplify code in hooks, which right now need to deal with exceptions for single field writes)
