@@ -20,13 +20,13 @@
     ✔ Get rid of the "partial" thing, make it the other way around @done(2019-12-07 07:07)
     ✔ Get rid of single fields which have become pointless @done(2019-12-07 07:07)
     ✔ Separate db/validation/permissions concerns away from jsonreststores and into MySqlMixin  @done(2019-12-07 07:08)
+    ✔ Allow validation hook to ADD errors to the errors array @done(2019-12-07 08:37)
+    ☐ Change afterDelete/Insert/Update into jooks in queryMaker hook, to keep all queries in the same spot
     ☐ Take out all of the "doc" and "docs", replace with "record", "records"
+    ☐ Document all parameters to every function
+    ☐ Check/document every side effect to request.*
+    ☐ Final code tidy up
 ☐ Delete any of the original hooks from Jobs.js 2.0
-☐ Tidy up code in MySqlMixin
-☐ Add a 'request.fullBody' field which, in case of singleFields, will be populated by request.doc (This is to simplify code in hooks, which right now need to deal with exceptions for single field writes)
-☐ Allow validation hook to ADD errors to the errors array
-☐ Improve Jobs 2.0 to use new validation hooks
-☐ Improve Jobs 2.0, so that anything that is about database is handled by DB hooks without using afterDbOperation
 ☐ Tidy up code in Jobs.js
 
 ☐ SimpleSchema: final check on 'canBeNull', etc.
