@@ -21,16 +21,18 @@
     ✔ Get rid of single fields which have become pointless @done(2019-12-07 07:07)
     ✔ Separate db/validation/permissions concerns away from jsonreststores and into MySqlMixin  @done(2019-12-07 07:08)
     ✔ Allow validation hook to ADD errors to the errors array @done(2019-12-07 08:37)
-    ☐ Change afterDelete/Insert/Update into jooks in queryMaker hook, to keep all queries in the same spot
-    ☐ Take out all of the "doc" and "docs", replace with "record", "records"
+    ✔ Change afterDelete/Insert/Update into jooks in queryMaker hook, to keep all queries in the same spot @done(2019-12-11 06:41)
+    ✔ Add missing beforeValidate on Insert @done(2019-12-11 06:41)
+    ✔ Allow "partial" onnly on insert or only on update <--- CRUCIAL!!! @done(2019-12-11 07:04)
+    ✔ Take out all of the "doc" and "docs", replace with "record", "records" @done(2019-12-11 07:15)
+    ✔ Check/document every side effect to request.* @done(2019-12-11 07:39)
     ☐ Document all parameters to every function
-    ☐ Check/document every side effect to request.*
     ☐ Final code tidy up
+    ☐ SimpleSchema: final check on 'canBeNull', etc.
+    ☐ SimpleSchema: have an async version; or, maybe turn it into a 100% async module
+
 ☐ Delete any of the original hooks from Jobs.js 2.0
 ☐ Tidy up code in Jobs.js
-
-☐ SimpleSchema: final check on 'canBeNull', etc.
-☐ SimpleSchema: have an async version; or, maybe turn it into a 100% async module
 ☐ Add store that allows file upload
   ☐ Multer: Use async functions, maybe using async multer
   ☐ Multer: ability to assign names based on record IDs

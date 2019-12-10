@@ -115,36 +115,24 @@ const Store = exports = module.exports = class {
   }
 
   // Methods that MUST be implemented for the store to be functional
+  // They need to satisfy the JsonRestStore DB API
 
-  // Input: request.params
-  // Output: an object, or null
   async implementFetch (request) {
     throw (new Error('implementFetch not implemented, store is not functional'))
   }
 
-  // Input: request.body, request.options.[placement,placementAfter]
-  // Output: an object (saved record)
   async implementInsert (request) {
     throw (new Error('implementInsert not implemented, store is not functional'))
   }
 
-  // Input:
-  // - request.params (query)
-  // - request.body (data)
-  // - request.options.[placement,placementAfter] (for record placement)
-  // Output: an object (updated record)
   async implementUpdate (request) {
     throw (new Error('implementUpdate not implemented, store is not functional'))
   }
 
-  // Input: request.params
-  // Output: an object (deleted record)
   async implementDelete (request) {
     throw (new Error('implementDelete not implemented, store is not functional'))
   }
 
-  // Input: request.params, request.options.[conditionsHash,ranges,sort]
-  // Output: { data, total, grandTotal }
   async implementQuery (request) {
     throw (new Error('implementQuery not implemented, store is not functional'))
   }
@@ -177,7 +165,7 @@ const Store = exports = module.exports = class {
     this.publicURLprefix = Constructor.publicURLprefix
     this.publicURL = Constructor.publicURL
     this.idProperty = Constructor.idProperty
-    this.paramIds = Constructor.paramIds
+    this.paramIds = [...Constructor.paramIds]
     this.storeName = Constructor.storeName
 
     this.handlePost = Constructor.handlePost
@@ -245,20 +233,20 @@ const Store = exports = module.exports = class {
     if (!this.handlePut && request.remote) throw new Store.NotImplementedError()
 
     // Fetch the record
-    // The fact that it's assigned to request.doc means that
+    // The fact that it's assigned to request.record means that
     // implementFetch will use it without re-fetching
-    request.prefetchedDoc = await this.implementFetch(request) || null
+    request.record = await this.implementFetch(request) || null
 
     // Check the 'overwrite' option, throw if fail
     if (typeof request.options.overwrite !== 'undefined') {
-      if (request.prefetchedDoc && !request.options.overwrite) {
+      if (request.record && !request.options.overwrite) {
         throw new this.PreconditionFailedError()
-      } else if (!request.prefetchedDoc && request.options.overwrite) {
+      } else if (!request.record && request.options.overwrite) {
         throw new this.PreconditionFailedError()
       }
     }
 
-    if (!request.prefetchedDoc) {
+    if (!request.record) {
       // Execute actual DB operation
       return await this.implementInsert(request, 'put') || null
     } else {
@@ -302,7 +290,7 @@ const Store = exports = module.exports = class {
     // Record not there: not found error!
     if (!record) throw new Store.NotFoundError()
 
-    request.prefetchedDoc = record
+    request.record = record
     await this.implementDelete(request)
     return record
   }
