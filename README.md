@@ -1,30 +1,17 @@
-JsonRestStores TWO
-==================
-
-JsonRestStore2 (just JsonRestStores from here on) is a rewrite of [JsonRestStores](https://github.com/mercmobily/jsonreststores)
+JsonRestStores
+==============
 
 Rundown of features:
 
 * **DRY approach**. Create complex applications keeping your code short and tight, without repeating yourself.
-* **unintrusive**. It only does all the things you'd have to repeat over and over again. The "real" stuff (managing data) is in your hands
-* **Down-to-earth**. It does what developers _actually_ need, using existing technologies.
-* **Database-agnostic**. When creating a store, all you have to do is write the essential queries to fetch/modify data.
+* **Database is optional**. When creating a store, all you have to do is write the essential queries to fetch/modify data.
+* **Database ready**. Comes with mixins to use MySql (more to come)
 * **Protocol-agnostic**. HTTP is only one of the possible protocols.
-* **Schema based**. Anything coming from the client will be validated and cast to the right type.
 * **File uploads**. It automatically supports file uploads, where the field will be the file's path
-* **API-ready**. Every store function can be called via API, which bypass permissions constraints
-* **Tons of hooks**. You can hook yourself to every step of the store processing process
-* **Authentication hooks**. Only implement things once, and keep authentication tight and right.
-* **Mixin-based**. You can add functionality easily.
-* **Inheriting stores**. You can easily derive a store from another one.
+* **API-ready**. Every store function can be called via API
 * **Great documentation**. (Work in progress after the rewrite)
-* **Self documenting**. (Work in progress after the rewrite)
 
 # Introduction to (JSON) REST stores
-
-Here is an introduction on REST, JSON REST, and this module. If you are a veteran of REST stores, you can probably just skim through this.
-
-## Implementing REST stores
 
 Imagine that you have a web application with bookings, and users connected to each booking, and that you want to make this information available via a JSON Rest API. You would have to define the following routes in your application:
 
@@ -42,26 +29,13 @@ And then to access users for that booking:
 * `POST /bookings/:bookingId/users/`
 * `DELETE /bookings/:bookingId/users/:userId`
 
-And then -- again -- to get/post data from individual fields with one call:
-
-* `GET /bookings/:bookingId/users/:userId/field1`
-* `PUT /bookings/:bookingId/users/:userId/field1`
-* `GET /bookings/:bookingId/users/:userId/field2`
-* `PUT /bookings/:bookingId/users/:userId/field2`
-* `GET /bookings/:bookingId/users/:userId/field3`
-* `PUT /bookings/:bookingId/users/:userId/field3`
-
 It sounds simple enough (although it's only two tables and it already looks rather boring). It gets tricky when you consider that:
 
-* You need to make sure that permissions are always carefully checked. For example, only users that are part of booking `1234` can `GET /bookings/1234/users`
 * When implementing `GET /bookings/`, you need to parse the URL in order to enable data filtering (for example, `GET /bookings?dateFrom=1976-01-10&name=Tony` will need to filter, on the database, all bookings made after the 10th of January 1976 by Tony).
 * When implementing `GET /bookings/`, you need to return the right `Content-Range` HTTP headers in your results so that the clients know what range they are getting.
 * When implementing `GET /bookings/`, you also need to make sure you take into account any `Range` header set by the client, which might only want to receive a subset of the data
-* When implementing `/bookings/:bookingId/users/:userId`, you need to make sure that the bookingId exists
-* With `POST` and `PUT`, you need to make sure that data is validated against some kind of schema, and return the appropriate errors if it's not.
 * With `PUT`, you need to consider the HTTP headers `If-match` and `If-none-match` to see if you can//should//must overwrite existing records
 * All unimplemented methods should return a `501 Unimplemented Method` server response
-* You need to implement all of the routes for individual fields, and add permissions
 
 This is only a short list of obvious things: there are many more to consider. The point is, when you make a store you should be focusing on the important parts (the data you gather and manipulate, and permission checking) rather than repetitive, boilerplate code.
 
@@ -69,225 +43,13 @@ With JsonRestStores, you can create JSON REST stores without ever worrying about
 
 If you are new to REST and web stores, you will probably benefit by reading a couple of important articles. Understanding the concepts behind REST stores will make your life easier. I suggest you read [John Calcote's article about REST, PUT, POST, etc.](http://jcalcote.wordpress.com/2008/10/16/put-or-post-the-rest-of-the-story/). It's a fantastic read, and I realised that it was written by John, who is a long term colleague and fellow writer at Free Software Magazine, only after posting this link here!
 
-# Dependencies overview
+# How to implement a store
 
-Jsonreststores is a module that creates managed routes for you, and integrates very easily with existing ExpressJS applications.
+JsonRestStores handles everything except:
 
-Here is a list of modules used by JsonRestStores. You should be at least slightly familiar with them.
-
-* [SimpleSchema - Github](https://github.com/mercmobily/SimpleSchema2). This module makes it easy (and I mean, really easy) to define a schema and validate/cast data against it. It's really simple to extend a schema as well. It's a no-fuss module.
-
-* [Allhttperrors](https://npmjs.org/package/allhttperrors). A simple module that creats `Error` objects for all of the possible HTTP statuses.
-
-Note that all of these modules are fully unit-tested, and are written and maintained by me.
-
-# Your first Json REST store
-
-Creating a store with JsonRestStores is very simple. Here is code that can be plugged directtly into an Express application:
-
-    var Store = require('jsonreststores2') // The main JsonRestStores module
-    var HTTPMixin = require('jsonreststores2/HTTPMixin') // HTTP Mixin
-    var Schema = require('simpleschema2')  // The main schema module
-
-    // This is for MySql
-    var promisify = require('util').promisify
-    var mysql = require('mysql')
-
-    // ======= BEGIN: Normally in separate file in production =============
-    // Create MySql connection. NOTE: in production this will likely be placed
-    // in a separate file, so that `connection` can be required and shared...
-    var connection = mysql.createPool({
-      host: 'localhost',
-      user: 'user',
-      password: 'YOUR PASSOWORD',
-      database: 'testing',
-      port: 3306
-    })
-    // Promisified versions of the query function for MySql
-    connection.queryP = promisify(connection.query)
-    // ======= END: Normally in separate file in production =============
-
-    // Make up an object that will contain all of the stores
-    var stores = {}
-
-    // Basic definition of the managers store
-    class Managers extends HTTPMixin(Store) {
-      static get schema () {
-        return new Schema({
-          name: { type: 'string', trim: 60 },
-          surname: { type: 'string', searchable: true, trim: 60 }
-        })
-      }
-
-      static get storeName () { return 'managers' }
-      static get publicURL () { return '/managers/:id' }
-
-      static get handlePut () { return true }
-      static get handlePost () { return true }
-      static get handleGet () { return true }
-      static get handleGetQuery () { return true }
-      static get handleDelete () { return true }
-
-      async implementFetch (request) {
-        return (await connection.queryP('SELECT * FROM managers WHERE id = ?', request.params.id))[0]
-      }
-
-      async implementInsert (request) {
-        let insertResults = await connection.queryP('INSERT INTO managers SET ?', request.body)
-        let selectResults = await connection.queryP('SELECT * FROM managers WHERE id = ?', insertResults.insertId)
-        return selectResults[0] || null
-      }
-
-      async implementUpdate (request) {
-        await connection.queryP('UPDATE managers SET ? WHERE id = ?', [request.body, request.params.id])
-        return (await connection.queryP('SELECT * FROM managers WHERE id = ?', request.params.id))[0]
-      }
-
-      async implementDelete (request) {
-        let record = (await connection.queryP('SELECT * FROM managers WHERE id = ?', request.params.id))[0]
-        await connection.queryP('DELETE FROM managers WHERE id = ?', [request.params.id])
-        return record
-      }
-
-      async implementQuery (request) {
-        var result = await connection.queryP(`SELECT * FROM managers LIMIT ?,?`, [ request.options.ranges.skip, request.options.ranges.limit ])
-        var grandTotal = (await connection.queryP(`SELECT COUNT (*) as grandTotal FROM managers`))[0].grandTotal
-        return { data: result, grandTotal: grandTotal }
-      }
-    }
-
-    stores.managers = new Managers()
-    exports = module.exports = stores
-
-In app.js, after `app.use(express.static)`, you would have:
-
-    var stores = require('./stores.js');
-    stores.managers.protocolListenHTTP({app: app});
-
-You will also need to create your MySql table in the 'testing' database:
-
-    CREATE TABLE managers (
-      id INT(10) PRIMARY KEY NOT NULL AUTO_INCREMENT,
-      name VARCHAR(60),
-      surname VARCHAR(60)
-    );
-
-That's it: this is enough to add, to your Express application, a a full store which will handly properly all of the HTTP calls.
-Note that the database side of things has no sanity check: that's because sanity checking has _already_ happened at this stage.
-
-Also note that this setup will query a MySql database; however, _anything_ can be the source of data.
-
-
-Note that:
-
-* `Managers` is a new constructor function that inherits from `Store` (the main constructor for JSON REST stores) mixed in with `HTTPMixin` (which implements `protocolListenHTTP()`
-* `schema` is an object of type Schema that will define what's acceptable in a REST call.
-* `publicURL` is the URL the store is reachable at. ***The last one ID is the most important one***: the last ID in `publicURL` (in this case it's also the only one: `id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
-* `storeName` (_mandatory_) needs to be a unique name for your store.
-* `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error.
-* `protocolListen( 'HTTP', { app: app } )` creates the right Express routes to receive HTTP connections for the `GET`, `PUT`, `POST` and `DELETE` methods.
-
-## The store in action
-
-A bit of testing with `curl`:
-
-    $ curl -i -XGET  http://localhost:3000/managers/
-    HTTP/1.1 200 OK
-    X-Powered-By: Express
-    Content-Type: application/json; charset=utf-8
-    Content-Length: 2
-    ETag: "223132457"
-    Date: Mon, 02 Dec 2013 02:20:21 GMT
-    Connection: keep-alive
-
-    []
-
-    curl -i -X POST -d "name=Tony&surname=Mobily"  http://localhost:3000/managers/
-    HTTP/1.1 201 Created
-    X-Powered-By: Express
-    Location: /managers/2
-    Content-Type: application/json; charset=utf-8
-    Content-Length: 54
-    Date: Mon, 02 Dec 2013 02:21:17 GMT
-    Connection: keep-alive
-
-    {
-      "id": 2,
-      "name": "Tony",
-      "surname": "Mobily"
-    }
-
-    curl -i -X POST -d "name=Chiara&surname=Mobily"  http://localhost:3000/managers/
-    HTTP/1.1 201 Created
-    X-Powered-By: Express
-    Location: /managers/4
-    Content-Type: application/json; charset=utf-8
-    Content-Length: 54
-    Date: Mon, 02 Dec 2013 02:21:17 GMT
-    Connection: keep-alive
-
-    {
-      "id": 4,
-      "name": "Chiara",
-      "surname": "Mobily"
-    }
-
-    $ curl -i -GET  http://localhost:3000/managers/
-    HTTP/1.1 200 OK
-    X-Powered-By: Express
-    Content-Type: application/json; charset=utf-8
-    Content-Length: 136
-    ETag: "1058662527"
-    Date: Mon, 02 Dec 2013 02:22:29 GMT
-    Connection: keep-alive
-
-    [
-      {
-        "id": 2,
-        "name": "Tony",
-        "surname": "Mobily"
-      },
-      {
-        "id": 4,
-        "name": "Chiara",
-        "surname": "Mobily"
-      }
-    ]
-
-
-    $ curl -i -X PUT -d "name=Merc&surname=Mobily"  http://localhost:3000/managers/2
-    HTTP/1.1 200 OK
-    X-Powered-By: Express
-    Location: /managers/2
-    Content-Type: application/json; charset=utf-8
-    Content-Length: 54
-    Date: Mon, 02 Dec 2013 02:23:50 GMT
-    Connection: keep-alive
-
-    {
-      "id": 2,
-      "name": "Merc",
-      "surname": "Mobily"
-    }
-
-    $ curl -i -XGET  http://localhost:3000/managers/2
-    HTTP/1.1 200 OK
-    X-Powered-By: Express
-    Content-Type: application/json; charset=utf-8
-    Content-Length: 54
-    ETag: "-264833935"
-    Date: Mon, 02 Dec 2013 02:24:58 GMT
-    Connection: keep-alive
-
-    {
-      "id": 2,
-      "name": "Merc",
-      "surname": "Mobily"
-    }
-
-It all works!
-
-# Implementing data-oriented calls
+* Permissions
+* Schema validation
+* Data manipulation
 
 Data-oriented calls are the bridge between your stores and your actual data. Data can be stored in a database, text files, or even remotely.
 
@@ -358,7 +120,7 @@ This method is used to fetch a set of records from the data source. The attribut
 * `request.remote`.
 * `request.params`. For remote requests, adds filtering restrictions to the query so that only matching records will be fetched. For local request, such extra filtering should be avoided.
 * `request.options`. The options object that will define what data is to be fetched. Specifically:
-  * `request.options.conditions`: an object specifying key/value criteria to be applied for filtering. The allowed values depend on the store's own `searchSchema` (see the next section)
+  * `request.options.conditions`: an object specifying key/value criteria to be applied for filtering.
   * `request.options.sort`: an object specifying how sorting should happen. For example `{ surname: -1, age: 1  }`.
   * `request.options.range`: an object with up to attributes:
     * `limit` must make sure that only a limited number of records are fetched;
@@ -366,78 +128,20 @@ This method is used to fetch a set of records from the data source. The attribut
 
 The list of returned records (as array) should be returned by this method.
 
-## Custom `searchSchema`
+# Creating a store
 
-In JsonRestStores you actually define what fields are acceptable as filters in `implementQuery` (specifically, `request.options.conditions`) with the property `searchSchema`, which is defined exactly as a schema. So, writing this is equivalent to the code just above:
+Creating a store is a matter of implementing the calls described above. You _can_ be lazy (or smart), and create stores based on MySql and using schema validation by using [jsonreststores-mysql](http://...) which comes with all of those functions implemented automatically, as well as the ability to customise queries, data validation and permissions.
 
-    // Basic definition of the managers store
-    class Managers extends HTTPMixin(Store) {
-      static get schema () {
-        return new Schema({
-          name: { type: 'string', trim: 60 },
-          surname: { type: 'string', searchable: true, trim: 60 }
-        })
-      }
-
-      searchSchema: new Schema( {
-        surname: { type: 'string', trim: 60 },
-      }),
-
-      static get storeName () { return 'managers' }
-      static get publicURL () { return '/managers/:id' }
-
-      static get handlePut () { return true }
-      static get handlePost () { return true }
-      static get handleGet () { return true }
-      static get handleGetQuery () { return true }
-      static get handleDelete () { return true }
-
-      // ...implement??? functions
-    }
+jsonreststores-mysql is the ideal solution for DB-oriented stores; however, there is often a strong case for non-DB stores (see: fetching data remotely on-the-fly, or providing endpoints which will perform complex maintenance operations, etc.)
 
 
-If `searchSchema` is not defined, JsonRestStores will create one based on your main schema by doing a shallow copy, excluding `paramIds` (which means that, in this case, `id` is not added automatically to `searchSchema`, which is most likely what you want).
+# A simple (database-free) store
 
-If you define your own `searchSchema`, you are able to decide exactly how you want to filter the values. For example you could define a different default, or trim value, etc. You might also have fields that will create more complex queries. For example:
-
-    // Basic definition of the managers store
-    class Managers extends HTTPMixin(Store) {
-      static get schema () {
-        return new Schema({
-          name: { type: 'string', searchable: true, trim: 60 },
-          surname: { type: 'string', searchable: true, trim: 60 }
-        })
-      }
-
-      searchSchema: new Schema( {
-        surname: { type: 'string', trim: 60 },
-        name: { type: 'string', trim: 60 },
-        anyField: { type: string, trim: 60 }
-      }),
-
-      static get storeName () { return 'managers' }
-      static get publicURL () { return '/managers/:id' }
-
-      static get handlePut () { return true }
-      static get handlePost () { return true }
-      static get handleGet () { return true }
-      static get handleGetQuery () { return true }
-      static get handleDelete () { return true }
-
-      async implementQuery (request) {
-        // request.options.conditions might have 'any', which should generate
-        // an SQL query checking both name and surname
-      }
-
-      // ...implement??? functions
-    }
 
 
 # Naming conventions for stores
 
 It's important to be consistent in naming conventions while creating stores. In this case, code is clearer than a thousand bullet points:
-
-## Naming convertions for simple stores
 
     var Managers = declare( Store, {
 
@@ -469,103 +173,6 @@ It's important to be consistent in naming conventions while creating stores. In 
 * Store names as string (e.g. `storeName`) should be lowercase and are plural (they are collections representing multiple entries)
 * Classes (derived from `Store`) are in capital letters
 * URLs are in non-capital letters (following the stores' names, since everybody knows that `/Capital/Urls/Are/Silly`)
-
-# Permissions
-
-Every rest method runs `checkPermissions()` in order to check permissions. If everything is fine, `checkPermissions()`  returns `true`; if it returns `false`, along with a message, it means that permission wasn't granted.
-
-The `checkPermissions()` method has the following signature:
-
-    checkPermissions: function( request, method)
-
-Here:
-
-* `request`. It is the request object
-* `method`. It can be `post`, `put`, `get`, `getQuery`, `delete`
-
-Here is an example of a store only allowing deletion only to specific admin users:
-
-Note that if your store is derived from another one, and you want to preserve the parent store's permission model, you can run `super.checkPermissions()`:
-
-      async checkPermissions (request, method) {
-
-        // Run the parent's permission check. If it failed, honour the failure
-        let { granted, message } = super.checkPermissions(request, method)
-        if (!granted) return { granted: true }
-
-        // We are only adding checks for  `put`.
-        // In any other case, will go along with the parent's response
-        if (method === 'put') return { granted: true }
-
-        // User is admin (id: 1 )
-        if( request.session.user === 1){ return { granted: true }
-        else return { granted: false, message: 'Only admin can do this'}
-      },
-
-Please note that `checkPermissions()` is only run for local requests, with `remote` set to false. All requests coming from APIs will ignore the method.
-
-
-## A note on `publicURL` and `paramIds`
-
-When you define a store like this:
-
-    var Managers = declare( Store, {
-
-      schema: new Schema({
-        name   : { type: 'string', trim: 60 },
-        surname: { type: 'string', trim: 60 },
-      }),
-
-      storeName: 'managers',
-      publicURL: '/managers/:id',
-
-      handlePut: true,
-      handlePost: true,
-      handleGet: true,
-      handleGetQuery: true,
-      handleDelete: true,
-
-      hardLimitOnQueries: 50,
-    });
-
-    managers.protocolListen( 'HTTP', { app: app } );;
-
-The `publicURL` is used to:
-
-* Add `id: { type: id }` to the schema automatically. This is done so that you don't have to do the grunt work of defining `id` in the schema if they are already in `publicURL`.
-* Create the `paramIds` array for the store. In this case, `paramIds` will be `[ 'id' ]`.
-
-So, you could reach the same goal without `publicURL`:
-
-    // Basic definition of the managers store
-    class Managers extends HTTPMixin(Store) {
-      static get schema () {
-        return new Schema({
-          id: { type: 'id' },
-          name: { type: 'string', searchable: true, trim: 60 },
-          surname: { type: 'string', trim: 60 }
-        })
-      }
-
-      static get paramIds () { return [ 'id' ] }
-
-      static get storeName () { return 'managers' }
-      static get publicURL () { return '/managers/:id' }
-
-      static get handlePut () { return true }
-      static get handlePost () { return true }
-      static get handleGet () { return true }
-      static get handleGetQuery () { return true }
-      static get handleDelete () { return true }
-      // ...implement??? functions
-    }
-
-Note that:
- * The `id` parameter had to be defined in the schema
- * The `paramIds` array had to be defined by hand
- * `managers.protocolListenHTTP({ app: app } );` can't be used as the public URL is not there
-
-In any case, the property `idProperty` is set as last element of `paramIds`; in this example, it is `id`.
 
 # File uploads
 
@@ -602,7 +209,7 @@ File upload is something that happens at HTTP level. So, it's implemented in HTT
 In this store:
 
 * The store has an `uploadFields` attribute, which lists the fields that will represent file paths resulting from the successful upload
-* The field is populated with the fill path to the uploaded file
+* The field is populated with the full path to the uploaded file
 
 For this to happen, effectively HTTPMixin will:
 
@@ -611,8 +218,6 @@ For this to happen, effectively HTTPMixin will:
 * set `req.body.picture` as the file's path, and `req.bodyComputed.picture` to true.
 
 JsonRestStores will simply see values in `req.body`, blissfully unaware of the work done to parse the requests' input and the work to automatically populate `req.body` with the form values as well as the file paths.
-
-The fact that the fields are protected meand that you are _not_ forced to re-upload files every time you submit the form: if the values are set (thanks to an upload), they will change; if they are not set, they will be left "as is".
 
 On the backend, JsonRestStores uses `multer`, a powerful multipart-parsing module. However, this is basically transparent to JsonRestStores and to developers, except some familiarity with the configuration functions.
 
@@ -734,17 +339,6 @@ By default, when there is an error, the file upload module `multer` will throw a
 # NOTE: DOCUMENTATION UPDATED TO THIS POINT
 
 
-# Inheriting a store from another one
-
-
-# Self-documetation
-
-This feature hasn't yet been ported from Jsonreststores
-
-# Errors returned and error management
-
-JsonRestStores has very careful error management.
-
 ## The error objects
 
 This is the comprehensive list of errors the class can create:
@@ -796,7 +390,7 @@ Do this if you basically want to make absolute sure that every single request wi
 
 #### `nonhttp`
 
-If you have `chainErrors: nonhttp` in your class definition, JsonRestStores will only call `next( err ) ` for non-HTTP errors --  any other problem (like your MongoDB server going down) will be handled by the next Express error management middleware. Use this if you want the server to respond directly in case of an HTTP problem (again using `self.formatErrorResponse()` to send a response to the client), but then you want to manage other problems (for example a MongoDB problem) with Express.
+If you have `chainErrors: nonhttp` in your class definition, JsonRestStores will only call `next( err ) ` for non-HTTP errors --  any other problem (like your database server going down) will be handled by the next Express error management middleware. Use this if you want the server to respond directly in case of an HTTP problem (again using `self.formatErrorResponse()` to send a response to the client), but then you want to manage other problems (for example a database problem) with Express.
 
 ### `self.formatErrorResponse()`
 
@@ -806,7 +400,7 @@ The stock `self.formatErrorResponse()` method will simply return a Json represen
 
 ### `self.logError()`
 
-Whenever an error happens, JsonRestStore will run `self.logError()`. This happens regardless of what `self.chainErrors` contains (that is, whether the error is chained up to Express or it's managed internally). Note that there is no `callback` parameter to this method: since it's only a logging method, if it fails, it fails.
+Whenever an error happens, JsonRestStores will run `self.logError()`. This happens regardless of what `self.chainErrors` contains (that is, whether the error is chained up to Express or it's managed internally). Note that there is no `callback` parameter to this method: since it's only a logging method, if it fails, it fails.
 
 
 ## The response
