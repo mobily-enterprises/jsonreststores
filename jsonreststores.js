@@ -12,8 +12,6 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 NOTE. When creating a store, you can take the following shortcuts:
   * Don't specify `paramIds`. If not specified, it will be worked out from publicURL
   * Don't specify `idProperty`. If idProperty not specified, it will be assumed last element of paramIds
-  * Don't specify `paramIds` in schema. They will be added to the schema as `{type: 'id' }` automatically
-  * Don't specify `searchSchema`. It will be worked out taking all schema element marked as `searchable: true` (except paramIds)
 */
 
 const e = require('allhttperrors')
@@ -115,7 +113,7 @@ const Store = exports = module.exports = class {
   }
 
   // Methods that MUST be implemented for the store to be functional
-  // They need to satisfy the JsonRestStore DB API
+  // They need to satisfy the JsonRestStores DB API
 
   async implementFetch (request) {
     throw (new Error('implementFetch not implemented, store is not functional'))
@@ -235,6 +233,7 @@ const Store = exports = module.exports = class {
     // Fetch the record
     // The fact that it's assigned to request.record means that
     // implementFetch will use it without re-fetching
+    // SIDE_EFFECT: request.record
     request.record = await this.implementFetch(request) || null
 
     // Check the 'overwrite' option, throw if fail
@@ -276,6 +275,7 @@ const Store = exports = module.exports = class {
 
     // Sets request.total and request.grandTotal, which will be used
     // by HTTPMixin to write out headers
+    // SIDE_EFFECT: request.total, request.grandTotal
     request.total = data.length
     if (typeof grandTotal !== 'undefined') request.grandTotal = grandTotal
 
@@ -290,6 +290,7 @@ const Store = exports = module.exports = class {
     // Record not there: not found error!
     if (!record) throw new Store.NotFoundError()
 
+    // SIDE_EFFECT: request.record
     request.record = record
     await this.implementDelete(request)
     return record
