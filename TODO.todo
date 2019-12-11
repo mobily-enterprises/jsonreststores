@@ -26,13 +26,14 @@
     ✔ Allow "partial" onnly on insert or only on update <--- CRUCIAL!!! @done(2019-12-11 07:04)
     ✔ Take out all of the "doc" and "docs", replace with "record", "records" @done(2019-12-11 07:15)
     ✔ Check/document every side effect to request.* @done(2019-12-11 07:39)
-    ☐ Document all parameters to every function
-    ☐ Final code tidy up
+    ✔ Document all parameters to every function @done(2019-12-12 07:23)
+    ✔ Final code tidy up @done(2019-12-12 07:43)
     ☐ SimpleSchema: final check on 'canBeNull', etc.
     ☐ SimpleSchema: have an async version; or, maybe turn it into a 100% async module
+    ☐ Multer: Use async functions, maybe using async multer
+    ☐ Multer: ability to assign names based on record IDs
+    ☐ Make jsonreststores-mysql a separate module
+    ☐ Make documentation stubs
 
 ☐ Delete any of the original hooks from Jobs.js 2.0
 ☐ Tidy up code in Jobs.js
-☐ Add store that allows file upload
-  ☐ Multer: Use async functions, maybe using async multer
-  ☐ Multer: ability to assign names based on record IDs
