@@ -11,6 +11,12 @@ Rundown of features:
 * **API-ready**. Every store function can be called via API
 * **Great documentation**. (Work in progress after the rewrite)
 
+# To integrate in documentation
+
+NOTE. When creating a store, you can take the following shortcuts:
+  * Don't specify `paramIds`. If not specified, it will be worked out from publicURL
+  * Don't specify `idProperty`. If idProperty not specified, it will be assumed last element of paramIds
+
 # Introduction to (JSON) REST stores
 
 Imagine that you have a web application with bookings, and users connected to each booking, and that you want to make this information available via a JSON Rest API. You would have to define the following routes in your application:
@@ -130,12 +136,218 @@ The list of returned records (as array) should be returned by this method.
 
 # Creating a store
 
-Creating a store is a matter of implementing the calls described above. You _can_ be lazy (or smart), and create stores based on MySql and using schema validation by using [jsonreststores-mysql](http://...) which comes with all of those functions implemented automatically, as well as the ability to customise queries, data validation and permissions.
+Creating a store is a matter of implementing the calls described above. You _can_ be lazy (or smart), and create stores based on MySql and using schema validation by using [jsonreststores-mysql](https://github.com/mercmobily/jsonreststores-mysql) which comes with all of those functions implemented automatically, as well as the ability to customise queries, data validation and permissions.
 
 jsonreststores-mysql is the ideal solution for DB-oriented stores; however, there is often a strong case for non-DB stores (see: fetching data remotely on-the-fly, or providing endpoints which will perform complex maintenance operations, etc.)
 
 
 # A simple (database-free) store
+
+
+
+# A database-driven JSON REST store
+
+Creating a store with JsonRestStores is very simple. Here is code that can be plugged directly into an Express application:
+
+    var Store = require('jsonreststores2') // The main JsonRestStores module
+    var HTTPMixin = require('jsonreststores2/HTTPMixin') // HTTP Mixin
+    var Schema = require('simpleschema2')  // The main schema module
+
+    // This is for MySql
+    var promisify = require('util').promisify
+    var mysql = require('mysql')
+
+    // ======= BEGIN: Normally in separate file in production =============
+    // Create MySql connection. NOTE: in production this will likely be placed
+    // in a separate file, so that `connection` can be required and shared...
+    var connection = mysql.createPool({
+      host: 'localhost',
+      user: 'user',
+      password: 'YOUR PASSOWORD',
+      database: 'testing',
+      port: 3306
+    })
+    // Promisified versions of the query function for MySql
+    connection.queryP = promisify(connection.query)
+    // ======= END: Normally in separate file in production =============
+
+    // Make up an object that will contain all of the stores
+    var stores = {}
+
+    // Basic definition of the managers store
+    class Managers extends HTTPMixin(Store) {
+      static get schema () {
+        return new Schema({
+          name: { type: 'string', trim: 60 },
+          surname: { type: 'string', searchable: true, trim: 60 }
+        })
+      }
+
+      static get storeName () { return 'managers' }
+      static get publicURL () { return '/managers/:id' }
+
+      static get handlePut () { return true }
+      static get handlePost () { return true }
+      static get handleGet () { return true }
+      static get handleGetQuery () { return true }
+      static get handleDelete () { return true }
+
+      async implementFetch (request) {
+        return (await connection.queryP('SELECT * FROM managers WHERE id = ?', request.params.id))[0]
+      }
+
+      async implementInsert (request) {
+        let insertResults = await connection.queryP('INSERT INTO managers SET ?', request.body)
+        let selectResults = await connection.queryP('SELECT * FROM managers WHERE id = ?', insertResults.insertId)
+        return selectResults[0] || null
+      }
+
+      async implementUpdate (request) {
+        await connection.queryP('UPDATE managers SET ? WHERE id = ?', [request.body, request.params.id])
+        return (await connection.queryP('SELECT * FROM managers WHERE id = ?', request.params.id))[0]
+      }
+
+      async implementDelete (request) {
+        let record = (await connection.queryP('SELECT * FROM managers WHERE id = ?', request.params.id))[0]
+        await connection.queryP('DELETE FROM managers WHERE id = ?', [request.params.id])
+        return record
+      }
+
+      async implementQuery (request) {
+        var result = await connection.queryP(`SELECT * FROM managers LIMIT ?,?`, [ request.options.ranges.skip, request.options.ranges.limit ])
+        var grandTotal = (await connection.queryP(`SELECT COUNT (*) as grandTotal FROM managers`))[0].grandTotal
+        return { data: result, grandTotal: grandTotal }
+      }
+    }
+
+    stores.managers = new Managers()
+    exports = module.exports = stores
+
+In app.js, after `app.use(express.static)`, you would have:
+
+    var stores = require('./stores.js');
+    stores.managers.protocolListenHTTP({app: app});
+
+You will also need to create your MySql table in the 'testing' database:
+
+    CREATE TABLE managers (
+      id INT(10) PRIMARY KEY NOT NULL AUTO_INCREMENT,
+      name VARCHAR(60),
+      surname VARCHAR(60)
+    );
+
+That's it: this is enough to add, to your Express application, a full store which will handle properly all of the HTTP calls.
+Note that the database side of things has no sanity check: that's because sanity checking has _already_ happened at this stage.
+
+Also note that this setup will query a MySql database; however, _anything_ can be the source of data.
+
+Note that:
+
+* `Managers` is a new constructor function that inherits from `Store` (the main constructor for JSON REST stores) mixed in with `HTTPMixin` (which implements `protocolListenHTTP()`
+* `schema` is an object of type Schema that will define what's acceptable in a REST call.
+* `publicURL` is the URL the store is reachable at. ***The last one ID is the most important one***: the last ID in `publicURL` (in this case it's also the only one: `id`) defines which field, within your schema, will be used as _the_ record ID when performing a PUT and a GET (both of which require a specific ID to function).
+* `storeName` (_mandatory_) needs to be a unique name for your store.
+* `handleXXX` are attributes which will define how your store will behave. If you have `handlePut: false` and a client tries to PUT, they will receive an `NotImplemented` HTTP error.
+* `protocolListen( 'HTTP', { app: app } )` creates the right Express routes to receive HTTP connections for the `GET`, `PUT`, `POST` and `DELETE` methods.
+
+## The store in action
+
+A bit of testing with `curl`:
+
+    $ curl -i -XGET  http://localhost:3000/managers/
+    HTTP/1.1 200 OK
+    X-Powered-By: Express
+    Content-Type: application/json; charset=utf-8
+    Content-Length: 2
+    ETag: "223132457"
+    Date: Mon, 02 Dec 2013 02:20:21 GMT
+    Connection: keep-alive
+
+    []
+
+    curl -i -X POST -d "name=Tony&surname=Mobily"  http://localhost:3000/managers/
+    HTTP/1.1 201 Created
+    X-Powered-By: Express
+    Location: /managers/2
+    Content-Type: application/json; charset=utf-8
+    Content-Length: 54
+    Date: Mon, 02 Dec 2013 02:21:17 GMT
+    Connection: keep-alive
+
+    {
+      "id": 2,
+      "name": "Tony",
+      "surname": "Mobily"
+    }
+
+    curl -i -X POST -d "name=Chiara&surname=Mobily"  http://localhost:3000/managers/
+    HTTP/1.1 201 Created
+    X-Powered-By: Express
+    Location: /managers/4
+    Content-Type: application/json; charset=utf-8
+    Content-Length: 54
+    Date: Mon, 02 Dec 2013 02:21:17 GMT
+    Connection: keep-alive
+
+    {
+      "id": 4,
+      "name": "Chiara",
+      "surname": "Mobily"
+    }
+
+    $ curl -i -GET  http://localhost:3000/managers/
+    HTTP/1.1 200 OK
+    X-Powered-By: Express
+    Content-Type: application/json; charset=utf-8
+    Content-Length: 136
+    ETag: "1058662527"
+    Date: Mon, 02 Dec 2013 02:22:29 GMT
+    Connection: keep-alive
+
+    [
+      {
+        "id": 2,
+        "name": "Tony",
+        "surname": "Mobily"
+      },
+      {
+        "id": 4,
+        "name": "Chiara",
+        "surname": "Mobily"
+      }
+    ]
+
+    $ curl -i -X PUT -d "name=Merc&surname=Mobily"  http://localhost:3000/managers/2
+    HTTP/1.1 200 OK
+    X-Powered-By: Express
+    Location: /managers/2
+    Content-Type: application/json; charset=utf-8
+    Content-Length: 54
+    Date: Mon, 02 Dec 2013 02:23:50 GMT
+    Connection: keep-alive
+
+    {
+      "id": 2,
+      "name": "Merc",
+      "surname": "Mobily"
+    }
+
+    $ curl -i -XGET  http://localhost:3000/managers/2
+    HTTP/1.1 200 OK
+    X-Powered-By: Express
+    Content-Type: application/json; charset=utf-8
+    Content-Length: 54
+    ETag: "-264833935"
+    Date: Mon, 02 Dec 2013 02:24:58 GMT
+    Connection: keep-alive
+
+    {
+      "id": 2,
+      "name": "Merc",
+      "surname": "Mobily"
+    }
+
+It all works!
 
 
 
