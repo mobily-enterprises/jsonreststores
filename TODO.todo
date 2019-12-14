@@ -28,12 +28,12 @@
     ✔ Check/document every side effect to request.* @done(2019-12-11 07:39)
     ✔ Document all parameters to every function @done(2019-12-12 07:23)
     ✔ Final code tidy up @done(2019-12-12 07:43)
-    ☐ Make jsonreststores-mysql a separate module
-    ☐ SimpleSchema: final check on 'canBeNull', etc.
-    ☐ SimpleSchema: have an async version; or, maybe turn it into a 100% async module
+    ✔ Make jsonreststores-mysql a separate module @done(2019-12-14 07:58)
+    ✔ Make documentation stubs @done(2019-12-15 05:58)
+    ✔ SimpleSchema: final check on 'canBeNull', etc. @done(2019-12-15 07:14)
+    ✔ SimpleSchema: have an async version; or, maybe turn it into a 100% async module @done(2019-12-15 07:29)
     ☐ Multer: Use async functions, maybe using async multer
     ☐ Multer: ability to assign names based on record IDs
-    ☐ Make documentation stubs
 
 ☐ Delete any of the original hooks from Jobs.js 2.0
 ☐ Tidy up code in Jobs.js
