@@ -1,4 +1,3 @@
-
 ✔ Make sure it works by changing URL in client v2 @done(2019-12-01 07:35)
 ✔ Add hook support to make queries in MySqlMixin @done(2019-12-02 23:26)
 ✔ Add default "where" clause depending on conditionsHash @done(2019-12-02 06:15)
@@ -32,8 +31,6 @@
     ✔ Make documentation stubs @done(2019-12-15 05:58)
     ✔ SimpleSchema: final check on 'canBeNull', etc. @done(2019-12-15 07:14)
     ✔ SimpleSchema: have an async version; or, maybe turn it into a 100% async module @done(2019-12-15 07:29)
-    ☐ Multer: Use async functions, maybe using async multer
-    ☐ Multer: ability to assign names based on record IDs
-
-☐ Delete any of the original hooks from Jobs.js 2.0
-☐ Tidy up code in Jobs.js
+    ✔ Multer: ability to assign names based on record IDs @done(2019-12-16 07:45)
+    ✔ Multer: Use async functions, maybe using async multer (MULTER DELETED) @done(2019-12-16 10:10)
+    ✔ Multer: Add ability to add Multer storage rather than paths @done(2019-12-16 10:10)
