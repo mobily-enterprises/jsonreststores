@@ -7,7 +7,6 @@ Rundown of features:
 * **Database is optional**. When creating a store, all you have to do is write the essential queries to fetch/modify data.
 * **Database ready**. Comes with mixins to use MySql (more to come)
 * **Protocol-agnostic**. HTTP is only one of the possible protocols.
-* **File uploads**. It automatically supports file uploads, where the field will be the file's path
 * **API-ready**. Every store function can be called via API
 * **Great documentation**. (Work in progress after the rewrite)
 
@@ -386,169 +385,11 @@ It's important to be consistent in naming conventions while creating stores. In 
 * Classes (derived from `Store`) are in capital letters
 * URLs are in non-capital letters (following the stores' names, since everybody knows that `/Capital/Urls/Are/Silly`)
 
-# File uploads
-
-File upload is something that happens at HTTP level. So, it's implemented in HTTPMixin.
-
-    // Basic definition of the managers store
-    class Managers extends HTTPMixin(Store) {
-      static get schema () {
-        return new Schema({
-          name: { type: 'string', trim: 60 },
-          surname: { type: 'string', searchable: true, trim: 60 }
-          picture: { default: '', type: 'string', trim: 128 },
-        })
-      }
-
-      static get storeName () { return 'managers' }
-      static get publicURL () { return '/managers/:id' }
-
-      static get handlePut () { return true }
-      static get handlePost () { return true }
-      static get handleGet () { return true }
-      static get handleGetQuery () { return true }
-      static get handleDelete () { return true }
-
-      static get uploadFields () { return {
-        picture: {
-          destination: '/home/www/files',
-        },  
-      }}
-
-      // ...implement??? functions
-    }
-
-In this store:
-
-* The store has an `uploadFields` attribute, which lists the fields that will represent file paths resulting from the successful upload
-* The field is populated with the full path to the uploaded file
-
-For this to happen, effectively HTTPMixin will:
-
-* add a middleware in stores with `uploadFields`, adding the ability to parse `multipart/formdata` input from the client
-* save the files in the required location
-* set `req.body.picture` as the file's path, and `req.bodyComputed.picture` to true.
-
-JsonRestStores will simply see values in `req.body`, blissfully unaware of the work done to parse the requests' input and the work to automatically populate `req.body` with the form values as well as the file paths.
-
-On the backend, JsonRestStores uses `multer`, a powerful multipart-parsing module. However, this is basically transparent to JsonRestStores and to developers, except some familiarity with the configuration functions.
-
-## Configuring file uploads
-
-The store above only covers a limited use case. Remembering that the `file` object has the following fields:
-
-* `fieldname` - Field name specified in the form
-* `originalname` - Name of the file on the user's computer
-* `encoding` - Encoding type of the file
-* `mimetype` - Mime type of the file
-* `size` - Size of the file in bytes
-* `destination` - The folder to which the file has been saved
-* `filename` - The name of the file within the destination
-* `path` - The full path to the uploaded file
-
-
-In order to configure file uploads, you can set three `static get` attributes you can set when you declare you store:
-
-* `uploadFilter` -- to filter incoming files based on their names or fieldName
-* `uploadLimits` -- to set some upload limits, after which JsonRestStores will throw a `UnprocessableEntity` error.
-* `uploadFields` -- it can have two properties: `destination` and `fileName`.
-
-Here are these options in detail:
-
-### `uploadFilter`
-
-This allows you to filter files based on their names and `fieldName`s. You only have limited amount of information for each file:
-
-    { fieldname: 'fileName',
-      originalname: 'test.mp4',
-      encoding: '7bit',
-      mimetype: 'video/mp4' }
-
-This is especially useful if you want to check for swearwords in the file name, or the file type. You can throw and error if the file type doesn't correspond to what you were expecting:
-
-    uploadFilter: function( req, file, cb ){
-      if( file.mimetype != 'video/mp4') return cb( null, false );
-      cb( null, true );
-    }
-
-Note that because this code run in the context of `multer`, it uses callback-style,
-
-### `uploadLimits`
-
-This allows you to set specific download limits. The list comes straight from `busbuy`, on which JsonRestStores is based:
-
-* `fieldNameSize` -- Max field name size (in bytes) (Default: 100 bytes).
-* `fieldSize` -- Max field value size (in bytes) (Default: 1MB).
-* `fields` -- Max number of non-file fields (Default: Infinity).
-* `fileSize` -- For multipart forms, the max file size (in bytes) (Default: Infinity).
-* `files` -- For multipart forms, the max number of file fields (Default: Infinity).
-* `parts` -- For multipart forms, the max number of parts (fields + files) (Default: Infinity).
-* `headerPairs` -- For multipart forms, the max number of header key=>value pairs to parse Default: 2000 (same as node's http).
-
-For example, the most typical use case would be:
-
-    static get uploadLimits () { return {
-      fileSize: 50000000 // 50 Mb
-    }}
-
-### `uploadFields`
-
-This is the heart of the upload abilities of JsonRestStores.
-
-It accepts two parameters:
-
-#### `destination`
-
-This parameter is mandatory, and defines where the files connected to that field will be stored. It can either be a string, or a function with the following signature: `function( req, file, cb )`. It will need to call the callback `cb` with `cb( null, FULL_PATH )`. For example:
-
-    static get uploadFields () { return {
-      picture: {
-        destination: function (req, file, cb) {
-          // This can depend on req, or file's attribute
-          cb( null, '/tmp/my-uploads');
-        }
-      }
-    }
-
-#### `fileName`
-
-It's a function that will determine the file name. By default, it will be a function that works out the file name from the field. By default, if you don't define a `fileName` function, it will be the equivalent of writing:
-
-If you don't set it, it will be:
-
-    static get uploadFields () { return {
-      picture: {
-        destination: function (req, file, cb) {
-          // This can depend on req, or file's attribute
-          cb( null, '/tmp/my-uploads');
-        },
-
-        // If the ID is there (that's the case with a PUT), then use it. Otherwise,
-        // simply generate a random string
-        fileName: function( req, file, cb ){
-          var id = req.params[ this.idProperty ];
-          if( ! id ) id = crypto.randomBytes( 20 ).toString( 'hex' );
-
-          // That's it
-          return cb( null, file.fieldname + '_' + id ); // ._
-        }
-      }
-    },
-
-The default function works fine in most cases. However, you may want to change it.
-
-#### `uploadErrorProcessor`
-
-By default, when there is an error, the file upload module `multer` will throw and error. It's  much better to encapsulate those errors in HTTP errors. This is what uploadErrorProcessor does. By default, it's defined as follow (although you can definitely change it if needed):
-
-    uploadErrorProcessor: function( err, next ){
-      var ReturnedError = new this.UnprocessableEntityError( (err.field ? err.field : '' ) + ": " + err.message );
-      ReturnedError.OriginalError = err;
-      return next( ReturnedError );
-    },
-
-
 # NOTE: DOCUMENTATION UPDATED TO THIS POINT
+
+## preMiddleware and postMiddleware
+
+
 
 
 ## The error objects
