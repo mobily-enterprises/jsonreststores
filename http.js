@@ -7,31 +7,20 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
-
-const multer = require('multer')
-const crypto = require('crypto')
 const URL = require('url').URL
 
 const HTTPMixin = (base) => class extends base {
-  //
-  // Which fields are to be considered "upload" ones
-  static get uploadFields () { return {} }
-
-  // Upload limits following multer's format
-  static get uploadLimits () { return null }
-
-  // Upload filters to conditionally stop files
-  uploadFilter (req, file, cb) { return cb(null, true) }
+  // Pre and Post middleware functions
+  // They will allow plugging of file uploads and any further manipulation of requests
+  preMiddleware (method) { return (req, res, next) => next(null) }
+  postMiddleware (method) { return (req, res, next) => next(null) }
 
   // How to chain errors
   static get chainErrors () { return 'nonhttp' }
 
   constructor () {
     super()
-    this.uploadFields = this.constructor.uploadFields
-    this.uploadLimits = this.constructor.uploadLimits
     this.chainerrors = this.constructor.chainerrors
-    this.uploadFilter = this.constructor.uploadFilter
   }
 
   // Sends the information out, for HTTP calls.
@@ -108,42 +97,6 @@ const HTTPMixin = (base) => class extends base {
     const app = params.app
     let idName
 
-    const self = this
-
-    // Make up the upload middleware to parse the files correctly
-    // The middleware will be empty if there are no upload fields
-    let uploadMiddleware
-    if (!Object.keys(self.uploadFields).length) {
-      uploadMiddleware = function (req, res, next) { next(null) }
-    } else {
-      // Make up the storage for multer
-      const storage = multer.diskStorage({
-        destination: self._determineUploadDestinaton.bind(self),
-        filename: self._determineUploadFileName.bind(self)
-      })
-
-      // Make up the iptions
-      const options = { storage: storage, fileFilter: self._multerFileFilter.bind(self) }
-      // Commeted out as it throws generic errors, which become 503s
-      if (self.uploadLimits) options.limits = self.uploadLimits
-
-      // Create the multer middleware. Errors are wrapped around HTTP error UnprocesableEntity
-      // otherwise the server will generate 503 for big uploads
-      const upload = multer(options).any()
-      uploadMiddleware = function (req, res, next) {
-        upload(req, res, function (err) {
-          if (err) return self._uploadErrorProcessor(err, next)
-
-          if (req.files && Array.isArray(req.files)) {
-            req.files.forEach((f) => {
-              req.body[f.fieldname] = f.filename
-            })
-          }
-          next(null)
-        })
-      }
-    }
-
     // Public URL must be set
     if (!url) {
       throw (new Error('listen() must be called on a store with a public URL'))
@@ -163,66 +116,11 @@ const HTTPMixin = (base) => class extends base {
 
     // Make entries in "app", so that the application
     // will give the right responses
-    app.get(url + idName, this._getRequestHandler('get'))
-    app.get(url, this._getRequestHandler('getQuery'))
-    app.put(url + idName, uploadMiddleware, this._getRequestHandler('put'))
-    app.post(url, uploadMiddleware, this._getRequestHandler('post'))
-    app.delete(url + idName, this._getRequestHandler('delete'))
-  }
-
-  // Will make sure only fields marked as file uploads are accepted
-  _multerFileFilter (req, file, cb) {
-    const self = this
-
-    const storeAttributes = self.uploadFields[file.fieldname]
-
-    // If it's not in uploadFields, then end of the story: not allowed
-    if (!storeAttributes) {
-      const UnprocessableEntityError = this.constructor.UnprocessableEntityError
-      return cb(new UnprocessableEntityError('Unacceptable upload field: ' + file.fieldname), false)
-
-    // There is no filter set by the store itself: allow it.
-    } else if (typeof (self.uploadFilter) !== 'function') {
-      return cb(null, true)
-
-    // There is a filter: run it, the filter will either allow it or reject it
-    } else {
-      return self.uploadFilter.apply(this, [].slice.call(arguments))
-    }
-  }
-
-  _determineUploadDestinaton (req, file, cb) {
-    const self = this
-
-    const storeAttributes = self.uploadFields[file.fieldname]
-
-    if (typeof (storeAttributes.destination) === 'string') {
-      return cb(null, storeAttributes.destination)
-    } else if (typeof (storeAttributes.destination) === 'function') {
-      return storeAttributes.destination.apply(this, [].slice.call(arguments))
-    } else {
-      return cb(new Error('destination needs to be set as string or function for uploadField entries'))
-    }
-  }
-
-  _determineUploadFileName (req, file, cb) {
-    const self = this
-
-    const storeAttributes = self.uploadFields[file.fieldname]
-
-    // If there is a function defined as fileName, use it
-    if (typeof (storeAttributes.fileName) === 'function') {
-      return storeAttributes.fileName.apply(this, [].slice.call(arguments))
-    // If not, just use the stock function that mixes the record ID with the fieldName in one string
-    } else {
-      // If the ID is there (that's the case with a PUT), then use it. Otherwise,
-      // simply generate a random string
-      let id = req.params[this.idProperty]
-      if (!id) id = crypto.randomBytes(20).toString('hex')
-
-      // That's it
-      return cb(null, file.fieldname + '_' + id)
-    }
+    app.get(url + idName, this.preMiddleware('get'), this._getRequestHandler('get'), this.postMiddleware('get'))
+    app.get(url, this.preMiddleware('getQuery'), this._getRequestHandler('getQuery'), this.postMiddleware('getQuery'))
+    app.put(url + idName, this.preMiddleware('put'), this._getRequestHandler('put'), this.postMiddleware('put'))
+    app.post(url, this.preMiddleware('post'), this._getRequestHandler('post'), this.postMiddleware('post'))
+    app.delete(url + idName, this.preMiddleware('delete'), this._getRequestHandler('delete'), this.postMiddleware('get'))
   }
 
   _getRequestHandler (method, field) {
@@ -422,14 +320,6 @@ const HTTPMixin = (base) => class extends base {
       if (key !== 'sortBy') r[key] = value
     }
     return r
-  }
-
-  // Turns an error into an UnprocessableEntityError
-  _uploadErrorProcessor (err, next) {
-    const UnprocessableEntityError = this.constructor.UnprocessableEntityError
-    const ReturnedError = new UnprocessableEntityError(err.message)
-    ReturnedError.OriginalError = err
-    return next(ReturnedError)
   }
 }
 
