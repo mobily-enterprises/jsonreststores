@@ -302,6 +302,7 @@ const Store = exports = module.exports = class {
 
     request.session = options.session || {}
     request.options = { ...options }
+    request.method = 'getQuery'
 
     this._makeGetQuery(request)
   }
@@ -317,6 +318,7 @@ const Store = exports = module.exports = class {
     if (options.apiParams) request.params = options.apiParams
     else { request.params = {}; request.params[this.idProperty] = id }
     request.session = options.session || {}
+    request.method = 'get'
 
     // Actually run the request
     this._makeGet(request)
@@ -338,6 +340,7 @@ const Store = exports = module.exports = class {
     if (options.apiParams) request.params = options.apiParams
     else { request.params = {}; request.params[this.idProperty] = body[this.idProperty] }
     request.session = options.session || {}
+    request.method = 'put'
 
     // Actually run the request
     this._makePut(request)
@@ -353,6 +356,7 @@ const Store = exports = module.exports = class {
     request.params = options.apiParams || {}
     request.session = options.session || {}
     request.body = { ...body }
+    request.method = 'post'
 
     // Actually run the request
     this._makePost(request)
@@ -368,6 +372,7 @@ const Store = exports = module.exports = class {
     if (options.apiParams) request.params = options.apiParams
     else { request.params = {}; request.params[this.idProperty] = id }
     request.session = options.session || {}
+    request.method = 'delete'
 
     // Actually run the request
     this._makeDelete(request, next)

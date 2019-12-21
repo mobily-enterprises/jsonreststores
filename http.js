@@ -147,6 +147,7 @@ const HTTPMixin = (base) => class extends base {
         request.body = { ...req.body }
         request.session = req.session
         request.options = {}
+        request.method = method
 
         try {
           request.options = self._initOptionsFromReq(method, req)
