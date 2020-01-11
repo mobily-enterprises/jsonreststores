@@ -129,8 +129,6 @@ const Store = exports = module.exports = class {
     throw (new Error('implementQuery not implemented, store is not functional'))
   }
 
-  async checkNetworkPermissions (request) {}
-
   // ****************************************************
   // *** ERROR-MANAGING HELPER FUNCTIONS
   // ****************************************************
