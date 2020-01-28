@@ -69,22 +69,21 @@ const Store = exports = module.exports = class {
     registryByName[name][version] = registryByVersion[version][name] = this
   }
 
-  get stores () {
-    const thisVersion = this.version
+  static stores (version) {
     return new Proxy({}, {
       get: function (obj, prop) {
         // Store is not defined: do not return anything
         if (!registryByName[prop]) return undefined
 
         // Exact version available: return it
-        if (registryByName[prop][thisVersion]) {
-          return registryByName[prop][thisVersion]
+        if (registryByName[prop][version]) {
+          return registryByName[prop][version]
         }
 
         // Look for the highest version below the one of the
         // calling store
         const rightVersion = Object.keys(registryByName[prop])
-          .filter(el => semver.satisfies(registryByName[prop][el].version, `<${thisVersion}`))
+          .filter(el => semver.satisfies(registryByName[prop][el].version, `<${version}`))
           .sort((a, b) => semver.compare(a, b))
           .shift()
 
@@ -96,6 +95,10 @@ const Store = exports = module.exports = class {
         }
       }
     })
+  }
+
+  get stores () {
+    return this.constructor.stores(this.version)
   }
 
   static requireStoresFromPath (p, app) {
