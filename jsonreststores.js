@@ -227,7 +227,7 @@ const Store = exports = module.exports = class {
 
     // Fetch the record
     // The fact that it's assigned to request.record means that
-    // implementFetch will use it without re-fetching
+    // implementUpdate will use it without re-fetching
     // SIDE_EFFECT: request.record
     request.record = await this.implementFetch(request) || null
 
