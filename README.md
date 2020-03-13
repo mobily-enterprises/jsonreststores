@@ -8,7 +8,6 @@ Rundown of features:
 * **Database ready**. Comes with mixins to use MySql (more to come)
 * **Protocol-agnostic**. HTTP is only one of the possible protocols.
 * **API-ready**. Every store function can be called via API
-* **Great documentation**. (Work in progress after the rewrite)
 
 # To integrate in documentation
 
@@ -213,7 +212,7 @@ Creating a store with JsonRestStores is very simple. Here is code that can be pl
       }
 
       async implementQuery (request) {
-        var result = await connection.queryP(`SELECT * FROM managers LIMIT ?,?`, [ request.options.ranges.skip, request.options.ranges.limit ])
+        var result = await connection.queryP(`SELECT * FROM managers LIMIT ?,?`, [ request.options.skip || 0, request.options.limit || 0 ])
         var grandTotal = (await connection.queryP(`SELECT COUNT (*) as grandTotal FROM managers`))[0].grandTotal
         return { data: result, grandTotal: grandTotal }
       }
@@ -489,34 +488,6 @@ Also, `status` will be set to the HTTP status code.
 _`protocolSendXXX()` is always passed an HTTP error._ In case the error was caused by something else (for example, the connection to the database dropped), the error will be set as 503, and the error object will also have a `originalErr` attribute which represents the original error that triggered the 503 HTTP error.
 
 # Receiving HTTP requests and sending HTTP responses: `HTTPMixin`
-
-
-# Store APIs
-
-JsonRestStores allows you to run store methods from within your programs, rather than accessing them via URL. This is especially useful if you have a store and want to simulate an HTTP request within your own programs. Note that for database-backed methods you should use SimpleDbLaye methods (you can access the SimpleDbLayer table object in your store via `store.dbLayer`).
-
-The API is really simple:
-
-* `Store.apiGet( id, options, next( err, doc ) {})`
-* `Store.apiGetQuery( options, next( err, queryDocs ){} )`
-* `Store.apiPut(  body, options, next( err, doc ){} )`
-* `Store.apiPost( body, options, next( err, doc ){} )`
-* `Store.apiDelete( id, options, next( err, doc ){} )`
-
-The `next()` call is the callback called at the end.
-
-When using the API, the `options` object is especially important, as it defines how the API will work. When a request comes from a remote operation, the `options` object is populated depending on the requested URL and HTTP headers. When using the API, you need to popuate `options` manually in order to obtain what you desire. `options` is especially important while querying, as that's where you define what you filter and order the results by.
-
-Since there is no HTTP connection to extrapolate options from, the `options` parameter in every API call is assigned directly to `request.options`. For all of the available options, refer to the [The options object](the-options-object) section in this guide.
-
-All normal hooks are called when using these functions. However:
-
-* Any check on `paramIds` is turned off: you are free to query a store without any pre-set automatic filtering imposed by `paramIds`. If your store has a `publicURL` of `/workspaces/:workspaceId/users/:id`, and you request `GET /workspaces/10/user/11`, in remote requests the `user` data source will be looked up based on _both_ `workspaceId` and `id`. In API (non-remote) requests, the lookup will only happen on `id`.
-* `request.params` is automatically set to a hash object where the `idProperty` attribute matches the passed object's ID property. For example, for `{ id: 10, colour: 'red' }`, the `request.params` object is automatically set to  { `id: 10 }`. (This is true for all methods except `getQuery` and `post`, which don't accept objects with IDs). Note that you can pass `options.apiParams` to force `request.params` to whatever you like.
-* All `store.handleXXX` properties are ignored: all methods will work
-* The `request.remote` variable is set to false
-* Permissions checking methods are not called at all: permission is always granted
-* When the request is done, rather than ending data through using the transport of choice (for example HTTP), the `next()` callback is called with the results.
 
 # Conclusion
 

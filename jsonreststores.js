@@ -69,22 +69,21 @@ const Store = exports = module.exports = class {
     registryByName[name][version] = registryByVersion[version][name] = this
   }
 
-  get stores () {
-    const thisVersion = this.version
+  static stores (version) {
     return new Proxy({}, {
       get: function (obj, prop) {
         // Store is not defined: do not return anything
         if (!registryByName[prop]) return undefined
 
         // Exact version available: return it
-        if (registryByName[prop][thisVersion]) {
-          return registryByName[prop][thisVersion]
+        if (registryByName[prop][version]) {
+          return registryByName[prop][version]
         }
 
         // Look for the highest version below the one of the
         // calling store
         const rightVersion = Object.keys(registryByName[prop])
-          .filter(el => semver.satisfies(registryByName[prop][el].version, `<${thisVersion}`))
+          .filter(el => semver.satisfies(registryByName[prop][el].version, `<${version}`))
           .sort((a, b) => semver.compare(a, b))
           .shift()
 
@@ -96,6 +95,10 @@ const Store = exports = module.exports = class {
         }
       }
     })
+  }
+
+  get stores () {
+    return this.constructor.stores(this.version)
   }
 
   static requireStoresFromPath (p, app) {
@@ -128,8 +131,6 @@ const Store = exports = module.exports = class {
   async implementQuery (request) {
     throw (new Error('implementQuery not implemented, store is not functional'))
   }
-
-  async checkNetworkPermissions (request) {}
 
   // ****************************************************
   // *** ERROR-MANAGING HELPER FUNCTIONS
@@ -226,7 +227,7 @@ const Store = exports = module.exports = class {
 
     // Fetch the record
     // The fact that it's assigned to request.record means that
-    // implementFetch will use it without re-fetching
+    // implementUpdate will use it without re-fetching
     // SIDE_EFFECT: request.record
     request.record = await this.implementFetch(request) || null
 
@@ -288,93 +289,5 @@ const Store = exports = module.exports = class {
     request.record = record
     await this.implementDelete(request)
     return record
-  }
-
-  apiGetQuery (options) {
-    options = options || {}
-
-    // Make up the request
-    const request = {}
-    request.remote = false
-    request.body = {}
-    if (options.apiParams) request.params = options.apiParams
-    else request.params = {}
-
-    request.session = options.session || {}
-    request.options = { ...options }
-    request.method = 'getQuery'
-
-    this._makeGetQuery(request)
-  }
-
-  apiGet (id, options) {
-    options = options || {}
-
-    // Make up the request
-    const request = {}
-    request.remote = false
-    request.options = { ...options }
-    request.body = {}
-    if (options.apiParams) request.params = options.apiParams
-    else { request.params = {}; request.params[this.idProperty] = id }
-    request.session = options.session || {}
-    request.method = 'get'
-
-    // Actually run the request
-    this._makeGet(request)
-  }
-
-  apiPut (body, options) {
-    options = options || {}
-
-    // This will only work if this.idProperty is included in the body object
-    if (typeof (body[this.idProperty]) === 'undefined') {
-      throw (new Error('When calling Store.apiPut with an ID of null, id MUST be in body'))
-    }
-
-    // Make up the request
-    const request = {}
-    request.remote = false
-    request.options = { ...options }
-    request.body = { ...body }
-    if (options.apiParams) request.params = options.apiParams
-    else { request.params = {}; request.params[this.idProperty] = body[this.idProperty] }
-    request.session = options.session || {}
-    request.method = 'put'
-
-    // Actually run the request
-    this._makePut(request)
-  }
-
-  apiPost (body, options) {
-    options = options || {}
-
-    // Make up the request
-    const request = {}
-    request.remote = false
-    request.options = { ...options }
-    request.params = options.apiParams || {}
-    request.session = options.session || {}
-    request.body = { ...body }
-    request.method = 'post'
-
-    // Actually run the request
-    this._makePost(request)
-  }
-
-  apiDelete (id, options, next) {
-    options = options || {}
-
-    // Make up the request
-    const request = {}
-    request.body = {}
-    request.options = { ...options }
-    if (options.apiParams) request.params = options.apiParams
-    else { request.params = {}; request.params[this.idProperty] = id }
-    request.session = options.session || {}
-    request.method = 'delete'
-
-    // Actually run the request
-    this._makeDelete(request, next)
   }
 }

@@ -7,12 +7,12 @@
     "API"
   ],
   "main": "jsonreststores.js",
-  "version": "2.0.0",
+  "version": "2.0.3",
   "readmeFilename": "README.md",
   "private": false,
   "repository": {
     "type": "git",
-    "url": "git://github.com/mercmobily/jsonreststores.git"
+    "url": "git://github.com/mobily-enterprises/jsonreststores.git"
   },
   "author": {
     "name": "Tony Mobily"
@@ -34,6 +34,6 @@
     "eslint-plugin-standard": "^4.0.1"
   },
   "bugs": {
-    "url": "https://github.com/mercmobily/jsonreststores/issues"
+    "url": "https://github.com/mobily-enterprises/jsonreststores/issues"
   }
 }

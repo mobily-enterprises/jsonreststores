@@ -60,12 +60,12 @@ const HTTPMixin = (base) => class extends base {
         break
 
       case 'getQuery':
-        if (request.options.ranges) {
+        if (request.options.skip || request.options.limit) {
           // Working out from-to/of
           // Note that if no records were returned, the format should be 0-0/X
 
           // Nice shorter constiables
-          const skip = request.options.ranges.skip || 0
+          const skip = request.options.skip || 0
           const total = request.total
 
           // Work out 'of': it will depend on the grandTotal, and that's it. It's an easy one.
@@ -193,7 +193,7 @@ const HTTPMixin = (base) => class extends base {
   _initOptionsFromReq (method, req) {
     const self = this
 
-    const options = {}
+    let options = {}
 
     // Set the 'overwrite' option if the right header
     // is there
@@ -224,23 +224,13 @@ const HTTPMixin = (base) => class extends base {
       }
     }
 
-    // Set the 'SortBy', 'ranges' and 'conditions' in
+    // Set the `SortBy`, `skip`, `limit`,  `conditions` in
     // the options, based on the passed headers
-
     if (method === 'getQuery') {
-      options.sort = self._parseSortBy(req)
-      options.ranges = self._parseRangeHeaders(req)
+      options = { ...options, sort: self._parseSortBy(req), ...self._parseRangeHeaders(req) }
     }
-
     if (method === 'getQuery' || method === 'get') {
       options.conditionsHash = self._parseConditions(req)
-    }
-
-    // If the range wasn't provided, it will force it to be the one set by the
-    // store's limit, so that range headers will be returned anyway,
-    // otherwise the client
-    if (!options.ranges) {
-      options.ranges = { }
     }
 
     // If self.defaultSort was passed, then maybe it needs to be applied (depending on options.sort)
