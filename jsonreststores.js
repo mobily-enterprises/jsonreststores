@@ -40,7 +40,7 @@ const Store = exports = module.exports = class {
   static get handleGet () { return false }
   static get handleGetQuery () { return false }
   static get handleDelete () { return false }
-  static get defaultLimitOnQueries () { return 50 } //  Max number of records returned by default
+  static get defaultLimitOnQueries () { return 1000 } //  Max number of records returned by default
 
   // Default error objects which might be used by this module.
   static get BadRequestError () { return e.BadRequestError }
