@@ -105,7 +105,7 @@ const Store = exports = module.exports = class {
     fs.readdirSync(p).forEach((storeFile) => {
       if (!storeFile.endsWith('.js')) return
       const store = require(path.join(p, storeFile))
-      if (app) store.listen({ app })
+      if (app && store.publicURL) store.listen({ app })
     })
   }
 
