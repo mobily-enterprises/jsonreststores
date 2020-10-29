@@ -125,17 +125,16 @@ const Mixin = (superclass) => class extends superclass {
     return l
   }
 
-  // https://dev.mysql.com/doc/refman/5.7/en/information-schema-columns-table.html
   // TODO:
   //  X Implement makeSqlDefinition
   //  X Run definition for every field in schema
   //  X Make sure ordering is correct, only apply ordering from second entry, place before previous one
   //  X Make it work for new tables and existing ones
   //  - Run index for every searchable field in schema, using dbIndex if present
+  //  - Allow adding of extra indexes
   //  - Add foreign keys constraint automatically
   //  - Party!
   async schemaDbSync () {
-    // const columns = await this.connection.queryP(`SHOW COLUMNS FROM ${this.table}`)
     function makeSqlDefinition (columnName) {
       const field = this.schema.structure[columnName]
       let sqlType
@@ -219,6 +218,7 @@ const Mixin = (superclass) => class extends superclass {
     if (!tableAlreadyExists) await this.connection.queryP(`CREATE TABLE \`${this.table}\` (__dummy__ INT(1) )`)
 
     const columns = await this.connection.queryP(`SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = '${this.table}'`)
+    const indexes = await this.connection.queryP(` SHOW index FROM \`${this.table}\``)
 
     // Make a hash of all columns
     const columnsHash = columns.reduce((map, column) => {
@@ -240,6 +240,7 @@ const Mixin = (superclass) => class extends superclass {
     // This is important in case the primary key has changed
     if (primaryKeyColumn) await maybeChangePrimaryKey.call(this, primaryKeyColumn)
 
+    const schemaIndexes = []
     for (let i = 0, l = schemaFieldsAsArray.length; i < l; i++) {
       const field = schemaFieldsAsArray[i]
 
@@ -257,10 +258,35 @@ const Mixin = (superclass) => class extends superclass {
       const sqlQuery = `ALTER TABLE \`${this.table}\` ${changeOrAddStatement} ${def} ${maybePrimaryKey} ${maybeAutoIncrement} ${maybeAfter}`
 
       await this.connection.queryP(sqlQuery)
+
+      if (field.dbIndex) {
+        schemaIndexes.push({
+          column: field.name,
+          unique: field.dbUnique,
+          order: field.dbIndexOrder,
+          name: field.dbIndexName || `jrs_${field.name}`
+        })
+      }
     }
+
+    // TODO: ADD EVEN MORE ENTRIES TO SCHEMAINDEXES, SO THAT COMPOSITE INDEXES ARE POSSIBLE
+    // SOMETHING LIKE dbExtraIndexes: [ {column: [...], name: ..., unique:..., order: ...}]
 
     // If it's a newly created table, delete the dummy column
     if (columnsHash.__dummy__) await this.connection.queryP(`ALTER TABLE \`${this.table}\` DROP COLUMN \`__dummy__\``)
+
+    debugger
+    for (let i = 0, l = schemaIndexes.length; i < l; i++) {
+      const schemaIndex = schemaIndexes[i]
+
+      // TODO: SEARCH FOR THE INDEX IN THE ACTUAL indexes ARRAY with .find()
+      // If not there, add it
+      // Make sure that multiple fields are handled properly
+
+      console.log(schemaIndex)
+    }
+
+    // TODO: ADD CONSTRAINTS AS DEFINED IN dbConstraint: {table: ..., column: ...}
   }
 
   // **************************************************
