@@ -127,22 +127,63 @@ const Mixin = (superclass) => class extends superclass {
 
   // https://dev.mysql.com/doc/refman/5.7/en/information-schema-columns-table.html
   // TODO:
-  //  - Implement makeDefinition
-  //  - Run definition for every field in schema
-  //  - Run index for every field in schema, using dbIndex if present
-  //  - Make sure ordering is correct, only apply ordering from second entry, place before previous one
+  //  X Implement makeSqlDefinition
+  //  X Run definition for every field in schema
+  //  X Make sure ordering is correct, only apply ordering from second entry, place before previous one
+  //  X Make it work for new tables and existing ones
+  //  - Run index for every searchable field in schema, using dbIndex if present
+  //  - Add foreign keys constraint automatically
   //  - Party!
   async schemaDbSync () {
     // const columns = await this.connection.queryP(`SHOW COLUMNS FROM ${this.table}`)
-    debugger
+    function makeSqlDefinition (columnName) {
+      const field = this.schema.structure[columnName]
+      let sqlType
+      let trim = 256
+      if (field.dbType) sqlType = field.dbType
+      else {
+        switch (field.type) {
+          case 'number':
+          case 'id':
+            sqlType = 'INT'
+            break
+          case 'string':
+            if (field.trim) trim = field.trim
+            sqlType = `VARCHAR(${trim})`
+            break
+          case 'boolean':
+            sqlType = 'TINYINT'
+            break
+          case 'date':
+            sqlType = 'DATE'
+            break
+          case 'timestamp':
+            sqlType = 'TIMESTAMP'
+            break
+          case 'blob':
+            sqlType = 'BLOB'
+            break
+        }
+      }
 
-    function makeDefinition (column) {
-      return '`id` INT(11) NOT NULL'
+      // NULL clause
+      const nullOrNotNull = field.canBeNull ? 'NULL' : 'NOT NULL'
+
+      // Default value, giving priority to dbDefault
+      let defaultValue
+      if (typeof field.dbDefault !== 'undefined') defaultValue = `DEFAULT '${field.dbDefault}'`
+      else if (typeof field.default !== 'undefined') defaultValue = `DEFAULT '${field.default}'`
+      else defaultValue = ''
+
+      // AUTO_INCREMENT clause
+      return `\`${columnName}\` ${sqlType} ${nullOrNotNull} ${defaultValue}`
     }
 
     async function maybeChangePrimaryKey (primaryKeyColumn) {
+      //
+      // If the primary key hasn't changed, don't do anything
       if (primaryKeyColumn && primaryKeyColumn.COLUMN_NAME === this.idProperty) {
-        return false
+        return
       }
 
       // ID column has changed. This is a tricky situation, especially because of
@@ -152,13 +193,17 @@ const Mixin = (superclass) => class extends superclass {
       // First of all, if the OLD primary key has AUTO_INCREMENT, then
       // AUTO_INCREMENT must be taken out
       if (primaryKeyColumn.EXTRA === 'auto_increment') {
-        const def = makeDefinition(oldPrimaryKeyColumnName, primaryKeyColumn)
         await this.connection.queryP('SET foreign_key_checks = 0')
-        await this.connection.queryP(`ALTER TABLE \`${this.table}\` CHANGE \`${oldPrimaryKeyColumnName}\` ${def}`)
+        const pkc = primaryKeyColumn
+        const defWithoutAutoIncrement = `${pkc.COLUMN_NAME} ${pkc.COLUMN_TYPE} ${pkc.IS_NULLABLE === 'YES' ? 'NULL' : 'NOT NULL'} ${typeof pkc.COLUMN_DEFAULT !== 'undefined' && pkc.COLUMN_KEY !== 'PRI' ? 'DEFAULT ' + pkc.COLUMN_DEFAULT : ''}`
+        await this.connection.queryP(`ALTER TABLE \`${this.table}\` CHANGE \`${oldPrimaryKeyColumnName}\` ${defWithoutAutoIncrement}`)
         await this.connection.queryP('SET foreign_key_checks = 1')
       }
 
       // Check that there are INDEXES available for the "old" id
+      // This is crucial since the next statement, DROP PRIMARY KEY, ADD PRIMARY_KEY
+      // will fail if the field is still being referenced in the DB and
+      // it's left without key
       const indexIsThere = await this.connection.queryP(`SHOW INDEX FROM \`${this.table}\` WHERE Key_name <> 'PRIMARY' AND Seq_in_index = 1 AND Column_name='${oldPrimaryKeyColumnName}'`)
       if (!indexIsThere.length) {
         const dbIndex = schemaFieldsAsArray.find(definition => definition.name === this.idProperty).dbIndex || `jrs_${oldPrimaryKeyColumnName}`
@@ -170,9 +215,21 @@ const Mixin = (superclass) => class extends superclass {
       return true
     }
 
+    const tableAlreadyExists = (await this.connection.queryP(`SHOW TABLES like '${this.table}'`)).length
+    if (!tableAlreadyExists) await this.connection.queryP(`CREATE TABLE \`${this.table}\` (__dummy__ INT(1) )`)
+
     const columns = await this.connection.queryP(`SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = '${this.table}'`)
+
+    // Make a hash of all columns
+    const columnsHash = columns.reduce((map, column) => {
+      map[column.COLUMN_NAME] = column
+      return map
+    }, {})
+
     const primaryKeyColumn = columns.find(el => el.COLUMN_KEY === 'PRI')
 
+    // Turn the schema fields into a searchable array. It will be used as an
+    // array to search for the auto-increment field, and to iterate through it
     const schemaFieldsAsArray = Object.keys(this.schema.structure).map(k => ({ ...this.schema.structure[k], name: k }))
 
     // Work out which one the auto_increment field will be
@@ -180,26 +237,30 @@ const Mixin = (superclass) => class extends superclass {
     if (!autoIncrementField) autoIncrementField = schemaFieldsAsArray.find(el => el.name === this.idProperty)
     const autoIncrementFieldName = autoIncrementField.name
 
-    // this.idProperty = 'position'
-    const primaryKeyChanged = await maybeChangePrimaryKey.call(this, primaryKeyColumn)
-
-    const columnsHash = {}
-    for (const column of columns) {
-      const columnName = column.COLUMN_NAME
-      columnsHash[columnName] = column
-    }
+    // This is important in case the primary key has changed
+    if (primaryKeyColumn) await maybeChangePrimaryKey.call(this, primaryKeyColumn)
 
     for (let i = 0, l = schemaFieldsAsArray.length; i < l; i++) {
       const field = schemaFieldsAsArray[i]
-      console.log(field.name)
 
-      // Skip completely the primary key if it was changed previously.
-      // This is because if that is the case, the definition rerun as well
-      // as the index rerun have already happened
-      if (field.name === this.idProperty) {
-        if (primaryKeyChanged) continue
-      }
+      const creatingNewColumn = !columnsHash[field.name]
+
+      const changeOrAddStatement = creatingNewColumn ? 'ADD COLUMN' : `CHANGE \`${field.name}\``
+
+      const def = makeSqlDefinition.call(this, field.name)
+      // If it's a new table, and it's the primary key column, then it's already going to be
+      // auto_increment. So, it must be defined as primary key
+      const maybePrimaryKey = (creatingNewColumn && field.name === this.idProperty) ? 'PRIMARY KEY' : ''
+      const maybeAutoIncrement = autoIncrementFieldName === field.name ? 'AUTO_INCREMENT' : ''
+      const maybeAfter = i ? `AFTER \`${schemaFieldsAsArray[i - 1].name}\`` : ''
+
+      const sqlQuery = `ALTER TABLE \`${this.table}\` ${changeOrAddStatement} ${def} ${maybePrimaryKey} ${maybeAutoIncrement} ${maybeAfter}`
+
+      await this.connection.queryP(sqlQuery)
     }
+
+    // If it's a newly created table, delete the dummy column
+    if (columnsHash.__dummy__) await this.connection.queryP(`ALTER TABLE \`${this.table}\` DROP COLUMN \`__dummy__\``)
   }
 
   // **************************************************
