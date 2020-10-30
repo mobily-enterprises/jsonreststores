@@ -52,6 +52,8 @@ const Mixin = (superclass) => class extends superclass {
     this.connection.queryP = promisify(this.connection.query)
     this.table = this.constructor.table
 
+    this.dbExtraIndexes = this.constructor.dbExtraIndexes
+
     // The schema must be defined
     if (this.schema == null) {
       throw (new Error('You must define a schema'))
@@ -68,7 +70,7 @@ const Mixin = (superclass) => class extends superclass {
       }
     }
 
-    // If onlineSearchSchema wasn't defined, then set it as a copy of the schema where
+    // If searchSchema wasn't defined, then set it as a copy of the schema where
     // fields are `searchable`, EXCLUDING the paramIds fields.
     if (this.searchSchema == null) {
       const searchSchemaStructure = { }
@@ -78,6 +80,14 @@ const Mixin = (superclass) => class extends superclass {
         }
       }
       this.searchSchema = new this.schema.constructor(searchSchemaStructure)
+    // If searchSchema WAS defined, then set 'searchable' to the schema fields
+    // that match the schema
+    } else {
+      for (k in this.searchSchema.structure) {
+        if (this.schema.structure[k]) {
+          this.schema.structure[k].searchable = true
+        }
+      }
     }
   }
 
@@ -130,8 +140,9 @@ const Mixin = (superclass) => class extends superclass {
   //  X Run definition for every field in schema
   //  X Make sure ordering is correct, only apply ordering from second entry, place before previous one
   //  X Make it work for new tables and existing ones
-  //  - Run index for every searchable field in schema, using dbIndex if present
-  //  - Allow adding of extra indexes
+  //  X Run index for every searchable field in schema, using dbIndex if present
+  //  X Allow adding of extra indexes
+  //  X Make sure unique is respected
   //  - Add foreign keys constraint automatically
   //  - Party!
   async schemaDbSync () {
@@ -218,7 +229,9 @@ const Mixin = (superclass) => class extends superclass {
     if (!tableAlreadyExists) await this.connection.queryP(`CREATE TABLE \`${this.table}\` (__dummy__ INT(1) )`)
 
     const columns = await this.connection.queryP(`SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = '${this.table}'`)
-    const indexes = await this.connection.queryP(` SHOW index FROM \`${this.table}\``)
+    const indexes = await this.connection.queryP(`SHOW index FROM \`${this.table}\``)
+    const constraints = await this.connection.queryP(`SELECT * from INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = '${this.table}'`)
+    // select * from information_schema.table_constraints where constraint_schema = 'sasit-development';
 
     // Make a hash of all columns
     const columnsHash = columns.reduce((map, column) => {
@@ -240,7 +253,8 @@ const Mixin = (superclass) => class extends superclass {
     // This is important in case the primary key has changed
     if (primaryKeyColumn) await maybeChangePrimaryKey.call(this, primaryKeyColumn)
 
-    const schemaIndexes = []
+    const dbIndexes = []
+    const dbConstraints = []
     for (let i = 0, l = schemaFieldsAsArray.length; i < l; i++) {
       const field = schemaFieldsAsArray[i]
 
@@ -259,34 +273,98 @@ const Mixin = (superclass) => class extends superclass {
 
       await this.connection.queryP(sqlQuery)
 
-      if (field.dbIndex) {
-        schemaIndexes.push({
-          column: field.name,
-          unique: field.dbUnique,
-          order: field.dbIndexOrder,
-          name: field.dbIndexName || `jrs_${field.name}`
+      // For searchable and dbIndex fields, add an index
+      if (field.dbIndex || field.searchable) {
+        if (columnsHash[field.name] && field.name !== this.idProperty) {
+          dbIndexes.push({
+            column: field.name,
+            unique: field.dbUnique,
+            name: field.dbIndexName
+          })
+        }
+      }
+
+      if (field.dbConstraint) {
+        const dbc = field.dbConstraint
+        dbConstraints.push({
+          source: field.name,
+          table: dbc.table,
+          store: dbc.store,
+          column: dbc.column,
+          name: dbc.name
         })
       }
     }
 
-    // TODO: ADD EVEN MORE ENTRIES TO SCHEMAINDEXES, SO THAT COMPOSITE INDEXES ARE POSSIBLE
-    // SOMETHING LIKE dbExtraIndexes: [ {column: [...], name: ..., unique:..., order: ...}]
+    // Add anything listed in dbExtraIndexes in the list of possible
+    // indexes to all
+    if (this.dbExtraIndexes) {
+      for (let i = 0, l = this.dbExtraIndexes.length; i < l; i++) {
+        const ei = this.dbExtraIndexes[i]
+        dbIndexes.push({
+          column: ei.column,
+          unique: !ei.unique,
+          name: ei.name
+        })
+      }
+    }
 
     // If it's a newly created table, delete the dummy column
     if (columnsHash.__dummy__) await this.connection.queryP(`ALTER TABLE \`${this.table}\` DROP COLUMN \`__dummy__\``)
 
-    debugger
-    for (let i = 0, l = schemaIndexes.length; i < l; i++) {
-      const schemaIndex = schemaIndexes[i]
+    // Add db indexes
+    for (let i = 0, l = dbIndexes.length; i < l; i++) {
+      const dbi = dbIndexes[i]
 
-      // TODO: SEARCH FOR THE INDEX IN THE ACTUAL indexes ARRAY with .find()
-      // If not there, add it
-      // Make sure that multiple fields are handled properly
+      // Handle multiple columns
+      let columns
+      if (!Array.isArray(dbi.column)) columns = `\`${dbi.column}\``
+      else columns = dbi.column.map(c => '`' + c + '`').join(',')
 
-      console.log(schemaIndex)
+      // Make up an index name if needed
+      let indexName
+      if (dbi.dbIndexName) indexName = dbi.dbIndexName
+      else {
+        if (!Array.isArray(dbi.column)) indexName = `jrs_${dbi.column}`
+        else indexName = 'jrs_' + dbi.column.join('_')
+      }
+
+      // If the index already exists, don't do anything
+      if (indexes.find(i => i.Key_name === indexName)) continue
+
+      const sqlQuery = `ALTER TABLE \`${this.table}\` ADD ${dbi.unique ? 'UNIQUE' : ''} INDEX \`${indexName}\` (${columns})`
+      await this.connection.queryP(sqlQuery)
     }
 
-    // TODO: ADD CONSTRAINTS AS DEFINED IN dbConstraint: {table: ..., column: ...}
+    // Add db constraints
+    for (let i = 0, l = dbConstraints.length; i < l; i++) {
+      const dbc = dbConstraints[i]
+
+      let table
+      let column
+      let name
+
+      if (dbc.table) table = dbc.table
+      else if (dbc.store) table = this.stores[dbc.store].table
+
+      if (dbc.column) column = dbc.column
+      else column = this.stores[dbc.store].idProperty
+
+      if (dbc.name) name = dbc.name
+      else name = `jrs_${dbc.source}_to_${table}_${column}`
+
+      if (constraints.find(c => c.CONSTRAINT_NAME === name)) return
+
+      const sqlQuery = `
+      ALTER TABLE \`${this.table}\`
+      ADD CONSTRAINT \`${name}\`
+      FOREIGN KEY (\`${dbc.source}\`)
+      REFERENCES \`${table}\` (\`${column}\`)
+        ON DELETE NO ACTION
+        ON UPDATE NO ACTION`
+
+      await this.connection.queryP(sqlQuery)
+    }
   }
 
   // **************************************************
