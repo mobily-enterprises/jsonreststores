@@ -7,7 +7,7 @@
     "API"
   ],
   "main": "jsonreststores.js",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "readmeFilename": "README.md",
   "private": false,
   "repository": {
