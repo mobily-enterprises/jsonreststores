@@ -452,12 +452,12 @@ const Store = exports = module.exports = class {
 
     // The store name must be defined
     if (this.storeName === null) {
-      throw (new Error('You must define a store name for a store in constructor class for ' + this.storeName'))
+      throw (new Error('You must define a store name for a store in constructor class for ' + this.storeName))
     }
 
     // The store name must be defined
     if (this.version === null) {
-      throw (new Error('You must define a store version in constructor class for ' + this.storeName'))
+      throw (new Error('You must define a store version in constructor class for ' + this.storeName))
     }
 
     // The schema must be defined
