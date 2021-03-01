@@ -72,7 +72,6 @@ const Store = exports = module.exports = class {
   static get sortableFields () { return [] }
   static get beforeIdField () { return 'beforeId' } // Virtual field to place elements
   static get positionFilter () { return [] } // List of fields that will determine the subset
-  static get positionField () { return null } // List of fields that will determine the subset
 
   // Static getter/setter which will actually manipulate the one `registry` variable
 
@@ -439,11 +438,10 @@ const Store = exports = module.exports = class {
     this.canBeNull = Constructor.canBeNull
     this.fullRecordOnInsert = Constructor.fullRecordOnInsert
     this.fullRecordOnUpdate = Constructor.fullRecordOnUpdate
-
     this.defaultSort = Constructor.defaultSort
+
     this.sortableFields = Constructor.sortableFields
     this.beforeIdField = this.constructor.beforeIdField
-    this.positionField = this.constructor.positionField
     this.positionFilter = this.constructor.positionFilter
 
     this.handlePost = Constructor.handlePost
@@ -464,6 +462,11 @@ const Store = exports = module.exports = class {
       throw (new Error('You must define a store version in constructor class'))
     }
 
+    // The schema must be defined
+    if (this.schema == null) {
+      throw (new Error('You must define a schema'))
+    }
+
     // If paramId is not specified, takes it from publicURL
     if (this.paramIds.length === 0 && typeof (this.publicURL) === 'string') {
       this.paramIds = (this.publicURL + '/')
@@ -481,6 +484,29 @@ const Store = exports = module.exports = class {
       // least surprise) must be the last paramId passed to
       // the Constructor.
       this.idProperty = this._lastParamId()
+    }
+
+    // By default, paramIds are set in schema as { type: 'id' } so that developers
+    // can be lazy when defining their schemas
+    // SIDE_EFFECT: schema.structure changed
+    let k
+    for (let i = 0, l = this.paramIds.length; i < l; i++) {
+      k = this.paramIds[i]
+      if (typeof (this.schema.structure[k]) === 'undefined') {
+        this.schema.structure[k] = { type: 'id' }
+      }
+    }
+
+    // If onlineSearchSchema wasn't defined, then set it as a copy of the schema where
+    // fields are `searchable`, EXCLUDING the paramIds fields.
+    if (this.searchSchema == null) {
+      const searchSchemaStructure = { }
+      for (k in this.schema.structure) {
+        if (this.schema.structure[k].searchable && this.paramIds.indexOf(k) === -1) {
+          searchSchemaStructure[k] = this.schema.structure[k]
+        }
+      }
+      this.searchSchema = new this.schema.constructor(searchSchemaStructure)
     }
 
     this.register()
@@ -546,6 +572,7 @@ const Store = exports = module.exports = class {
     return record || { [this.idProperty]: request.params[this.idProperty] }
   }
 
+  // request.params, request.options.[conditionsHash,skip,limit,sort]
   async _makeGetQuery (request) {
     // Check that the method is implemented
     if (!this.handleGetQuery && request.remote) throw new Store.NotImplementedError()
