@@ -71,7 +71,6 @@ const Store = exports = module.exports = class {
   static get defaultSort () { return null } // If set, it will be applied to all getQuery calls
   static get sortableFields () { return [] }
   static get beforeIdField () { return 'beforeId' } // Virtual field to place elements
-  static get positionFilter () { return [] } // List of fields that will determine the subset
 
   // Static getter/setter which will actually manipulate the one `registry` variable
 
@@ -442,7 +441,6 @@ const Store = exports = module.exports = class {
 
     this.sortableFields = Constructor.sortableFields
     this.beforeIdField = this.constructor.beforeIdField
-    this.positionFilter = this.constructor.positionFilter
 
     this.handlePost = Constructor.handlePost
     this.handlePut = Constructor.handlePut
