@@ -8,25 +8,20 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-let data
 const firstBy = require('thenby')
 
 const Mixin = (superclass) => class extends superclass {
   //
   async transformResult (request, op, recordOrSet) { return null }
 
-  constructor () {
-    super()
-
-    data = []
-  }
+  static get data () { return [] } // Data. This can get re-set to something else in children
 
   reposition (currentPos) {
     //
     // No position field: exit right away
     if (!this.beforeIdField) return
 
-    const record = data[currentPos]
+    const record = this.data[currentPos]
 
     const beforeId = record[this.beforeIdField]
 
@@ -35,11 +30,11 @@ const Mixin = (superclass) => class extends superclass {
 
     // The current position is last and beforeId is null: it's already where it
     // should be (last)
-    if (currentPos === data.length - 1 && beforeId === null) return
+    if (currentPos === this.data.length - 1 && beforeId === null) return
 
-    const newPos = data.findIndex(el => el[this.idProperty] === beforeId)
+    const newPos = this.data.findIndex(el => el[this.idProperty] === beforeId)
     if (newPos === -1) return
-    data.splice(newPos, 0, data.splice(currentPos, 1)[0])
+    this.data.splice(newPos, 0, this.data.splice(currentPos, 1)[0])
   }
 
   // Input:
@@ -51,8 +46,8 @@ const Mixin = (superclass) => class extends superclass {
 
     request.record = request.body
 
-    data.push(request.record)
-    this.reposition(data.length - 1)
+    this.data.push(request.record)
+    this.reposition(this.data.length - 1)
 
     // implementUpdate() needs to have this in order to restore the
     // previously deleted record.beforeId
@@ -69,8 +64,8 @@ const Mixin = (superclass) => class extends superclass {
   async implementUpdate (request) {
     await super.implementUpdate(request)
 
-    const currentPos = data.findIndex(el => el[this.idProperty] === request.record[this.idProperty])
-    data[currentPos] = request.record
+    const currentPos = this.data.findIndex(el => el[this.idProperty] === request.record[this.idProperty])
+    this.data[currentPos] = request.record
     this.reposition(currentPos)
 
     // implementUpdate() needs to have this in order to restore the
@@ -85,8 +80,8 @@ const Mixin = (superclass) => class extends superclass {
   async implementDelete (request) {
     await super.implementDelete(request)
 
-    const currentPos = data.findIndex(el => el[this.idProperty] === request.record[this.idProperty])
-    data.splice(currentPos, 1)
+    const currentPos = this.data.findIndex(el => el[this.idProperty] === request.record[this.idProperty])
+    this.data.splice(currentPos, 1)
   }
 
   // Input: request.params, request.options.[conditionsHash,skip,limit,sort]
@@ -94,7 +89,7 @@ const Mixin = (superclass) => class extends superclass {
   async implementQuery (request) {
     await super.implementQuery(request)
 
-    let retData = data
+    let retData = this.data
 
     if (Object.keys(request.options.conditionsHash).length) retData = this.filterByConditions(request, retData)
     if (Object.keys(request.options.sort).length) retData = this.sortBy(request, retData)
@@ -130,9 +125,9 @@ const Mixin = (superclass) => class extends superclass {
   async implementFetch (request) {
     await super.implementFetch(request)
 
-    const currentPos = data.findIndex(el => el[this.idProperty] === request.record[this.idProperty])
+    const currentPos = this.data.findIndex(el => el[this.idProperty] === request.record[this.idProperty])
 
-    request.record = data[currentPos]
+    request.record = this.data[currentPos]
 
     // Requested by the API: when implementing implementFetch(), this function
     // must be called when request.record is set
