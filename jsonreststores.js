@@ -452,12 +452,12 @@ const Store = exports = module.exports = class {
 
     // The store name must be defined
     if (this.storeName === null) {
-      throw (new Error('You must define a store name for a store in constructor class'))
+      throw (new Error('You must define a store name for a store in constructor class for ' + this.storeName'))
     }
 
     // The store name must be defined
     if (this.version === null) {
-      throw (new Error('You must define a store version in constructor class'))
+      throw (new Error('You must define a store version in constructor class for ' + this.storeName'))
     }
 
     // The schema must be defined
@@ -475,7 +475,7 @@ const Store = exports = module.exports = class {
     // If idProperty is not set, derive it from this._lastParamId()
     if (!this.idProperty) {
       if (this.paramIds.length === 0) {
-        throw (new Error('Your store needs to set idProperty, or alternatively set paramIds (idProperty will be the last paramId). Store: ' + this.storeName))
+        throw (new Error('Your store needs to set idProperty, or alternatively set paramIds (idProperty will be the last paramId) for: ' + this.storeName))
       }
 
       // Sets this.idProperty, which (as for the principle of
