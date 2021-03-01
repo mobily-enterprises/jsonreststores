@@ -572,7 +572,6 @@ const Store = exports = module.exports = class {
     return record || { [this.idProperty]: request.params[this.idProperty] }
   }
 
-  // request.params, request.options.[conditionsHash,skip,limit,sort]
   async _makeGetQuery (request) {
     // Check that the method is implemented
     if (!this.handleGetQuery && request.remote) throw new Store.NotImplementedError()
