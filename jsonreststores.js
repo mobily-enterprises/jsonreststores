@@ -462,7 +462,7 @@ const Store = exports = module.exports = class {
 
     // The schema must be defined
     if (this.schema == null) {
-      throw (new Error('You must define a schema'))
+      throw (new Error('You must define a schema for ' + this.storeName))
     }
 
     // If paramId is not specified, takes it from publicURL
