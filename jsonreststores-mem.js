@@ -35,6 +35,7 @@ const Mixin = (superclass) => class extends superclass {
     const newPos = this.data.findIndex(el => el[this.idProperty] === beforeId)
     if (newPos === -1) return
     this.data.splice(newPos, 0, this.data.splice(currentPos, 1)[0])
+    return newPos
   }
 
   // Input:
@@ -47,8 +48,9 @@ const Mixin = (superclass) => class extends superclass {
     request.record = request.body
 
     this.data.push(request.record)
-    this.reposition(this.data.length - 1)
+    if (this.positionField) request.record[this.positionField] = this.reposition(this.data.length - 1)
 
+    // Requested by the API
     // implementUpdate() needs to have this in order to restore the
     // previously deleted record.beforeId
     this.restoreBeforeIdInRecord(request)
@@ -66,8 +68,9 @@ const Mixin = (superclass) => class extends superclass {
 
     const currentPos = this.data.findIndex(el => el[this.idProperty] === request.record[this.idProperty])
     this.data[currentPos] = request.record
-    this.reposition(currentPos)
+    if (this.positionField) request.record[this.positionField] = this.reposition(currentPos)
 
+    // Requested by the API
     // implementUpdate() needs to have this in order to restore the
     // previously deleted record.beforeId
     this.restoreBeforeIdInRecord(request)
