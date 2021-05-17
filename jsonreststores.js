@@ -36,6 +36,8 @@ const Store = exports = module.exports = class {
   static get storeName () { return null }
   static get artificialDelay () { return 0 } // Artificial delay
 
+  static get positionField () { return null } // List of fields that will determine the subset
+
   // ****************************************************
   // *** ATTRIBUTES THAT DEFINE STORE'S BEHAVIOUR
   // ****************************************************
@@ -449,6 +451,8 @@ const Store = exports = module.exports = class {
     this.handleDelete = Constructor.handleDelete
     this.defaultLimitOnQueries = Constructor.defaultLimitOnQueries
     this.version = Constructor.version
+
+    this.positionField = this.constructor.positionField
 
     // The store name must be defined
     if (this.storeName === null) {
