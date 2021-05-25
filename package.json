@@ -18,7 +18,9 @@
     "name": "Tony Mobily"
   },
   "scripts": {
-    "test": ""
+    "test": "",
+    "docs": "cd docs-src;./makeDocs.sh"
+
   },
   "dependencies": {
     "allhttperrors": "0.4.x",
@@ -27,6 +29,7 @@
     "thenby": "^1.3.4"
   },
   "devDependencies": {
+    "docco-next": "^0.9.8",
     "eslint": "^6.3.0",
     "eslint-config-standard": "^14.1.0",
     "eslint-plugin-import": "^2.18.2",
