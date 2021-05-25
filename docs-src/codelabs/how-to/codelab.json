@@ -1,0 +1,24 @@
+{
+  "environment": "web",
+  "format": "template.html",
+  "prefix": "https://storage.googleapis.com",
+  "mainga": "UA-49880327-14",
+  "updated": "2021-05-25T16:28:57-03:00",
+  "id": "how-to",
+  "duration": 8,
+  "title": "How to Write a Codelab",
+  "authors": "Zarin",
+  "summary": "How to Write a Codelab",
+  "source": "how-to.md",
+  "theme": "",
+  "status": [
+    "published"
+  ],
+  "category": [
+    "sample"
+  ],
+  "tags": [
+    "medium"
+  ],
+  "url": "how-to"
+}

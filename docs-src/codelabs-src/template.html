@@ -1,0 +1,11 @@
+  <google-codelab codelab-gaid="{{.Meta.GA}}"
+                  id="{{.Meta.ID}}"
+                  title="{{.Meta.Title}}"
+                  environment="{{index .Env}}"
+                  feedback-link="{{.Meta.Feedback}}">
+    {{range $i, $e := .Steps}}{{if matchEnv .Tags $.Env}}
+      <google-codelab-step label="{{.Title}}" duration="{{.Duration.Minutes}}">
+        {{.Content | renderHTML $.Context}}
+      </google-codelab-step>
+    {{end}}{{end}}
+  </google-codelab>
