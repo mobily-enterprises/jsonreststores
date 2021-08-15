@@ -36,7 +36,7 @@ const Store = exports = module.exports = class {
   static get storeName () { return null }
   static get artificialDelay () { return 0 } // Artificial delay
 
-  static get positionField () { return null } // List of fields that will determine the subset
+  static get positionField () { return null } // Fields that will store the position of a record
 
   // ****************************************************
   // *** ATTRIBUTES THAT DEFINE STORE'S BEHAVIOUR
@@ -70,8 +70,8 @@ const Store = exports = module.exports = class {
   static get fullRecordOnUpdate () { return false } //  A write will only affects the passed fields, not the whole record
   static get fullRecordOnInsert () { return true } //  A write will only affects the passed fields, not the whole record
 
-  static get defaultSort () { return null } // If set, it will be applied to all getQuery calls
   static get sortableFields () { return [] }
+  static get defaultSort () { return null } // If set, it will be applied to all getQuery calls
   static get beforeIdField () { return 'beforeId' } // Virtual field to place elements
 
   // Static getter/setter which will actually manipulate the one `registry` variable
