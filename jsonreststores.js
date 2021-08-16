@@ -140,7 +140,7 @@ const Store = exports = module.exports = class {
     request.options = request.options || {}
 
     const id = request.params[this.idProperty]
-    if (!id) throw new Error('request.params needs to contain idProperty for implementFetch')
+    if (id === null || id === undefined) throw new Error('request.params needs to contain idProperty for implementFetch')
 
     // Checking of permission must be delegated to the implementing function which
     // must call this.implementFetchPermissions(request) once request.record is set
@@ -300,7 +300,7 @@ const Store = exports = module.exports = class {
     request.params = await this._validateParams(request)
 
     const id = request.params[this.idProperty]
-    if (!id) throw new Error('request.params needs to contain idProperty for implementUpdate')
+    if (id === null || id === undefined) throw new Error('request.params needs to contain idProperty for implementUpdate')
 
     // Add paramIds to body
     this._enrichBodyWithParamIds(request)
@@ -358,7 +358,7 @@ const Store = exports = module.exports = class {
     request.options = request.options || {}
 
     const id = request.params[this.idProperty]
-    if (!id) throw new Error('request.params needs to contain idProperty for implementDelete')
+    if (id === null || id === undefined) throw new Error('request.params needs to contain idProperty for implementDelete')
 
     // Load the record, if it is not yet present in request as `record`
     if (!request.record) {
