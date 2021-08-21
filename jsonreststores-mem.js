@@ -18,8 +18,8 @@ const Mixin = (superclass) => class extends superclass {
 
   reposition (currentPos) {
     //
-    // No position field: exit right away
-    if (!this.beforeIdField) return
+    // No positioning managed: exit right away
+    if (!this.positioning) return
 
     const record = this.data[currentPos]
 
@@ -48,7 +48,8 @@ const Mixin = (superclass) => class extends superclass {
     request.record = request.body
 
     this.data.push(request.record)
-    if (this.positionField) request.record[this.positionField] = this.reposition(this.data.length - 1)
+    // if (this.positioning) request.record[this.positionField] = this.reposition(this.data.length - 1)
+    if (this.positioning) this.reposition(this.data.length - 1)
 
     // Requested by the API
     // implementUpdate() needs to have this in order to restore the
@@ -68,7 +69,8 @@ const Mixin = (superclass) => class extends superclass {
 
     const currentPos = this.data.findIndex(el => el[this.idProperty] === request.record[this.idProperty])
     this.data[currentPos] = request.record
-    if (this.positionField) request.record[this.positionField] = this.reposition(currentPos)
+    // if (this.positioning) request.record[this.positionField] = this.reposition(currentPos)
+    if (this.positioning) this.reposition(currentPos)
 
     // Requested by the API
     // implementUpdate() needs to have this in order to restore the

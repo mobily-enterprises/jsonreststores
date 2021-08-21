@@ -36,7 +36,8 @@ const Store = exports = module.exports = class {
   static get storeName () { return null }
   static get artificialDelay () { return 0 } // Artificial delay
 
-  static get positionField () { return null } // Fields that will store the position of a record
+  static get positioning () { return false } // if true, position management will work
+  static get beforeIdField () { return 'beforeId' } // Virtual field to place elements
 
   // ****************************************************
   // *** ATTRIBUTES THAT DEFINE STORE'S BEHAVIOUR
@@ -60,7 +61,7 @@ const Store = exports = module.exports = class {
   static get ServiceUnavailableError () { return e.ServiceUnavailableError }
 
   // ****************************************************
-  // *** DAATA MANIPULATION PROPERTIES
+  // *** DATA MANIPULATION PROPERTIES
   // ****************************************************
 
   static get schema () { return null }
@@ -72,7 +73,6 @@ const Store = exports = module.exports = class {
 
   static get sortableFields () { return [] }
   static get defaultSort () { return null } // If set, it will be applied to all getQuery calls
-  static get beforeIdField () { return 'beforeId' } // Virtual field to place elements
 
   // Static getter/setter which will actually manipulate the one `registry` variable
 
@@ -218,7 +218,7 @@ const Store = exports = module.exports = class {
     request.inMethod = 'implementInsert'
     request.options = request.options || {}
 
-    if (this.positionField) {
+    if (this.positioning) {
       request.beforeId = request.body[this.beforeIdField]
       delete request.body[this.beforeIdField]
     }
@@ -290,7 +290,7 @@ const Store = exports = module.exports = class {
     request.inMethod = 'implementUpdate'
     request.options = request.options || {}
 
-    if (this.positionField) {
+    if (this.positioning) {
       request.beforeId = request.body[this.beforeIdField]
       delete request.body[this.beforeIdField]
     }
@@ -439,9 +439,8 @@ const Store = exports = module.exports = class {
     this.canBeNull = Constructor.canBeNull
     this.fullRecordOnInsert = Constructor.fullRecordOnInsert
     this.fullRecordOnUpdate = Constructor.fullRecordOnUpdate
-    this.defaultSort = Constructor.defaultSort
 
-    this.sortableFields = Constructor.sortableFields
+    this.positioning = this.constructor.positioning
     this.beforeIdField = this.constructor.beforeIdField
 
     this.handlePost = Constructor.handlePost
@@ -452,8 +451,9 @@ const Store = exports = module.exports = class {
     this.defaultLimitOnQueries = Constructor.defaultLimitOnQueries
     this.version = Constructor.version
 
-    this.positionField = this.constructor.positionField
-
+    this.sortableFields = Constructor.sortableFields
+    this.defaultSort = Constructor.defaultSort
+    
     // The store name must be defined
     if (this.storeName === null) {
       throw (new Error('You must define a store name for a store in constructor class for ' + this.storeName))
@@ -499,6 +499,14 @@ const Store = exports = module.exports = class {
       }
     }
 
+    // At this stage, the searchSchema may or may not be defined.
+    // If it's not defined, it's created automatically with the properties marked as
+    // "searchable" in the main schema.
+    // If the searchSchema IS defined, it's still important to make sure that searchSchema
+    // and schema are "synced up", so that any field marked as 'searchable' in the main schema
+    // is also present in the searchSchema, AND that anything in the searchSchema is marked as 
+    // searchable in the main schema if their names match.
+ 
     // If onlineSearchSchema wasn't defined, then set it as a copy of the schema where
     // fields are `searchable`, EXCLUDING the paramIds fields.
     if (this.searchSchema == null) {
@@ -509,6 +517,23 @@ const Store = exports = module.exports = class {
         }
       }
       this.searchSchema = new this.schema.constructor(searchSchemaStructure)
+
+    // ...whereas if searchSchema WAS defined, make sure that:
+    // * 'searchable' property is assigned to any schema entry that has a matching searchSchema entry
+    // * make sure that any property marked as searchable in the schema DOES have a corresponding entry
+    // in searchSchema
+    } else {
+      for (k in this.schema.structure) {
+        if (this.searchSchema.structure[k]) {
+          this.schema.structure[k].searchable = true
+        } else {
+          if (this.schema.structure[k].searchable && this.paramIds.indexOf(k) === -1) {
+            this.searchSchema.structure[k] = this.schema.structure[k]
+          }
+        }
+      }
+
+      
     }
 
     this.register()
