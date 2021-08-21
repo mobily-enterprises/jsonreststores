@@ -214,14 +214,11 @@ const Store = exports = module.exports = class {
   //   request.params (whole object replaced by _validateParams)
   //   request.originalParams (whole object replaced by _validateParams)
   async implementInsert (request) {
+    let beforeId
+
     request.method = request.method || 'post'
     request.inMethod = 'implementInsert'
     request.options = request.options || {}
-
-    if (this.positioning) {
-      request.beforeId = request.body[this.beforeIdField]
-      delete request.body[this.beforeIdField]
-    }
 
     // validateParam
     request.originalParams = request.params || {}
@@ -273,7 +270,7 @@ const Store = exports = module.exports = class {
     await this.validate(request, errors)
     if (errors.length) throw new this.constructor.UnprocessableEntityError({ errors })
 
-    // Reinstating request.body.beforeId must be delegated to the implementing function which
+    // WAS: Reinstating request.body.beforeId must be delegated to the implementing function which
     // must call this.restoreBeforeIdInRecord(request) in order to restore it
   }
   //   request.originalRecord
@@ -286,14 +283,11 @@ const Store = exports = module.exports = class {
   //   request.originalBody
   //   request.options
   async implementUpdate (request) {
+    let beforeId
+
     request.method = request.method || 'put'
     request.inMethod = 'implementUpdate'
     request.options = request.options || {}
-
-    if (this.positioning) {
-      request.beforeId = request.body[this.beforeIdField]
-      delete request.body[this.beforeIdField]
-    }
 
     // validateParam
     request.originalParams = request.params || {}
@@ -320,9 +314,18 @@ const Store = exports = module.exports = class {
 
     const fullRecord = this.fullRecordOnUpdate || request.options.fullRecordOnUpdate
 
+    const emptyAsNull = typeof request.options.emptyAsNull !== 'undefined'
+    ? !!request.options.emptyAsNull
+    : this.emptyAsNull
+
+    const canBeNull = typeof request.options.canBeNull !== 'undefined'
+    ? !!request.options.canBeNull
+    : this.canBeNull
+
     // Validate input. This is light validation.
     const { validatedObject, errors: validationErrors } = await this.schema.validate(request.body, {
-      emptyAsNull: request.options.emptyAsNull || this.emptyAsNull,
+      emptyAsNull,
+      canBeNull,
       onlyObjectValues: !fullRecord,
       record: request.record
     })
@@ -340,16 +343,8 @@ const Store = exports = module.exports = class {
     await this.validate(request, errors)
     if (errors.length) throw new this.constructor.UnprocessableEntityError({ errors })
 
-    // Reinstating request.body.beforeId must be delegated to the implementing function which
+    // WAS: Reinstating request.body.beforeId must be delegated to the implementing function which
     // must call this.restoreBeforeIdInRecord(request) in order to restore it
-  }
-
-  async restoreBeforeIdInRecord (request) {
-    // Sneak beforeId back in. This will tell the client
-    // where to place the record, allowing for (maybe) repositioning
-    if (typeof request.beforeId !== 'undefined') {
-      request.record.beforeId = request.beforeId
-    }
   }
 
   async implementDelete (request) {
@@ -497,6 +492,12 @@ const Store = exports = module.exports = class {
       if (typeof (this.schema.structure[k]) === 'undefined') {
         this.schema.structure[k] = { type: 'id' }
       }
+    }
+
+    // If positioning is enable, add the beforeId field to the
+    // schema artificially, so that it will pass validation
+    if (this.positioning && typeof this.schema.structure[this.beforeIdField] === 'undefined') {
+      this.schema.structure[this.beforeIdField] = { type: 'id', default: null, silent: true }
     }
 
     // At this stage, the searchSchema may or may not be defined.
