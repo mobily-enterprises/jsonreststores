@@ -11,15 +11,16 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 const firstBy = require('thenby')
 
 const Mixin = (superclass) => class extends superclass {
-  //
-  async transformResult (request, op, recordOrSet) { return null }
+  // op can be 'fetch', 'update', 'insert', 'query', 'delete'.
+  // If 'query, then data is an array. Otherwise, it's a record
+  async transformResult (request, data, op) {  return data }
 
   static get data () { return [] } // Data. This can get re-set to something else in children
 
   reposition (currentPos) {
     //
-    // No position field: exit right away
-    if (!this.beforeIdField) return
+    // No positioning managed: exit right away
+    if (!this.positioning) return
 
     const record = this.data[currentPos]
 
@@ -48,14 +49,10 @@ const Mixin = (superclass) => class extends superclass {
     request.record = request.body
 
     this.data.push(request.record)
-    if (this.positionField) request.record[this.positionField] = this.reposition(this.data.length - 1)
+    // if (this.positioning) request.record[this.positionField] = this.reposition(this.data.length - 1)
+    if (this.positioning) this.reposition(this.data.length - 1)
 
-    // Requested by the API
-    // implementUpdate() needs to have this in order to restore the
-    // previously deleted record.beforeId
-    this.restoreBeforeIdInRecord(request)
-
-    return request.record
+    return this.transformResult(request, request.record, 'insert')
   }
 
   // Input:
@@ -68,14 +65,10 @@ const Mixin = (superclass) => class extends superclass {
 
     const currentPos = this.data.findIndex(el => el[this.idProperty] === request.record[this.idProperty])
     this.data[currentPos] = request.record
-    if (this.positionField) request.record[this.positionField] = this.reposition(currentPos)
+    // if (this.positioning) request.record[this.positionField] = this.reposition(currentPos)
+    if (this.positioning) this.reposition(currentPos)
 
-    // Requested by the API
-    // implementUpdate() needs to have this in order to restore the
-    // previously deleted record.beforeId
-    this.restoreBeforeIdInRecord(request)
-
-    return request.record
+    return this.transformResult(request, request.record, 'update')
   }
 
   // Input: request.params (with key this.idProperty set)
@@ -85,6 +78,9 @@ const Mixin = (superclass) => class extends superclass {
 
     const currentPos = this.data.findIndex(el => el[this.idProperty] === request.record[this.idProperty])
     this.data.splice(currentPos, 1)
+
+    return this.transformResult(request, request.record, 'delete')
+
   }
 
   // Input: request.params, request.options.[conditionsHash,skip,limit,sort]
@@ -99,7 +95,7 @@ const Mixin = (superclass) => class extends superclass {
     if (request.options.skip) retData = retData.splice(request.options.skip, 0)
     if (request.options.limit) retData = retData.slice(0, request.options.limit)
 
-    return { data: retData, grandTotal: retData.length }
+    return { data: this.transformResult(request, retData, 'query'), grandTotal: retData.length }
   }
 
   async filterByConditions (request, d) {
@@ -136,7 +132,7 @@ const Mixin = (superclass) => class extends superclass {
     // must be called when request.record is set
     if (request.record) this.implementFetchPermissions(request)
 
-    return request.record
+    return this.transformResult(request, request.record, 'fetch')
   }
 }
 

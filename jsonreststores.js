@@ -36,7 +36,8 @@ const Store = exports = module.exports = class {
   static get storeName () { return null }
   static get artificialDelay () { return 0 } // Artificial delay
 
-  static get positionField () { return null } // List of fields that will determine the subset
+  static get positioning () { return false } // if true, position management will work
+  static get beforeIdField () { return 'beforeId' } // Virtual field to place elements
 
   // ****************************************************
   // *** ATTRIBUTES THAT DEFINE STORE'S BEHAVIOUR
@@ -60,7 +61,7 @@ const Store = exports = module.exports = class {
   static get ServiceUnavailableError () { return e.ServiceUnavailableError }
 
   // ****************************************************
-  // *** DAATA MANIPULATION PROPERTIES
+  // *** DATA MANIPULATION PROPERTIES
   // ****************************************************
 
   static get schema () { return null }
@@ -70,9 +71,8 @@ const Store = exports = module.exports = class {
   static get fullRecordOnUpdate () { return false } //  A write will only affects the passed fields, not the whole record
   static get fullRecordOnInsert () { return true } //  A write will only affects the passed fields, not the whole record
 
-  static get defaultSort () { return null } // If set, it will be applied to all getQuery calls
   static get sortableFields () { return [] }
-  static get beforeIdField () { return 'beforeId' } // Virtual field to place elements
+  static get defaultSort () { return null } // If set, it will be applied to all getQuery calls
 
   // Static getter/setter which will actually manipulate the one `registry` variable
 
@@ -140,7 +140,7 @@ const Store = exports = module.exports = class {
     request.options = request.options || {}
 
     const id = request.params[this.idProperty]
-    if (!id) throw new Error('request.params needs to contain idProperty for implementFetch')
+    if (id === null || id === undefined) throw new Error('request.params needs to contain idProperty for implementFetch')
 
     // Checking of permission must be delegated to the implementing function which
     // must call this.implementFetchPermissions(request) once request.record is set
@@ -214,14 +214,11 @@ const Store = exports = module.exports = class {
   //   request.params (whole object replaced by _validateParams)
   //   request.originalParams (whole object replaced by _validateParams)
   async implementInsert (request) {
+    let beforeId
+
     request.method = request.method || 'post'
     request.inMethod = 'implementInsert'
     request.options = request.options || {}
-
-    if (this.positionField) {
-      request.beforeId = request.body[this.beforeIdField]
-      delete request.body[this.beforeIdField]
-    }
 
     // validateParam
     request.originalParams = request.params || {}
@@ -273,7 +270,7 @@ const Store = exports = module.exports = class {
     await this.validate(request, errors)
     if (errors.length) throw new this.constructor.UnprocessableEntityError({ errors })
 
-    // Reinstating request.body.beforeId must be delegated to the implementing function which
+    // WAS: Reinstating request.body.beforeId must be delegated to the implementing function which
     // must call this.restoreBeforeIdInRecord(request) in order to restore it
   }
   //   request.originalRecord
@@ -286,21 +283,18 @@ const Store = exports = module.exports = class {
   //   request.originalBody
   //   request.options
   async implementUpdate (request) {
+    let beforeId
+
     request.method = request.method || 'put'
     request.inMethod = 'implementUpdate'
     request.options = request.options || {}
-
-    if (this.positionField) {
-      request.beforeId = request.body[this.beforeIdField]
-      delete request.body[this.beforeIdField]
-    }
 
     // validateParam
     request.originalParams = request.params || {}
     request.params = await this._validateParams(request)
 
     const id = request.params[this.idProperty]
-    if (!id) throw new Error('request.params needs to contain idProperty for implementUpdate')
+    if (id === null || id === undefined) throw new Error('request.params needs to contain idProperty for implementUpdate')
 
     // Add paramIds to body
     this._enrichBodyWithParamIds(request)
@@ -320,9 +314,18 @@ const Store = exports = module.exports = class {
 
     const fullRecord = this.fullRecordOnUpdate || request.options.fullRecordOnUpdate
 
+    const emptyAsNull = typeof request.options.emptyAsNull !== 'undefined'
+    ? !!request.options.emptyAsNull
+    : this.emptyAsNull
+
+    const canBeNull = typeof request.options.canBeNull !== 'undefined'
+    ? !!request.options.canBeNull
+    : this.canBeNull
+
     // Validate input. This is light validation.
     const { validatedObject, errors: validationErrors } = await this.schema.validate(request.body, {
-      emptyAsNull: request.options.emptyAsNull || this.emptyAsNull,
+      emptyAsNull,
+      canBeNull,
       onlyObjectValues: !fullRecord,
       record: request.record
     })
@@ -340,16 +343,8 @@ const Store = exports = module.exports = class {
     await this.validate(request, errors)
     if (errors.length) throw new this.constructor.UnprocessableEntityError({ errors })
 
-    // Reinstating request.body.beforeId must be delegated to the implementing function which
+    // WAS: Reinstating request.body.beforeId must be delegated to the implementing function which
     // must call this.restoreBeforeIdInRecord(request) in order to restore it
-  }
-
-  async restoreBeforeIdInRecord (request) {
-    // Sneak beforeId back in. This will tell the client
-    // where to place the record, allowing for (maybe) repositioning
-    if (typeof request.beforeId !== 'undefined') {
-      request.record.beforeId = request.beforeId
-    }
   }
 
   async implementDelete (request) {
@@ -358,7 +353,7 @@ const Store = exports = module.exports = class {
     request.options = request.options || {}
 
     const id = request.params[this.idProperty]
-    if (!id) throw new Error('request.params needs to contain idProperty for implementDelete')
+    if (id === null || id === undefined) throw new Error('request.params needs to contain idProperty for implementDelete')
 
     // Load the record, if it is not yet present in request as `record`
     if (!request.record) {
@@ -439,9 +434,8 @@ const Store = exports = module.exports = class {
     this.canBeNull = Constructor.canBeNull
     this.fullRecordOnInsert = Constructor.fullRecordOnInsert
     this.fullRecordOnUpdate = Constructor.fullRecordOnUpdate
-    this.defaultSort = Constructor.defaultSort
 
-    this.sortableFields = Constructor.sortableFields
+    this.positioning = this.constructor.positioning
     this.beforeIdField = this.constructor.beforeIdField
 
     this.handlePost = Constructor.handlePost
@@ -452,8 +446,9 @@ const Store = exports = module.exports = class {
     this.defaultLimitOnQueries = Constructor.defaultLimitOnQueries
     this.version = Constructor.version
 
-    this.positionField = this.constructor.positionField
-
+    this.sortableFields = Constructor.sortableFields
+    this.defaultSort = Constructor.defaultSort
+    
     // The store name must be defined
     if (this.storeName === null) {
       throw (new Error('You must define a store name for a store in constructor class for ' + this.storeName))
@@ -499,6 +494,20 @@ const Store = exports = module.exports = class {
       }
     }
 
+    // If positioning is enable, add the beforeId field to the
+    // schema artificially, so that it will pass validation
+    if (this.positioning && typeof this.schema.structure[this.beforeIdField] === 'undefined') {
+      this.schema.structure[this.beforeIdField] = { type: 'id', default: null, silent: true }
+    }
+
+    // At this stage, the searchSchema may or may not be defined.
+    // If it's not defined, it's created automatically with the properties marked as
+    // "searchable" in the main schema.
+    // If the searchSchema IS defined, it's still important to make sure that searchSchema
+    // and schema are "synced up", so that any field marked as 'searchable' in the main schema
+    // is also present in the searchSchema, AND that anything in the searchSchema is marked as 
+    // searchable in the main schema if their names match.
+ 
     // If onlineSearchSchema wasn't defined, then set it as a copy of the schema where
     // fields are `searchable`, EXCLUDING the paramIds fields.
     if (this.searchSchema == null) {
@@ -509,6 +518,23 @@ const Store = exports = module.exports = class {
         }
       }
       this.searchSchema = new this.schema.constructor(searchSchemaStructure)
+
+    // ...whereas if searchSchema WAS defined, make sure that:
+    // * 'searchable' property is assigned to any schema entry that has a matching searchSchema entry
+    // * make sure that any property marked as searchable in the schema DOES have a corresponding entry
+    // in searchSchema
+    } else {
+      for (k in this.schema.structure) {
+        if (this.searchSchema.structure[k]) {
+          this.schema.structure[k].searchable = true
+        } else {
+          if (this.schema.structure[k].searchable && this.paramIds.indexOf(k) === -1) {
+            this.searchSchema.structure[k] = this.schema.structure[k]
+          }
+        }
+      }
+
+      
     }
 
     this.register()
