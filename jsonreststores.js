@@ -302,6 +302,7 @@ const Store = exports = module.exports = class {
     // Load the record, if it is not yet present in request as `record`
     if (!request.record) {
       request.record = await this.implementFetch(request)
+      request.inMethod = 'implementUpdate'
     }
 
     // Prepare the errors array
