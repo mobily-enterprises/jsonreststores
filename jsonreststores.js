@@ -76,6 +76,11 @@ const Store = exports = module.exports = class {
 
   // Static getter/setter which will actually manipulate the one `registry` variable
 
+  copyRequest (request, extras = {}) {
+    return { ...request, params: { ...request.params }, body: { ...request.body }, ...extras }
+  }
+
+
   register () {
     // const self = this
     const name = this.storeName
@@ -124,6 +129,10 @@ const Store = exports = module.exports = class {
   }
 
   static requireStoresFromPath (p, app) {
+    if (!fs.existsSync(p)) {
+      console.warn('Warning: directory not found: ', p)
+      return
+    }
     fs.readdirSync(p).forEach((storeFile) => {
       if (!storeFile.endsWith('.js')) return
       const store = require(path.join(p, storeFile))
@@ -301,8 +310,16 @@ const Store = exports = module.exports = class {
 
     // Load the record, if it is not yet present in request as `record`
     if (!request.record) {
-      request.record = await this.implementFetch(request)
+      request.record = await this.implementFetch(this.copyRequest(request))
     }
+
+    // It must be possible to fetch to update
+    // The fact that this is normally called from _makePut (which
+    // will call implementInsert or implementUpdate, depending on whethe
+    // the field is returned or not) is all fun games, but it doesn't
+    // cover for the cases when implementUpdate is called DIRECTLY
+    // as with API use: in this case the ID might actually not exist
+    if (!request.record) throw new Store.NotFoundError()
 
     // Prepare the errors array
     let errors = []
@@ -357,10 +374,16 @@ const Store = exports = module.exports = class {
 
     // Load the record, if it is not yet present in request as `record`
     if (!request.record) {
-      request.record = await this.implementFetch(request) || null
+      request.record = await this.implementFetch(this.copyRequest(request))
     }
+
+    // It must be possible to fetch to update
+    // The fact that this is normally called from _makeDelete blah blah
+    if (!request.record) throw new Store.NotFoundError()
+
     request.body = {}
     request.originalBody = {}
+
 
     // Check for permissions
     const { granted, message } = await this.checkPermissions(request)
@@ -568,7 +591,7 @@ const Store = exports = module.exports = class {
     // The fact that it's assigned to request.record means that
     // implementUpdate will use it without re-fetching
     // SIDE_EFFECT: request.record
-    request.record = await this.implementFetch(request) || null
+    request.record = await this.implementFetch(this.copyRequest(request))
 
     // Check the 'overwrite' option, throw if fail
     if (typeof request.options.overwrite !== 'undefined') {
@@ -620,7 +643,7 @@ const Store = exports = module.exports = class {
     // Check that the method is implemented
     if (!this.handleDelete && request.remote) throw new Store.NotImplementedError()
 
-    const record = await this.implementFetch(request, 'delete') || null
+    const record = await this.implementFetch(request, 'delete')
     // Record not there: not found error!
     if (!record) throw new Store.NotFoundError()
 
