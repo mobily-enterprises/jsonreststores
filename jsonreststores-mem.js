@@ -17,6 +17,12 @@ const Mixin = (superclass) => class extends superclass {
 
   static get data () { return [] } // Data. This can get re-set to something else in children
 
+
+  constructor () {
+    super()
+    this.data = this.constructor.data
+  }
+
   reposition (currentPos) {
     //
     // No positioning managed: exit right away
@@ -47,6 +53,13 @@ const Mixin = (superclass) => class extends superclass {
     await super.implementInsert(request)
 
     request.record = request.body
+    if (typeof request.record[this.idProperty] === 'undefined') {
+      request.record[this.idProperty] = Math.max(this.data.map(el => el[this.idProperty])) + 1
+    } else {
+      if (this.data.findIndex(el => el[this.idProperty] === request.record[this.idProperty]) !== -1) {
+        throw new Error('ID already present, cannot insert duplicate IDs')
+      }
+    }
 
     this.data.push(request.record)
     // if (this.positioning) request.record[this.positionField] = this.reposition(this.data.length - 1)
@@ -124,7 +137,7 @@ const Mixin = (superclass) => class extends superclass {
   async implementFetch (request) {
     await super.implementFetch(request)
 
-    const currentPos = this.data.findIndex(el => el[this.idProperty] === request.record[this.idProperty])
+    const currentPos = this.data.findIndex(el => el[this.idProperty] === request.params[this.idProperty])
 
     request.record = this.data[currentPos]
 
