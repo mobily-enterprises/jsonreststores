@@ -138,6 +138,10 @@ const HTTPMixin = (base) => class extends base {
       try {
         const _sleep = (ms) => { if (!ms) return; return new Promise(resolve => setTimeout(resolve, ms)) }
 
+        // Initiating a request from the server resulted in an empty req.body.
+        // Making sure it's always there
+        req.body = req.body || {}
+
         Object.setPrototypeOf(req.body, Object.prototype)
 
         // Sets all of the required fields for a request
