@@ -532,11 +532,11 @@ const Store = exports = module.exports = class {
     // searchable in the main schema if their names match.
  
     // If onlineSearchSchema wasn't defined, then set it as a copy of the schema where
-    // fields are `searchable`, EXCLUDING the paramIds fields.
+    // fields are `searchable`, INCLUDING the paramIds fields (they were excluded before) 
     if (this.searchSchema == null) {
       const searchSchemaStructure = { }
       for (k in this.schema.structure) {
-        if (this.schema.structure[k].searchable && this.paramIds.indexOf(k) === -1) {
+        if (this.schema.structure[k].searchable) { // && this.paramIds.indexOf(k) === -1) {
           searchSchemaStructure[k] = this.schema.structure[k]
         }
       }
