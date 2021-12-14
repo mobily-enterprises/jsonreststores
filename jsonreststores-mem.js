@@ -13,7 +13,7 @@ const firstBy = require('thenby')
 const Mixin = (superclass) => class extends superclass {
   // op can be 'fetch', 'update', 'insert', 'query', 'delete'.
   // If 'query, then data is an array. Otherwise, it's a record
-  async transformResult (request, data, op) {  return data }
+  async transformResult (request, data, op) { }
 
   static get data () { return [] } // Data. This can get re-set to something else in children
 
@@ -103,12 +103,16 @@ const Mixin = (superclass) => class extends superclass {
 
     let retData = this.data
 
-    if (Object.keys(request.options.conditionsHash).length) retData = this.filterByConditions(request, retData)
-    if (Object.keys(request.options.sort).length) retData = this.sortBy(request, retData)
+    if (Object.keys(request.options.conditionsHash).length) retData = await this.filterByConditions(request, retData)
+    if (Object.keys(request.options.sort).length) retData = await this.sortBy(request, retData)
+
     if (request.options.skip) retData = retData.splice(request.options.skip, 0)
     if (request.options.limit) retData = retData.slice(0, request.options.limit)
 
-    return { data: this.transformResult(request, retData, 'query'), grandTotal: retData.length }
+    const transformedData = [ ...retData ]
+    await this.transformResult(request, transformedData, 'query')
+
+    return { data: transformedData, grandTotal: retData.length }
   }
 
   async filterByConditions (request, d) {
@@ -145,7 +149,8 @@ const Mixin = (superclass) => class extends superclass {
     // must be called when request.record is set
     if (request.record) this.implementFetchPermissions(request)
 
-    return this.transformResult(request, request.record, 'fetch')
+    this.transformResult(request, request.record, 'fetch')
+    return request.record
   }
 }
 
