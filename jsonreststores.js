@@ -151,6 +151,10 @@ const Store = exports = module.exports = class {
     const id = request.params[this.idProperty]
     if (id === null || id === undefined) throw new Error('request.params needs to contain idProperty for implementFetch')
 
+    // validateParam
+    request.originalParams = request.params || {}
+    request.params = await this._validateParams(request)
+
     // Checking of permission must be delegated to the implementing function which
     // must call this.implementFetchPermissions(request) once request.record is set
   }
@@ -532,7 +536,7 @@ const Store = exports = module.exports = class {
     // searchable in the main schema if their names match.
  
     // If onlineSearchSchema wasn't defined, then set it as a copy of the schema where
-    // fields are `searchable`, INCLUDING the paramIds fields (they were excluded before) 
+    // fields are `searchable`, INCLUDING the paramIds fields (they were excluded before)
     if (this.searchSchema == null) {
       const searchSchemaStructure = { }
       for (k in this.schema.structure) {
