@@ -65,7 +65,8 @@ const Mixin = (superclass) => class extends superclass {
     // if (this.positioning) request.record[this.positionField] = this.reposition(this.data.length - 1)
     if (this.positioning) this.reposition(this.data.length - 1)
 
-    return this.transformResult(request, request.record, 'insert')
+    await this.transformResult(request, request.record, 'insert')
+    return request.record
   }
 
   // Input:
@@ -81,7 +82,8 @@ const Mixin = (superclass) => class extends superclass {
     // if (this.positioning) request.record[this.positionField] = this.reposition(currentPos)
     if (this.positioning) this.reposition(currentPos)
 
-    return this.transformResult(request, request.record, 'update')
+    await this.transformResult(request, request.record, 'update')
+    return request.record
   }
 
   // Input: request.params (with key this.idProperty set)
@@ -92,8 +94,8 @@ const Mixin = (superclass) => class extends superclass {
     const currentPos = this.data.findIndex(el => el[this.idProperty] === request.record[this.idProperty])
     this.data.splice(currentPos, 1)
 
-    return this.transformResult(request, request.record, 'delete')
-
+    await this.transformResult(request, request.record, 'delete')
+    return request.record
   }
 
   // Input: request.params, request.options.[conditionsHash,skip,limit,sort]
@@ -149,7 +151,7 @@ const Mixin = (superclass) => class extends superclass {
     // must be called when request.record is set
     if (request.record) this.implementFetchPermissions(request)
 
-    this.transformResult(request, request.record, 'fetch')
+    await this.transformResult(request, request.record, 'fetch')
     return request.record
   }
 }
