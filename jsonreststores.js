@@ -129,6 +129,8 @@ const Store = exports = module.exports = class {
   }
 
   static requireStoresFromPath (p, app) {
+    p = path.resolve(p)
+
     if (!fs.existsSync(p)) {
       console.warn('Warning: directory not found: ', p)
       return
