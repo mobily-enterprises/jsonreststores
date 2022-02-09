@@ -155,7 +155,11 @@ const Store = exports = module.exports = class {
 
     // validateParam
     request.originalParams = request.params || {}
-    request.params = await this._validateParams(request)
+
+    // TODO: DECIDE WHAT TO DO WITH THIS ONE. ONLY THE LAST PARAMETER IS REALLY NEEDED SINCE IT'S THE ID.
+    // IF IT MUST BE REQUIRED, IT SHOULD BE REQUIRED BY THE UNDERLYING LEVEL TOO.
+    // THIS WILL NEED TO BE BEHIND A FLAG.
+    // request.params = await this._validateParams(request)
 
     // Checking of permission must be delegated to the implementing function which
     // must call this.implementFetchPermissions(request) once request.record is set
