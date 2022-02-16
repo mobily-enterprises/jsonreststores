@@ -160,6 +160,7 @@ const Store = exports = module.exports = class {
     // IF IT MUST BE REQUIRED, IT SHOULD BE REQUIRED BY THE UNDERLYING LEVEL TOO.
     // THIS WILL NEED TO BE BEHIND A FLAG.
     // request.params = await this._validateParams(request)
+    request.params = await this._validateParams(request, false, true)
 
     // Checking of permission must be delegated to the implementing function which
     // must call this.implementFetchPermissions(request) once request.record is set
@@ -182,7 +183,7 @@ const Store = exports = module.exports = class {
 
   // Check that paramsId are actually legal IDs using
   // paramsSchema.
-  async _validateParams (request, skipIdProperty) {
+  async _validateParams (request, skipIdProperty, allowMissingOnes) {
     const fieldErrors = []
 
     const params = request.params || {}
@@ -197,7 +198,7 @@ const Store = exports = module.exports = class {
       if (skipIdProperty && k === this.idProperty) return
 
       // Required paramId not there: puke!
-      if (typeof (params[k]) === 'undefined') {
+      if (!allowMissingOnes && typeof params[k] === 'undefined') {
         fieldErrors.push({ field: k, message: 'Field required in the URL/param: ' + k })
       }
     })
