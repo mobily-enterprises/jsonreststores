@@ -128,18 +128,20 @@ const Store = exports = module.exports = class {
     return this.constructor.stores(this.version)
   }
 
-  static requireStoresFromPath (p, app) {
+  static async requireStoresFromPath (p, app) {
     p = path.resolve(p)
 
     if (!fs.existsSync(p)) {
       console.warn('Warning: directory not found: ', p)
       return
     }
-    fs.readdirSync(p).forEach((storeFile) => {
+    for (const storeFile of fs.readdirSync(p)) {
       if (!storeFile.endsWith('.js')) return
-      const store = require(path.join(p, storeFile))
-      if (app && store.publicURL) store.listen({ app })
-    })
+      //const store = require(path.join(p, storeFile))
+      const store = await import(path.join(p, storeFile))
+
+      if (app && store.default.publicURL) store.default.listen({ app })
+    }
   }
 
   // Methods that MUST be implemented for the store to be functional
