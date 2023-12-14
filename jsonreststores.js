@@ -17,11 +17,16 @@ const registryByName = {}
 const registryByVersion = {}
 
 const Store = exports = module.exports = class {
+
+  
   // Hooks to inject code in workflow
   async beforeValidate (request) { }
   async validate (request) { return [] }
   async checkPermissions (request) { return { granted: true } }
-
+  
+  static get registryByName () { return registryByName }
+  static get registryByVersion () { return registryByVersion }
+  
   // ****************************************************
   // *** ATTRIBUTES THAT CAN TO BE DEFINED IN PROTOTYPE
   // ****************************************************
