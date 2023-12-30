@@ -94,9 +94,13 @@ const Store = exports = module.exports = class {
     registryByName[name] = registryByName[name] || {}
     registryByVersion[version] = registryByVersion[version] || {}
 
+    /*
+    // Note: this has never been useful and it's creating a problem with jskit. If 
+    // store is re-loaded, it should rewrite the cache
     if (registryByName[name][version]) {
       throw new Error('Store already registered: ' + name + ' version ' + version)
     }
+    */
 
     registryByName[name][version] = registryByVersion[version][name] = this
   }
